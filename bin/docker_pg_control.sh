@@ -6,8 +6,23 @@
 #   sudo ./docker_pg_control.sh list
 
 # 상수 변수 설정
-SUCCESS="success"
-FAIL="fail"
+SUCCESS="SUCCESS"
+FAIL="fAIL"
+
+# config/database.yml 파일 경로
+DATABASE_YML="$(dirname "$0")/../config/database.yml"
+
+if [ ! -f "$DATABASE_YML" ]; then
+  echo "Error: '$DATABASE_YML' 파일을 찾을 수 없습니다."
+  exit 1
+fi
+
+# PostgreSQL username을 database.yml에서 추출 (postgres 섹션 내의 username)
+PG_USERNAME=$(sed -n '/^postgres:/,/^[^ ]/p' "$DATABASE_YML" | grep "username:" | sed -E 's/.*username:[[:space:]]*"(.*)".*/\1/')
+if [ -z "$PG_USERNAME" ]; then
+  echo "Error: database.yml에서 PostgreSQL username을 추출하지 못했습니다."
+  exit 1
+fi
 
 # usage 함수: 사용법 출력
 usage() {
@@ -63,7 +78,7 @@ CREATE EXTENSION IF NOT EXISTS vector;
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 EOF
 )
-    OUTPUT=$(docker exec -i postgres psql -U kimchi -d postgres <<EOF
+    OUTPUT=$(docker exec -i postgres psql -U "$PG_USERNAME" -d postgres <<EOF
 $PSQL_COMMANDS
 EOF
 )
@@ -83,7 +98,7 @@ EOF
   drop)
     # 데이터베이스 삭제
     PSQL_COMMANDS="DROP DATABASE IF EXISTS \"$DB_NAME\";"
-    OUTPUT=$(docker exec -i postgres psql -U kimchi -d postgres <<EOF
+    OUTPUT=$(docker exec -i postgres psql -U "$PG_USERNAME" -d postgres <<EOF
 $PSQL_COMMANDS
 EOF
 )
@@ -102,7 +117,7 @@ EOF
     # 데이터베이스 목록 조회 (템플릿이 아닌 DB만 조회)
     # 쿼리 결과를 JSON 배열로 반환 (psql의 json_agg 사용)
     QUERY="SELECT COALESCE(json_agg(datname), '[]'::json) FROM (SELECT datname FROM pg_database WHERE datistemplate = false) sub;"
-    DB_LIST_JSON=$(docker exec -i postgres psql -U kimchi -d postgres -t -A -c "$QUERY")
+    DB_LIST_JSON=$(docker exec -i postgres psql -U "$PG_USERNAME" -d postgres -t -A -c "$QUERY")
     RET_CODE=$?
     if [ $RET_CODE -ne 0 ]; then
       RESULT="$FAIL"

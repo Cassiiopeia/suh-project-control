@@ -9,7 +9,7 @@ jobs:
   deploy:
     runs-on: ubuntu-20.04
     steps:
-      # 소스 코드 체크아웃
+      # 1. 소스 코드 체크아웃
       - name: 소스 코드 가져오기
         uses: actions/checkout@v3
         with:
@@ -18,27 +18,29 @@ jobs:
       - name: 소스 코드 체크아웃 확인
         run: echo "소스 코드를 성공적으로 가져왔습니다."
 
-      # .env 파일 생성
-      - name: Create .env file
+      # 2. ./config/database.yml 파일 생성
+      - name: Create ./config/database.yml
         run: |
-          echo "PW=${{ secrets.SERVER_PASSWORD }}" > bin/.env
-          echo ".env 파일이 성공적으로 생성되었습니다."
+          mkdir -p config
+          echo "${{ secrets.DATABASE_YML }}" > config/database.yml
+          echo "database.yml 파일이 성공적으로 생성되었습니다."
 
-      # 서버 bin 폴더 업로드
-      - name: bin 폴더 업로드
+      # 3. 전체 프로젝트 업로드 (불필요한 폴더/파일 제외)
+      - name: 전체 프로젝트 업로드
         uses: appleboy/scp-action@v0.1.1
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           port: 2022
           password: ${{ secrets.SERVER_PASSWORD }}
-          source: "bin/*"
-          target: "${{ secrets.SEJONG_MALSAMI_DIR }}"
+          source: "."
+          target: "${{ secrets.SUH_PROJECT_CONTROL_DIR }}"
+          exclude: ".git,.idea,.gitignore,suh-project-control.iml,.github"
 
-      - name: bin 폴더 업로드 확인
-        run: echo "bin 폴더가 서버에 성공적으로 업로드되었습니다."
+      - name: 전체 프로젝트 업로드 확인
+        run: echo "프로젝트가 서버에 성공적으로 업로드되었습니다."
 
-      # SSH 접속 -> 스크립트 권한 설정
+      # 4. SSH 접속 → bin 폴더 내 스크립트에 실행 권한 부여
       - name: 스크립트 실행 권한 설정
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -51,15 +53,17 @@ jobs:
 
             echo "=== 환경 변수 설정 중 ==="
             export PATH=$PATH:/usr/local/bin
-            SEJONG_MALSAMI_BIN="${{ secrets.SEJONG_MALSAMI_DIR }}/bin"
 
-            echo "=== .env 파일 존재 여부 확인 ==="
-            if [[ ! -f "${SEJONG_MALSAMI_BIN}/.env" ]]; then
-              echo "Error: .env 파일이 존재하지 않습니다."
+            # SUH_PROJECT_CONTROL_DIR는 프로젝트 루트 디렉토리입니다.
+            echo "=== database.yml 파일 존재 여부 확인 ==="
+            if [[ ! -f "${{ secrets.SUH_PROJECT_CONTROL_DIR }}/config/database.yml" ]]; then
+              echo "Error: database.yml 파일이 존재하지 않습니다."
               exit 1
             fi
 
+            # bin 폴더 내 .env 파일은 이미 존재하거나 다른 방식으로 생성되었다고 가정합니다.
+            SUH_PROJECT_CONTROL_BIN="${{ secrets.SUH_PROJECT_CONTROL_DIR }}/bin"
             echo "=== 스크립트 실행 권한 설정 시작 ==="
-            source ${SEJONG_MALSAMI_BIN}/.env
-            echo $PW | sudo -S chmod +x ${SEJONG_MALSAMI_BIN}/*.sh
+            source ${SUH_PROJECT_CONTROL_BIN}/.env
+            echo $PW | sudo -S chmod +x ${SUH_PROJECT_CONTROL_BIN}/*.sh
             echo "=== 스크립트 실행 권한 설정 완료 ==="
