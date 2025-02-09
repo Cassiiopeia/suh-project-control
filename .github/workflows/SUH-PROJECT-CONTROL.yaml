@@ -58,4 +58,10 @@ jobs:
 
             echo "=== /bin 스크립트 실행 권한 추가 ==="
             echo $PW | sudo -S chmod +x ${SUH_PROJECT_CONTROL_BIN}/*.sh
+            echo "=== ./cleanup.sh 스크립트 실행 권한 추가 ==="
+            echo $PW | sudo -S chmod +x ${SUH_PROJECT_CONTROL_BIN}/../cleanup.sh
             echo "=== 스크립트 실행 권한 설정 완료 ==="
+
+            echo "=== cleanup.sh 스크립트 실행 ==="
+            cd "${{ secrets.SUH_PROJECT_CONTROL_DIR }}" && ./cleanup.sh
+            echo "=== cleanup.sh 실행 완료 ==="
