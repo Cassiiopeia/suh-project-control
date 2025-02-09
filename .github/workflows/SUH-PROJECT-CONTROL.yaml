@@ -1,0 +1,65 @@
+name: SUH-PROJECT-CONTROL
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-20.04
+    steps:
+      # 소스 코드 체크아웃
+      - name: 소스 코드 가져오기
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: 소스 코드 체크아웃 확인
+        run: echo "소스 코드를 성공적으로 가져왔습니다."
+
+      # .env 파일 생성
+      - name: Create .env file
+        run: |
+          echo "PW=${{ secrets.SERVER_PASSWORD }}" > bin/.env
+          echo ".env 파일이 성공적으로 생성되었습니다."
+
+      # 서버 bin 폴더 업로드
+      - name: bin 폴더 업로드
+        uses: appleboy/scp-action@v0.1.1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          port: 2022
+          password: ${{ secrets.SERVER_PASSWORD }}
+          source: "bin/*"
+          target: "${{ secrets.SEJONG_MALSAMI_DIR }}"
+
+      - name: bin 폴더 업로드 확인
+        run: echo "bin 폴더가 서버에 성공적으로 업로드되었습니다."
+
+      # SSH 접속 -> 스크립트 권한 설정
+      - name: 스크립트 실행 권한 설정
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          port: 2022
+          password: ${{ secrets.SERVER_PASSWORD }}
+          script: |
+            set -e  # 에러 발생 시 스크립트 중단
+
+            echo "=== 환경 변수 설정 중 ==="
+            export PATH=$PATH:/usr/local/bin
+            SEJONG_MALSAMI_BIN="${{ secrets.SEJONG_MALSAMI_DIR }}/bin"
+
+            echo "=== .env 파일 존재 여부 확인 ==="
+            if [[ ! -f "${SEJONG_MALSAMI_BIN}/.env" ]]; then
+              echo "Error: .env 파일이 존재하지 않습니다."
+              exit 1
+            fi
+
+            echo "=== 스크립트 실행 권한 설정 시작 ==="
+            source ${SEJONG_MALSAMI_BIN}/.env
+            echo $PW | sudo -S chmod +x ${SEJONG_MALSAMI_BIN}/*.sh
+            echo "=== 스크립트 실행 권한 설정 완료 ==="
