@@ -9,6 +9,12 @@
 SUCCESS="SUCCESS"
 FAIL="FAIL"
 
+# 공통 JSON 출력 함수 (jq 이용)
+output_json() {
+  # 인자: $1: result, $2: message, $3: data (JSON snippet)
+  jq -n --arg result "$1" --arg message "$2" --argjson data "$3" '{result: $result, message: $message, data: $data}'
+}
+
 # config/database.yml 파일 경로
 DATABASE_YML="$(dirname "$0")/../config/database.yml"
 
@@ -60,16 +66,15 @@ else
   usage
 fi
 
-DETAIL_MSG=""
+DATA=""
 
 # 1. Docker 컨테이너 'mongodb' 실행 여부 확인
 CONTAINER_ID=$(docker ps --filter "name=^mongodb\$" --format "{{.ID}}")
 if [ -z "$CONTAINER_ID" ]; then
   RESULT="$FAIL"
   MESSAGE="Docker 컨테이너 'mongodb'가 실행 중이지 않습니다."
-  DETAIL_MSG=$(jq -n --arg info "docker ps 명령어로 'mongodb' 컨테이너를 찾지 못했습니다." '{info: $info}')
-  jq -n --arg result "$RESULT" --arg message "$MESSAGE" --argjson detail "$DETAIL_MSG" --arg action "$ACTION" \
-    '{result: $result, message: $message, detail: $detail, action: $action}'
+  DATA=$(jq -n --arg info "docker ps 명령어로 'mongodb' 컨테이너를 찾지 못했습니다." '{info: $info}')
+  output_json "$RESULT" "$MESSAGE" "$DATA"
   exit 1
 fi
 
@@ -90,11 +95,11 @@ EOF
     if [ $RET_CODE -ne 0 ]; then
       RESULT="$FAIL"
       MESSAGE="데이터베이스 '$DB_NAME' 생성에 실패하였습니다."
-      DETAIL_MSG=$(jq -n --arg error "mongo 명령어 실행 중 오류 발생" --arg out "$OUTPUT" '{error: $error, output: $out}')
+      DATA=$(jq -n --arg error "mongo 명령어 실행 중 오류 발생" --arg out "$OUTPUT" '{error: $error, output: $out}')
     else
       RESULT="$SUCCESS"
       MESSAGE="데이터베이스 '$DB_NAME'가 생성되었습니다."
-      DETAIL_MSG=$(jq -n --arg db "$DB_NAME" '{created: $db}')
+      DATA=$(jq -n --arg db "$DB_NAME" '{created: $db}')
     fi
     ;;
   drop)
@@ -112,11 +117,11 @@ EOF
     if [ $RET_CODE -ne 0 ]; then
       RESULT="$FAIL"
       MESSAGE="데이터베이스 '$DB_NAME' 삭제에 실패하였습니다."
-      DETAIL_MSG=$(jq -n --arg error "mongo 명령어 실행 중 오류 발생" --arg out "$OUTPUT" '{error: $error, output: $out}')
+      DATA=$(jq -n --arg error "mongo 명령어 실행 중 오류 발생" --arg out "$OUTPUT" '{error: $error, output: $out}')
     else
       RESULT="$SUCCESS"
       MESSAGE="데이터베이스 '$DB_NAME'가 삭제되었습니다."
-      DETAIL_MSG=$(jq -n --arg db "$DB_NAME" '{dropped: $db}')
+      DATA=$(jq -n --arg db "$DB_NAME" '{dropped: $db}')
     fi
     ;;
   list)
@@ -126,15 +131,14 @@ EOF
     if [ $RET_CODE -ne 0 ]; then
       RESULT="$FAIL"
       MESSAGE="데이터베이스 목록 조회에 실패하였습니다."
-      DETAIL_MSG=$(jq -n --arg error "mongo 명령어 실행 중 오류 발생" --arg out "$OUTPUT" '{error: $error, output: $out}')
+      DATA=$(jq -n --arg error "mongo 명령어 실행 중 오류 발생" --arg out "$OUTPUT" '{error: $error, output: $out}')
     else
       RESULT="$SUCCESS"
       MESSAGE="데이터베이스 목록 조회에 성공하였습니다."
-      DETAIL_MSG=$(echo "$OUTPUT" | jq '.')
+      DATA=$(echo "$OUTPUT" | jq '.')
     fi
     ;;
 esac
 
-jq -n --arg result "$RESULT" --arg message "$MESSAGE" --argjson detail "$DETAIL_MSG" --arg action "$ACTION" \
-  '{result: $result, message: $message, detail: $detail, action: $action}'
+output_json "$RESULT" "$MESSAGE" "$DATA"
 exit 0

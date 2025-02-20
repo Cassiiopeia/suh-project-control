@@ -7,7 +7,13 @@
 
 # 상수 변수 설정
 SUCCESS="SUCCESS"
-FAIL="fAIL"
+FAIL="FAIL"
+
+# 공통 JSON 출력 함수 (jq 이용)
+output_json() {
+  # 인자: $1: result, $2: message, $3: data (JSON snippet)
+  jq -n --arg result "$1" --arg message "$2" --argjson data "$3" '{result: $result, message: $message, data: $data}'
+}
 
 # config/database.yml 파일 경로
 DATABASE_YML="$(dirname "$0")/../config/database.yml"
@@ -53,16 +59,15 @@ else
   usage
 fi
 
-DETAIL_MSG=""  # detail에 넣을 객체 또는 리스트(JSON 문자열)
+DATA=""  # data에 넣을 객체 또는 리스트(JSON 문자열)
 
 # 1. Docker 컨테이너 'postgres' 실행 여부 확인
 CONTAINER_ID=$(docker ps --filter "name=^postgres\$" --format "{{.ID}}")
 if [ -z "$CONTAINER_ID" ]; then
   RESULT="$FAIL"
   MESSAGE="Docker 컨테이너 'postgres'가 실행 중이지 않습니다."
-  DETAIL_MSG=$(jq -n --arg info "docker ps 명령어로 'postgres' 컨테이너를 찾지 못했습니다." '{info: $info}')
-  jq -n --arg result "$RESULT" --arg message "$MESSAGE" --argjson detail "$DETAIL_MSG" --arg action "$ACTION" \
-    '{result: $result, message: $message, detail: $detail, action: $action}'
+  DATA=$(jq -n --arg info "docker ps 명령어로 'postgres' 컨테이너를 찾지 못했습니다." '{info: $info}')
+  output_json "$RESULT" "$MESSAGE" "$DATA"
   exit 1
 fi
 
@@ -86,11 +91,11 @@ EOF
     if [ $RET_CODE -ne 0 ]; then
       RESULT="$FAIL"
       MESSAGE="데이터베이스 '$DB_NAME' 생성 및 확장 설치에 실패하였습니다."
-      DETAIL_MSG=$(jq -n --arg error "psql 명령어 실행 중 오류 발생" --arg out "$OUTPUT" '{error: $error, output: $out}')
+      DATA=$(jq -n --arg error "psql 명령어 실행 중 오류 발생" --arg out "$OUTPUT" '{error: $error, output: $out}')
     else
       RESULT="$SUCCESS"
       MESSAGE="데이터베이스 '$DB_NAME'가 생성되었으며, 확장(vector, uuid-ossp)이 설치되었습니다."
-      DETAIL_MSG=$(jq -n --arg db "$DB_NAME" \
+      DATA=$(jq -n --arg db "$DB_NAME" \
                     --argjson extensions '["vector","uuid-ossp"]' \
                     '{database: $db, extensions: $extensions}')
     fi
@@ -106,11 +111,11 @@ EOF
     if [ $RET_CODE -ne 0 ]; then
       RESULT="$FAIL"
       MESSAGE="데이터베이스 '$DB_NAME' 삭제에 실패하였습니다."
-      DETAIL_MSG=$(jq -n --arg error "psql 명령어 실행 중 오류 발생" --arg out "$OUTPUT" '{error: $error, output: $out}')
+      DATA=$(jq -n --arg error "psql 명령어 실행 중 오류 발생" --arg out "$OUTPUT" '{error: $error, output: $out}')
     else
       RESULT="$SUCCESS"
       MESSAGE="데이터베이스 '$DB_NAME'가 삭제되었습니다."
-      DETAIL_MSG=$(jq -n --arg db "$DB_NAME" '{dropped: $db}')
+      DATA=$(jq -n --arg db "$DB_NAME" '{dropped: $db}')
     fi
     ;;
   list)
@@ -122,18 +127,16 @@ EOF
     if [ $RET_CODE -ne 0 ]; then
       RESULT="$FAIL"
       MESSAGE="데이터베이스 목록 조회에 실패하였습니다."
-      DETAIL_MSG=$(jq -n --arg error "psql 명령어 실행 중 오류 발생" --arg out "$DB_LIST_JSON" '{error: $error, output: $out}')
+      DATA=$(jq -n --arg error "psql 명령어 실행 중 오류 발생" --arg out "$DB_LIST_JSON" '{error: $error, output: $out}')
     else
       RESULT="$SUCCESS"
       MESSAGE="데이터베이스 목록 조회에 성공하였습니다."
       # DB_LIST_JSON은 이미 JSON 배열 문자열로 나옴 (예: [ "postgres", "kimchi", ... ])
-      # jq의 --rawfile 옵션 없이, echo를 통해 JSON으로 파싱합니다.
-      DETAIL_MSG=$(echo "$DB_LIST_JSON" | jq '.')
+      DATA=$(echo "$DB_LIST_JSON" | jq '.')
     fi
     ;;
 esac
 
 # 3. 최종 JSON 결과 출력 및 exit 0
-jq -n --arg result "$RESULT" --arg message "$MESSAGE" --argjson detail "$DETAIL_MSG" --arg action "$ACTION" \
-  '{result: $result, message: $message, detail: $detail, action: $action}'
+output_json "$RESULT" "$MESSAGE" "$DATA"
 exit 0
