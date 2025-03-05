@@ -9,7 +9,7 @@
 SUCCESS="SUCCESS"
 FAIL="FAIL"
 
-# 공통 JSON 출력 함수 (jq 이용)
+# 공통 JSON 출력 함수
 output_json() {
   # 인자: $1: result, $2: message, $3: data (JSON snippet)
   jq -n --arg result "$1" --arg message "$2" --argjson data "$3" '{result: $result, message: $message, data: $data}'
