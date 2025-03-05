@@ -41,7 +41,7 @@ usage() {
   echo "Usage:"
   echo "  sudo $0 create <database_name>   : 데이터베이스 생성 (초기 컬렉션 생성)"
   echo "  sudo $0 drop <database_name>     : 데이터베이스 삭제"
-  echo "  sudo $0 list                     : 데이터베이스 목록 조회 (JSON 형식 반환)"
+  echo "  sudo $0 list                     : 데이터베이스 목록 조회 "
   exit 1
 }
 
