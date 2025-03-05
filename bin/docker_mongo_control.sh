@@ -11,7 +11,6 @@ FAIL="FAIL"
 
 # 공통 JSON 출력 함수
 output_json() {
-  # 인자: $1: result, $2: message, $3: data (JSON snippet)
   jq -n --arg result "$1" --arg message "$2" --argjson data "$3" '{result: $result, message: $message, data: $data}'
 }
 
@@ -53,13 +52,15 @@ fi
 
 ACTION="$1"
 DB_NAME=""
+shift
+
 if [[ "$ACTION" == "create" || "$ACTION" == "drop" ]]; then
-  if [ "$#" -ne 2 ]; then
+  if [ "$#" -ne 1 ]; then
     usage
   fi
-  DB_NAME="$2"
+  DB_NAME="$1"
 elif [ "$ACTION" == "list" ]; then
-  if [ "$#" -ne 1 ]; then
+  if [ "$#" -ne 0 ]; then
     usage
   fi
 else
@@ -73,7 +74,7 @@ CONTAINER_ID=$(docker ps --filter "name=^mongodb\$" --format "{{.ID}}")
 if [ -z "$CONTAINER_ID" ]; then
   RESULT="$FAIL"
   MESSAGE="Docker 컨테이너 'mongodb'가 실행 중이지 않습니다."
-  DATA=$(jq -n --arg info "docker ps 명령어로 'mongodb' 컨테이너를 찾지 못했습니다." '{info: $info}')
+  DATA=$(jq -n --arg err "docker ps 명령어로 'mongodb' 컨테이너를 찾지 못했습니다." '{database: null, databases: null, errorMessage: $err}')
   output_json "$RESULT" "$MESSAGE" "$DATA"
   exit 1
 fi
@@ -92,14 +93,14 @@ $MONGO_COMMANDS
 EOF
 )
     RET_CODE=$?
-    if [ $RET_CODE -ne 0 ]; then
+    if [ $RET_CODE -ne 0 ] || echo "$OUTPUT" | grep -q "error"; then
       RESULT="$FAIL"
       MESSAGE="데이터베이스 '$DB_NAME' 생성에 실패하였습니다."
-      DATA=$(jq -n --arg error "mongo 명령어 실행 중 오류 발생" --arg out "$OUTPUT" '{error: $error, output: $out}')
+      DATA=$(jq -n --arg db "$DB_NAME" --arg err "$OUTPUT" '{database: $db, databases: null, errorMessage: $err}')
     else
       RESULT="$SUCCESS"
       MESSAGE="데이터베이스 '$DB_NAME'가 생성되었습니다."
-      DATA=$(jq -n --arg db "$DB_NAME" '{created: $db}')
+      DATA=$(jq -n --arg db "$DB_NAME" '{database: $db, databases: null, errorMessage: null}')
     fi
     ;;
   drop)
@@ -114,28 +115,30 @@ $MONGO_COMMANDS
 EOF
 )
     RET_CODE=$?
-    if [ $RET_CODE -ne 0 ]; then
+    if [ $RET_CODE -ne 0 ] || echo "$OUTPUT" | grep -q "error"; then
       RESULT="$FAIL"
       MESSAGE="데이터베이스 '$DB_NAME' 삭제에 실패하였습니다."
-      DATA=$(jq -n --arg error "mongo 명령어 실행 중 오류 발생" --arg out "$OUTPUT" '{error: $error, output: $out}')
+      DATA=$(jq -n --arg db "$DB_NAME" --arg err "$OUTPUT" '{database: $db, databases: null, errorMessage: $err}')
     else
       RESULT="$SUCCESS"
       MESSAGE="데이터베이스 '$DB_NAME'가 삭제되었습니다."
-      DATA=$(jq -n --arg db "$DB_NAME" '{dropped: $db}')
+      DATA=$(jq -n --arg db "$DB_NAME" '{database: $db, databases: null, errorMessage: null}')
     fi
     ;;
   list)
     # 데이터베이스 목록 조회: db.adminCommand('listDatabases')를 사용하여 JSON 형식으로 출력
-    OUTPUT=$(docker exec -i mongodb mongo -u "$MONGO_USERNAME" -p "$MONGO_PASSWORD" --authenticationDatabase "$MONGO_AUTH_DB" --quiet --eval "printjson(db.adminCommand('listDatabases'))")
+    OUTPUT=$(docker exec -i mongodb mongo -u "$MONGO_USERNAME" -p "$MONGO_PASSWORD" --authenticationDatabase "$MONGO_AUTH_DB" --quiet --eval "printjson(db.adminCommand('listDatabases'))" 2>&1)
     RET_CODE=$?
-    if [ $RET_CODE -ne 0 ]; then
+    if [ $RET_CODE -ne 0 ] || echo "$OUTPUT" | grep -q "error"; then
       RESULT="$FAIL"
       MESSAGE="데이터베이스 목록 조회에 실패하였습니다."
-      DATA=$(jq -n --arg error "mongo 명령어 실행 중 오류 발생" --arg out "$OUTPUT" '{error: $error, output: $out}')
+      DATA=$(jq -n --arg err "$OUTPUT" '{database: null, databases: null, errorMessage: $err}')
     else
+      # MongoDB의 listDatabases 결과에서 데이터베이스 이름만 추출
+      DB_LIST=$(echo "$OUTPUT" | jq -r '.databases[].name')
       RESULT="$SUCCESS"
       MESSAGE="데이터베이스 목록 조회에 성공하였습니다."
-      DATA=$(echo "$OUTPUT" | jq '.')
+      DATA=$(jq -n --argjson dbs "$(echo "$DB_LIST" | jq -R . | jq -s .)" '{database: null, databases: $dbs, errorMessage: null}')
     fi
     ;;
 esac
