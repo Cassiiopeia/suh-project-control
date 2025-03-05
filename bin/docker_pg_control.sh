@@ -72,7 +72,6 @@ case "$ACTION" in
     fi
     DB_NAME="$1"
     shift
-    # --cascade 옵션 처리
     PLUGINS=()
     while [ "$#" -gt 0 ]; do
       if [ "$1" = "--cascade" ]; then
@@ -98,7 +97,7 @@ CONTAINER_ID=$(docker ps --filter "name=^postgres\$" --format "{{.ID}}")
 if [ -z "$CONTAINER_ID" ]; then
   RESULT="$FAIL"
   MESSAGE="Docker 컨테이너 'postgres'가 실행 중이지 않습니다."
-  DATA=$(jq -n --arg info "docker ps 명령어로 'postgres' 컨테이너를 찾지 못했습니다." '{info: $info}')
+  DATA=$(jq -n --arg db "" '{database: $db, plugins: []}')
   output_json "$RESULT" "$MESSAGE" "$DATA"
   exit 1
 fi
@@ -112,14 +111,14 @@ $PSQL_COMMANDS
 EOF
 )
     RET_CODE=$?
-    if [ $RET_CODE -ne 0 ]; then
+    if [ $RET_CODE -ne 0 ] || echo "$OUTPUT" | grep -q "ERROR"; then
       RESULT="$FAIL"
       MESSAGE="데이터베이스 '$DB_NAME' 생성에 실패하였습니다."
-      DATA=$(jq -n --arg error "psql 명령어 실행 중 오류 발생" --arg out "$OUTPUT" '{error: $error, output: $out}')
+      DATA=$(jq -n --arg db "$DB_NAME" --arg err "$OUTPUT" '{database: $db, plugins: [], error: $err}')
     else
       RESULT="$SUCCESS"
       MESSAGE="데이터베이스 '$DB_NAME'가 생성되었습니다."
-      DATA=$(jq -n --arg db "$DB_NAME" '{created: $db}')
+      DATA=$(jq -n --arg db "$DB_NAME" '{database: $db, plugins: []}')
     fi
     ;;
   drop)
@@ -129,28 +128,28 @@ $PSQL_COMMANDS
 EOF
 )
     RET_CODE=$?
-    if [ $RET_CODE -ne 0 ]; then
+    if [ $RET_CODE -ne 0 ] || echo "$OUTPUT" | grep -q "ERROR"; then
       RESULT="$FAIL"
       MESSAGE="데이터베이스 '$DB_NAME' 삭제에 실패하였습니다."
-      DATA=$(jq -n --arg error "psql 명령어 실행 중 오류 발생" --arg out "$OUTPUT" '{error: $error, output: $out}')
+      DATA=$(jq -n --arg db "$DB_NAME" --arg err "$OUTPUT" '{database: $db, plugins: [], error: $err}')
     else
       RESULT="$SUCCESS"
       MESSAGE="데이터베이스 '$DB_NAME'가 삭제되었습니다."
-      DATA=$(jq -n --arg db "$DB_NAME" '{dropped: $db}')
+      DATA=$(jq -n --arg db "$DB_NAME" '{database: $db, plugins: []}')
     fi
     ;;
   list)
     QUERY="SELECT COALESCE(json_agg(datname), '[]'::json) FROM (SELECT datname FROM pg_database WHERE datistemplate = false) sub;"
     DB_LIST_JSON=$(docker exec -i postgres psql -U "$PG_USERNAME" -d postgres -t -A -c "$QUERY" 2>&1)
     RET_CODE=$?
-    if [ $RET_CODE -ne 0 ]; then
+    if [ $RET_CODE -ne 0 ] || echo "$DB_LIST_JSON" | grep -q "ERROR"; then
       RESULT="$FAIL"
       MESSAGE="데이터베이스 목록 조회에 실패하였습니다."
-      DATA=$(jq -n --arg error "psql 명령어 실행 중 오류 발생" --arg out "$DB_LIST_JSON" '{error: $error, output: $out}')
+      DATA=$(jq -n --arg err "$DB_LIST_JSON" '{database: "", plugins: [], error: $err}')
     else
       RESULT="$SUCCESS"
       MESSAGE="데이터베이스 목록 조회에 성공하였습니다."
-      DATA=$(echo "$DB_LIST_JSON" | jq '.')
+      DATA=$(echo "$DB_LIST_JSON" | jq -n --argjson dbs "$DB_LIST_JSON" '{database: "", plugins: $dbs}')
     fi
     ;;
   info)
@@ -158,7 +157,7 @@ EOF
     if [ -z "$EXISTS" ]; then
       RESULT="$FAIL"
       MESSAGE="데이터베이스 '$DB_NAME'가 존재하지 않습니다."
-      DATA=$(jq -n --arg db "$DB_NAME" '{database: $db}')
+      DATA=$(jq -n --arg db "$DB_NAME" '{database: $db, plugins: []}')
     else
       QUERY=$(cat <<EOF
 SELECT json_build_object(
@@ -172,10 +171,10 @@ EOF
 )
       INFO_JSON=$(docker exec -i postgres psql -U "$PG_USERNAME" -d "$DB_NAME" -t -A -c "$QUERY" 2>&1)
       RET_CODE=$?
-      if [ $RET_CODE -ne 0 ]; then
+      if [ $RET_CODE -ne 0 ] || echo "$INFO_JSON" | grep -q "ERROR"; then
         RESULT="$FAIL"
         MESSAGE="데이터베이스 '$DB_NAME' 정보 조회에 실패하였습니다."
-        DATA=$(jq -n --arg error "psql 명령어 실행 중 오류 발생" --arg out "$INFO_JSON" '{error: $error, output: $out}')
+        DATA=$(jq -n --arg db "$DB_NAME" --arg err "$INFO_JSON" '{database: $db, plugins: [], error: $err}')
       else
         RESULT="$SUCCESS"
         MESSAGE="데이터베이스 '$DB_NAME' 정보 조회에 성공하였습니다."
@@ -188,7 +187,7 @@ EOF
     if [ -z "$EXISTS" ]; then
       RESULT="$FAIL"
       MESSAGE="데이터베이스 '$DB_NAME'가 존재하지 않습니다."
-      DATA=$(jq -n --arg db "$DB_NAME" '{database: $db}')
+      DATA=$(jq -n --arg db "$DB_NAME" '{database: $db, plugins: []}')
     else
       PSQL_COMMANDS=""
       for PLUGIN in "${PLUGINS[@]}"; do
@@ -202,11 +201,11 @@ EOF
       if [ $RET_CODE -ne 0 ] || echo "$OUTPUT" | grep -q "ERROR"; then
         RESULT="$FAIL"
         MESSAGE="데이터베이스 '$DB_NAME'에 플러그인 설치에 실패하였습니다."
-        DATA=$(jq -n --arg error "psql 명령어 실행 중 오류 발생" --arg out "$OUTPUT" --argjson plugins "$(printf '%s\n' "${PLUGINS[@]}" | jq -R . | jq -s .)" '{error: $error, output: $out, attempted_plugins: $plugins}')
+        DATA=$(jq -n --arg db "$DB_NAME" --argjson plugins "$(printf '%s\n' "${PLUGINS[@]}" | jq -R . | jq -s .)" --arg err "$OUTPUT" '{database: $db, plugins: $plugins, error: $err}')
       else
         RESULT="$SUCCESS"
         MESSAGE="데이터베이스 '$DB_NAME'에 플러그인이 설치되었습니다."
-        DATA=$(jq -n --arg db "$DB_NAME" --argjson plugins "$(printf '%s\n' "${PLUGINS[@]}" | jq -R . | jq -s .)" '{database: $db, installed_plugins: $plugins}')
+        DATA=$(jq -n --arg db "$DB_NAME" --argjson plugins "$(printf '%s\n' "${PLUGINS[@]}" | jq -R . | jq -s .)" '{database: $db, plugins: $plugins}')
       fi
     fi
     ;;
@@ -215,7 +214,7 @@ EOF
     if [ -z "$EXISTS" ]; then
       RESULT="$FAIL"
       MESSAGE="데이터베이스 '$DB_NAME'가 존재하지 않습니다."
-      DATA=$(jq -n --arg db "$DB_NAME" '{database: $db}')
+      DATA=$(jq -n --arg db "$DB_NAME" '{database: $db, plugins: []}')
     else
       PSQL_COMMANDS=""
       for PLUGIN in "${PLUGINS[@]}"; do
@@ -229,11 +228,11 @@ EOF
       if [ $RET_CODE -ne 0 ] || echo "$OUTPUT" | grep -q "ERROR"; then
         RESULT="$FAIL"
         MESSAGE="데이터베이스 '$DB_NAME'에서 플러그인 삭제에 실패하였습니다."
-        DATA=$(jq -n --arg error "psql 명령어 실행 중 오류 발생" --arg out "$OUTPUT" --argjson plugins "$(printf '%s\n' "${PLUGINS[@]}" | jq -R . | jq -s .)" '{error: $error, output: $out, attempted_plugins: $plugins}')
+        DATA=$(jq -n --arg db "$DB_NAME" --argjson plugins "$(printf '%s\n' "${PLUGINS[@]}" | jq -R . | jq -s .)" --arg err "$OUTPUT" '{database: $db, plugins: $plugins, error: $err}')
       else
         RESULT="$SUCCESS"
         MESSAGE="데이터베이스 '$DB_NAME'에서 플러그인이 삭제되었습니다."
-        DATA=$(jq -n --arg db "$DB_NAME" --argjson plugins "$(printf '%s\n' "${PLUGINS[@]}" | jq -R . | jq -s .)" '{database: $db, removed_plugins: $plugins}')
+        DATA=$(jq -n --arg db "$DB_NAME" --argjson plugins "$(printf '%s\n' "${PLUGINS[@]}" | jq -R . | jq -s .)" '{database: $db, plugins: $plugins}')
       fi
     fi
     ;;
