@@ -4,6 +4,8 @@
 #   sudo ./docker_pg_control.sh create <database_name>
 #   sudo ./docker_pg_control.sh drop <database_name>
 #   sudo ./docker_pg_control.sh list
+#   sudo ./docker_pg_control.sh install-plugin <database_name> <plugin1> [plugin2 ...]
+#   sudo ./docker_pg_control.sh remove-plugin <database_name> <plugin1> [plugin2 ...]
 
 # 상수 변수 설정
 SUCCESS="SUCCESS"
@@ -33,9 +35,11 @@ fi
 # usage 함수: 사용법 출력
 usage() {
   echo "Usage:"
-  echo "  sudo $0 create <database_name>   : 데이터베이스 생성 및 확장 설치"
-  echo "  sudo $0 drop <database_name>     : 데이터베이스 삭제"
-  echo "  sudo $0 list                     : 데이터베이스 목록 조회 (JSON 배열 반환)"
+  echo "  sudo $0 create <database_name>               : 데이터베이스 생성"
+  echo "  sudo $0 drop <database_name>                 : 데이터베이스 삭제"
+  echo "  sudo $0 list                                 : 데이터베이스 목록 조회 (JSON 배열 반환)"
+  echo "  sudo $0 install-plugin <db> <plugin1> [...]  : 데이터베이스에 플러그인 설치"
+  echo "  sudo $0 remove-plugin <db> <plugin1> [...]   : 데이터베이스에서 플러그인 삭제"
   exit 1
 }
 
@@ -46,22 +50,36 @@ fi
 
 ACTION="$1"
 DB_NAME=""
-if [[ "$ACTION" == "create" || "$ACTION" == "drop" ]]; then
-  if [ "$#" -ne 2 ]; then
-    usage
-  fi
-  DB_NAME="$2"
-elif [ "$ACTION" == "list" ]; then
-  if [ "$#" -ne 1 ]; then
-    usage
-  fi
-else
-  usage
-fi
+shift  # 첫 번째 인자(ACTION)를 제거하고 나머지 처리
 
-DATA=""  # data에 넣을 객체 또는 리스트(JSON 문자열)
+case "$ACTION" in
+  create|drop)
+    if [ "$#" -ne 1 ]; then
+      usage
+    fi
+    DB_NAME="$1"
+    ;;
+  list)
+    if [ "$#" -ne 0 ]; then
+      usage
+    fi
+    ;;
+  install-plugin|remove-plugin)
+    if [ "$#" -lt 2 ]; then
+      usage
+    fi
+    DB_NAME="$1"
+    shift  # DB_NAME 제거 후 남은 인자를 플러그인 목록으로 처리
+    PLUGINS=("$@")
+    ;;
+  *)
+    usage
+    ;;
+esac
 
-# 1. Docker 컨테이너 'postgres' 실행 여부 확인
+DATA=""
+
+# Docker 컨테이너 'postgres' 실행 여부 확인
 CONTAINER_ID=$(docker ps --filter "name=^postgres\$" --format "{{.ID}}")
 if [ -z "$CONTAINER_ID" ]; then
   RESULT="$FAIL"
@@ -71,18 +89,10 @@ if [ -z "$CONTAINER_ID" ]; then
   exit 1
 fi
 
-# 2. 액션에 따른 처리
+# 액션에 따른 처리
 case "$ACTION" in
   create)
-    # psql 명령어들을 here-doc으로 전달하여 DB 생성 및 확장 설치
-    PSQL_COMMANDS=$(cat <<EOF
-DROP DATABASE IF EXISTS "$DB_NAME";
-CREATE DATABASE "$DB_NAME";
-\\c "$DB_NAME"
-CREATE EXTENSION IF NOT EXISTS vector;
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-EOF
-)
+    PSQL_COMMANDS="CREATE DATABASE \"$DB_NAME\";"
     OUTPUT=$(docker exec -i postgres psql -U "$PG_USERNAME" -d postgres <<EOF
 $PSQL_COMMANDS
 EOF
@@ -90,18 +100,15 @@ EOF
     RET_CODE=$?
     if [ $RET_CODE -ne 0 ]; then
       RESULT="$FAIL"
-      MESSAGE="데이터베이스 '$DB_NAME' 생성 및 확장 설치에 실패하였습니다."
+      MESSAGE="데이터베이스 '$DB_NAME' 생성에 실패하였습니다."
       DATA=$(jq -n --arg error "psql 명령어 실행 중 오류 발생" --arg out "$OUTPUT" '{error: $error, output: $out}')
     else
       RESULT="$SUCCESS"
-      MESSAGE="데이터베이스 '$DB_NAME'가 생성되었으며, 확장(vector, uuid-ossp)이 설치되었습니다."
-      DATA=$(jq -n --arg db "$DB_NAME" \
-                    --argjson extensions '["vector","uuid-ossp"]' \
-                    '{database: $db, extensions: $extensions}')
+      MESSAGE="데이터베이스 '$DB_NAME'가 생성되었습니다."
+      DATA=$(jq -n --arg db "$DB_NAME" '{created: $db}')
     fi
     ;;
   drop)
-    # 데이터베이스 삭제
     PSQL_COMMANDS="DROP DATABASE IF EXISTS \"$DB_NAME\";"
     OUTPUT=$(docker exec -i postgres psql -U "$PG_USERNAME" -d postgres <<EOF
 $PSQL_COMMANDS
@@ -119,8 +126,6 @@ EOF
     fi
     ;;
   list)
-    # 데이터베이스 목록 조회 (템플릿이 아닌 DB만 조회)
-    # 쿼리 결과를 JSON 배열로 반환 (psql의 json_agg 사용)
     QUERY="SELECT COALESCE(json_agg(datname), '[]'::json) FROM (SELECT datname FROM pg_database WHERE datistemplate = false) sub;"
     DB_LIST_JSON=$(docker exec -i postgres psql -U "$PG_USERNAME" -d postgres -t -A -c "$QUERY")
     RET_CODE=$?
@@ -131,12 +136,53 @@ EOF
     else
       RESULT="$SUCCESS"
       MESSAGE="데이터베이스 목록 조회에 성공하였습니다."
-      # DB_LIST_JSON은 이미 JSON 배열 문자열로 나옴 (예: [ "postgres", "kimchi", ... ])
       DATA=$(echo "$DB_LIST_JSON" | jq '.')
+    fi
+    ;;
+  install-plugin)
+    # 플러그인 설치 명령 생성
+    PSQL_COMMANDS=""
+    for PLUGIN in "${PLUGINS[@]}"; do
+      PSQL_COMMANDS+="CREATE EXTENSION IF NOT EXISTS \"$PLUGIN\";"
+    done
+    OUTPUT=$(docker exec -i postgres psql -U "$PG_USERNAME" -d "$DB_NAME" <<EOF
+$PSQL_COMMANDS
+EOF
+)
+    RET_CODE=$?
+    if [ $RET_CODE -ne 0 ]; then
+      RESULT="$FAIL"
+      MESSAGE="데이터베이스 '$DB_NAME'에 플러그인 설치에 실패하였습니다."
+      DATA=$(jq -n --arg error "psql 명령어 실행 중 오류 발생" --arg out "$OUTPUT" --argjson plugins "$(printf '%s\n' "${PLUGINS[@]}" | jq -R . | jq -s .)" '{error: $error, output: $out, attempted_plugins: $plugins}')
+    else
+      RESULT="$SUCCESS"
+      MESSAGE="데이터베이스 '$DB_NAME'에 플러그인이 설치되었습니다."
+      DATA=$(jq -n --arg db "$DB_NAME" --argjson plugins "$(printf '%s\n' "${PLUGINS[@]}" | jq -R . | jq -s .)" '{database: $db, installed_plugins: $plugins}')
+    fi
+    ;;
+  remove-plugin)
+    # 플러그인 삭제 명령 생성
+    PSQL_COMMANDS=""
+    for PLUGIN in "${PLUGINS[@]}"; do
+      PSQL_COMMANDS+="DROP EXTENSION IF EXISTS \"$PLUGIN\";"
+    done
+    OUTPUT=$(docker exec -i postgres psql -U "$PG_USERNAME" -d "$DB_NAME" <<EOF
+$PSQL_COMMANDS
+EOF
+)
+    RET_CODE=$?
+    if [ $RET_CODE -ne 0 ]; then
+      RESULT="$FAIL"
+      MESSAGE="데이터베이스 '$DB_NAME'에서 플러그인 삭제에 실패하였습니다."
+      DATA=$(jq -n --arg error "psql 명령어 실행 중 오류 발생" --arg out "$OUTPUT" --argjson plugins "$(printf '%s\n' "${PLUGINS[@]}" | jq -R . | jq -s .)" '{error: $error, output: $out, attempted_plugins: $plugins}')
+    else
+      RESULT="$SUCCESS"
+      MESSAGE="데이터베이스 '$DB_NAME'에서 플러그인이 삭제되었습니다."
+      DATA=$(jq -n --arg db "$DB_NAME" --argjson plugins "$(printf '%s\n' "${PLUGINS[@]}" | jq -R . | jq -s .)" '{database: $db, removed_plugins: $plugins}')
     fi
     ;;
 esac
 
-# 3. 최종 JSON 결과 출력 및 exit 0
+# 최종 JSON 결과 출력
 output_json "$RESULT" "$MESSAGE" "$DATA"
 exit 0
