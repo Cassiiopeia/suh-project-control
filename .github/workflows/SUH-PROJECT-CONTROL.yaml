@@ -7,20 +7,15 @@ on:
 
 jobs:
   deploy:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     steps:
-      # 소스 코드 체크아웃
       - name: 소스 코드 가져오기
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: 소스 코드 체크아웃 확인
-        run: echo "소스 코드를 성공적으로 가져왔습니다."
-
-      # 전체 프로젝트 업로드
       - name: 전체 프로젝트 업로드
-        uses: appleboy/scp-action@v0.1.1
+        uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
@@ -28,14 +23,10 @@ jobs:
           password: ${{ secrets.SERVER_PASSWORD }}
           source: "."
           target: "${{ secrets.SUH_PROJECT_CONTROL_DIR }}"
-          exclude: ".git,.idea,.gitignore,suh-project-control.iml,.github" # 제외 파일, 폴더
+          exclude: ".git,.idea,.gitignore,suh-project-control.iml,.github"
 
-      - name: 전체 프로젝트 업로드 확인
-        run: echo "프로젝트가 서버에 성공적으로 업로드되었습니다."
-
-      # 4. SSH 접속 → bin 폴더 내 스크립트에 실행 권한 부여
       - name: 스크립트 실행 권한 설정
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.1.0
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
