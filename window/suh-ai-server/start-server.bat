@@ -36,22 +36,22 @@ echo [%date% %time%] ===== AI Server Startup ===== >> "%MAIN_LOG%"
 REM Step 1: Clean up existing processes
 echo [1/4] Cleaning up existing processes...
 echo [%date% %time%] Cleaning up existing processes... >> "%MAIN_LOG%"
-call "%SCRIPT_DIR%scripts\stop-services.bat" silent
+call "%SCRIPT_DIR%\scripts\stop-services.bat" silent
 
 REM Step 2: Start Ollama server
 echo [2/4] Starting Ollama server...
 echo [%date% %time%] Starting Ollama server... >> "%MAIN_LOG%"
-call "%SCRIPT_DIR%scripts\start-ollama.bat"
+call "%SCRIPT_DIR%\scripts\start-ollama.bat"
 
 REM Step 3: Start Nginx proxy
 echo [3/4] Starting Nginx proxy...
 echo [%date% %time%] Starting Nginx proxy... >> "%MAIN_LOG%"
-call "%SCRIPT_DIR%scripts\start-nginx.bat"
+call "%SCRIPT_DIR%\scripts\start-nginx.bat"
 
 REM Step 4: Check service status
 echo [4/4] Checking service status...
 echo [%date% %time%] Checking service status... >> "%MAIN_LOG%"
-call "%SCRIPT_DIR%scripts\check-status.bat"
+call "%SCRIPT_DIR%\scripts\check-status.bat"
 
 echo.
 echo ========================================
@@ -63,12 +63,17 @@ echo Config directory: %CONFIG_DIR%
 echo Data directory: %DATA_DIR%
 echo.
 
-REM Ask about tunnel startup
-set /p START_TUNNEL="Start Cloudflare tunnel? (y/n): "
+REM Ask about tunnel startup (with auto-yes option)
+if "%1"=="auto" (
+    set "START_TUNNEL=y"
+    echo Start Cloudflare tunnel? (y/n): y [auto-selected]
+) else (
+    set /p START_TUNNEL="Start Cloudflare tunnel? (y/n): "
+)
 if /i "%START_TUNNEL%"=="y" (
     echo.
     echo Starting Cloudflare tunnel...
-    call "%SCRIPT_DIR%scripts\start-tunnel.bat"
+    call "%SCRIPT_DIR%\scripts\start-tunnel.bat"
 )
 
 echo.
