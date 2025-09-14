@@ -62,3 +62,4 @@ Thumbs.db
 
 # yml
 /config/database.yml
+window/suh-ai-server/nginx.conf
