@@ -1,23 +1,23 @@
 # ===================================================================
-# 범용 프로젝트 버전 자동 관리 워크플로우
+# 범용 프로젝트 버전 자동 관리 워크플로우 v2.0
 # ===================================================================
 #
-# 이 워크플로우는 다양한 프로젝트 타입(Spring, Flutter, React, Node.js 등)에서
-# main 브랜치에 푸시될 때마다 patch 버전을 자동으로 증가시킵니다.
+# 이 워크플로우는 다양한 프로젝트 타입에서 main 브랜치에 푸시될 때마다
+# patch 버전을 자동으로 증가시키고 모든 관련 파일을 동기화합니다.
+#
+# 주요 개선사항:
+# - 버전 동기화 자동화 (version.yml ↔ 프로젝트 파일)
+# - 에러 처리 강화
+# - 로깅 개선
+# - 스크립트 안정성 향상
 #
 # 지원 프로젝트 타입:
-# - spring: build.gradle의 version 관리
-# - flutter: pubspec.yaml의 version 관리
-# - react: package.json의 version 관리
-# - react-native: package.json + Android/iOS 플랫폼별 버전 관리
-# - node: package.json의 version 관리
-# - python: pyproject.toml의 version 관리
-# - basic: version.yml만 관리하는 기본 타입
-#
-# 사용 방법:
-# 1. version.yml 파일에서 project_type을 설정하세요
-# 2. 해당 프로젝트의 버전 파일이 올바른 위치에 있는지 확인하세요
-# 3. main 브랜치에 푸시하면 자동으로 patch 버전이 증가합니다
+# - spring: build.gradle
+# - flutter: pubspec.yaml
+# - react/node: package.json
+# - react-native: Info.plist + build.gradle
+# - react-native-expo: app.json
+# - basic: version.yml만 관리
 #
 # ===================================================================
 
@@ -52,17 +52,29 @@ jobs:
           chmod +x .github/scripts/version_manager.sh
           echo "버전 관리 스크립트 권한 설정 완료"
 
-      - name: 현재 버전 확인
+      - name: 현재 버전 확인 및 동기화
         id: current_version
         run: |
-          CURRENT_VERSION=$(./.github/scripts/version_manager.sh get | tail -n 1)
+          echo "🔍 현재 버전 확인 및 동기화 중..."
+          CURRENT_VERSION=$(./.github/scripts/version_manager.sh get 2>/dev/null | tail -n 1)
+          if [ -z "$CURRENT_VERSION" ]; then
+            echo "❌ 버전 확인 실패"
+            exit 1
+          fi
           echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "✅ 현재 버전: $CURRENT_VERSION"
 
-      - name: 새 버전 계산 및 업데이트 (patch 버전 증가)
+      - name: 새 버전 계산 및 업데이트
         id: version
         run: |
-          NEW_VERSION=$(./.github/scripts/version_manager.sh increment | tail -n 1)
+          echo "⬆️ 패치 버전 증가 중..."
+          NEW_VERSION=$(./.github/scripts/version_manager.sh increment 2>/dev/null | tail -n 1)
+          if [ -z "$NEW_VERSION" ]; then
+            echo "❌ 버전 업데이트 실패"
+            exit 1
+          fi
           echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "✅ 새 버전: $NEW_VERSION"
 
       - name: 프로젝트 타입 확인
         id: project_info
@@ -78,83 +90,28 @@ jobs:
 
       - name: 변경사항 확인 및 커밋
         run: |
+          echo "📝 Git 설정 및 변경사항 확인 중..."
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
+
+          # 모든 변경사항 스테이징
+          git add -A
           
-          # 변경된 파일들 확인
-          CHANGED_FILES=""
-          PROJECT_TYPE="${{ steps.project_info.outputs.project_type }}"
+          # 변경사항이 있는지 확인
+          if git diff --staged --quiet; then
+            echo "ℹ️ 변경사항이 없습니다. (이미 동기화됨)"
+          else
+            echo "📤 변경사항 커밋 중..."
+            REPO_NAME=$(basename "${{ github.repository }}")
+            COMMIT_MSG="$REPO_NAME 버전 정보 관리: chore: 버전 ${{ steps.version.outputs.new_version }} [skip ci]"
           
-          # version.yml은 항상 포함
-          if [ -f "version.yml" ]; then
-            CHANGED_FILES="version.yml"
-          fi
-          
-                        # 프로젝트 타입별 파일 추가
-          case "$PROJECT_TYPE" in
-            "spring")
-              if [ -f "build.gradle" ]; then
-                CHANGED_FILES="$CHANGED_FILES build.gradle"
-              fi
-              ;;
-            "flutter")
-              if [ -f "pubspec.yaml" ]; then
-                CHANGED_FILES="$CHANGED_FILES pubspec.yaml"
-              fi
-              ;;
-            "react"|"node")
-              if [ -f "package.json" ]; then
-                CHANGED_FILES="$CHANGED_FILES package.json"
-              fi
-              ;;
-            "react-native")
-              if [ -f "package.json" ]; then
-                CHANGED_FILES="$CHANGED_FILES package.json"
-              fi
-              # React Native 플랫폼별 파일들도 추가
-              if [ -f "android/app/build.gradle" ]; then
-                CHANGED_FILES="$CHANGED_FILES android/app/build.gradle"
-              fi
-              # iOS Info.plist 파일들 찾기
-              find ios -name "Info.plist" -type f 2>/dev/null | while read plist_file; do
-                CHANGED_FILES="$CHANGED_FILES $plist_file"
-              done
-              ;;
-            "react-native-expo")
-              if [ -f "app.json" ]; then
-                CHANGED_FILES="$CHANGED_FILES app.json"
-              fi
-              ;;
-            "python")
-              if [ -f "pyproject.toml" ]; then
-                CHANGED_FILES="$CHANGED_FILES pyproject.toml"
-              fi
-              ;;
-            "basic")
-              echo "📌 기본 타입 프로젝트: version.yml만 관리합니다"
-              ;;
-          esac
-          
-          echo "변경된 파일들: $CHANGED_FILES"
-          
-          # 파일들 스테이징
-          if [ -n "$CHANGED_FILES" ]; then
-            git add $CHANGED_FILES
-            
-            # 변경사항이 있는지 확인
-            if git diff --staged --quiet; then
-              echo "📝 변경사항이 없습니다."
-            else
-              # 커밋 메시지 생성
-              REPO_NAME=$(basename "${{ github.repository }}")
-              COMMIT_MSG="$REPO_NAME 버전 정보 관리 : chore: 버전 ${{ steps.version.outputs.new_version }} [skip ci]"
-              
-              git commit -m "$COMMIT_MSG" || exit 0
+            if git commit -m "$COMMIT_MSG"; then
               git push
               echo "✅ 버전 업데이트 커밋 완료"
+            else
+              echo "❌ 커밋 실패"
+              exit 1
             fi
-          else
-            echo "⚠️ 커밋할 파일을 찾을 수 없습니다."
           fi
 
       - name: Git 태그 생성
@@ -162,23 +119,40 @@ jobs:
           NEW_VERSION="${{ steps.version.outputs.new_version }}"
           TAG_NAME="v$NEW_VERSION"
           
-          # 태그가 이미 존재하는지 확인
+          echo "🏷️ Git 태그 생성 중: $TAG_NAME"
+          
+          # 기존 태그 확인
           if git tag -l | grep -q "^$TAG_NAME$"; then
-            echo "⚠️ 태그 $TAG_NAME이 이미 존재합니다."
+            echo "⚠️ 태그 $TAG_NAME이 이미 존재합니다. 건너뛰기."
           else
-            git tag "$TAG_NAME"
-            git push origin "$TAG_NAME"
-            echo "✅ Git 태그 생성 완료: $TAG_NAME"
+            if git tag "$TAG_NAME" && git push origin "$TAG_NAME"; then
+              echo "✅ Git 태그 생성 완료: $TAG_NAME"
+            else
+              echo "❌ 태그 생성 실패: $TAG_NAME"
+              exit 1
+            fi
           fi
 
-      - name: 버전 업데이트 완료 알림
+      - name: 버전 업데이트 완료 요약
+        if: always()
         run: |
-          echo "🎉 버전 업데이트 완료!"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "📋 업데이트 정보:"
-          echo "  • 이전 버전: ${{ steps.current_version.outputs.current_version }}"
-          echo "  • 새 버전: ${{ steps.version.outputs.new_version }}"
-          echo "  • 프로젝트 타입: ${{ steps.project_info.outputs.project_type }}"
-          echo "  • 커밋: ${{ github.sha }}"
-          echo "  • 브랜치: ${{ github.ref_name }}"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          echo "🎉 버전 업데이트 워크플로우 완료!"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "📊 업데이트 요약:"
+          echo "  📦 프로젝트 타입: ${{ steps.project_info.outputs.project_type }}"
+          echo "  📌 이전 버전: ${{ steps.current_version.outputs.current_version }}"
+          echo "  🆙 새 버전: ${{ steps.version.outputs.new_version }}"
+          echo "  🔖 Git 태그: v${{ steps.version.outputs.new_version }}"
+          echo "  📝 커밋: ${{ github.sha }}"
+          echo "  🌿 브랜치: ${{ github.ref_name }}"
+          echo "  🕐 시간: $(date '+%Y-%m-%d %H:%M:%S UTC')"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          
+          # 실패한 경우에만 에러 표시
+          if [ "${{ job.status }}" != "success" ]; then
+            echo "❌ 일부 단계에서 오류가 발생했습니다. 로그를 확인해주세요."
+          else
+            echo "✅ 모든 단계가 성공적으로 완료되었습니다."
+          fi
