@@ -1,0 +1,23 @@
+{
+  "status": "active",
+  "service": "cloudflare-tunnel",
+  "timestamp": "2025-01-16 10:00:00",
+  "tunnel": {
+    "name": "suh-ai-server",
+    "protocol": "https",
+    "url": "https://suh-project.synology.me",
+    "local_port": 11435,
+    "target": "http://localhost:11434"
+  },
+  "endpoints": {
+    "health": "/health",
+    "tunnel_info": "/api/tunnel-info",
+    "logs": "/api/logs",
+    "ollama": "/"
+  },
+  "authentication": {
+    "required": true,
+    "methods": ["Bearer", "X-API-KEY"],
+    "local_bypass": true
+  }
+}
