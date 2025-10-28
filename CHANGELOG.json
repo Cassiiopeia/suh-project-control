@@ -1,11 +1,27 @@
 {
   "metadata": {
-    "lastUpdated": "2025-10-26T09:43:41Z",
-    "currentVersion": "1.0.9",
+    "lastUpdated": "2025-10-28T00:38:23Z",
+    "currentVersion": "1.1.0",
     "projectType": "basic",
-    "totalReleases": 3
+    "totalReleases": 4
   },
   "releases": [
+    {
+      "version": "1.1.0",
+      "project_type": "basic",
+      "date": "2025-10-28",
+      "pr_number": 21,
+      "raw_summary": "Summary by CodeRabbit\n릴리스 노트\n\nChores\n\n버전이 1.1.0으로 업데이트되었습니다.\n데이터베이스 백업 시스템 구성이 변경되었습니다.",
+      "parsed_changes": {
+        "chores": {
+          "title": "Chores",
+          "items": [
+            "버전이 1.1.0으로 업데이트되었습니다.",
+            "데이터베이스 백업 시스템 구성이 변경되었습니다."
+          ]
+        }
+      }
+    },
     {
       "version": "1.0.9",
       "project_type": "basic",
