@@ -6,6 +6,7 @@
 # 📝 설명:
 # - Docker 컨테이너에서 실행 중인 PostgreSQL 데이터베이스 백업
 # - database.yml 설정 파일에서 인증 정보 자동 로드
+# - sudo 권한으로 Docker 명령어 실행 (database.yml의 password 사용)
 # - 로그 파일 분리 (일반 로그 + 에러 로그)
 # - 자동 로그 로테이션 (크기 기반)
 #
@@ -16,6 +17,11 @@
 #   ./backup_postgres.sh tripgether
 #   ./backup_postgres.sh tripgether /volume1/projects/tripgether/backup/postgres-tripgether
 #   ./backup_postgres.sh tripgether /volume1/projects/backup/postgres/tripgether 60
+#
+# ⚠️ 주의사항:
+#   - Docker 명령어 실행을 위해 sudo 권한이 필요합니다
+#   - database.yml의 password가 sudo 비밀번호로 사용됩니다
+#   - 시놀로지 작업 스케줄러에서는 'root' 사용자로 실행하세요
 #
 # ===================================================================
 
@@ -55,12 +61,12 @@ COLOR_ERROR="\033[0;31m"
 # database.yml에서 postgres 설정 값 읽기
 get_postgres_config() {
     local key=$1
-    
+
     if [ ! -f "$CONFIG_FILE" ]; then
         echo ""
         return 1
     fi
-    
+
     # postgres 섹션에서 키 값 추출
     grep -A 10 "^postgres:" "$CONFIG_FILE" | \
     grep "^\s*${key}:" | \
@@ -79,7 +85,7 @@ log() {
     local level="${2:-INFO}"
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
     local log_message="[${timestamp}] [${level}] ${message}"
-    
+
     # 터미널 출력 (색상 포함)
     case "$level" in
         "SUCCESS")
@@ -95,7 +101,7 @@ log() {
             echo -e "${COLOR_INFO}${log_message}${COLOR_RESET}"
             ;;
     esac
-    
+
     # 로그 파일에 기록 (색상 코드 제외)
     if [ -n "$GENERAL_LOG" ]; then
         echo "[${timestamp}] [${level}] ${message}" >> "$GENERAL_LOG"
@@ -107,15 +113,15 @@ log_error() {
     local message="$1"
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
     local log_message="[${timestamp}] [ERROR] ${message}"
-    
+
     # 터미널 출력
     echo -e "${COLOR_ERROR}${log_message}${COLOR_RESET}"
-    
+
     # 일반 로그 파일에 기록
     if [ -n "$GENERAL_LOG" ]; then
         echo "[${timestamp}] [ERROR] ${message}" >> "$GENERAL_LOG"
     fi
-    
+
     # 에러 로그 파일에 기록
     if [ -n "$ERROR_LOG" ]; then
         echo "[${timestamp}] [ERROR] ${message}" >> "$ERROR_LOG"
@@ -140,15 +146,15 @@ rotate_log() {
     local log_file=$1
     local max_size=$2
     local max_backups=$3
-    
+
     # 파일 존재 확인
     if [ ! -f "$log_file" ]; then
         return 0
     fi
-    
+
     # 파일 크기 확인 (시놀로지 호환)
     local size=$(stat -c%s "$log_file" 2>/dev/null || stat -f%z "$log_file" 2>/dev/null)
-    
+
     # 크기 초과 시 로테이션
     if [ "$size" -gt "$max_size" ]; then
         # 기존 백업 로테이션 (역순으로)
@@ -157,13 +163,13 @@ rotate_log() {
                 mv "${log_file}.${i}.gz" "${log_file}.$((i + 1)).gz"
             fi
         done
-        
+
         # 현재 로그 압축
         gzip -c "$log_file" > "${log_file}.1.gz"
-        
+
         # 새 로그 시작
         > "$log_file"
-        
+
         # 오래된 백업 삭제
         if [ -f "${log_file}.$((max_backups + 1)).gz" ]; then
             rm "${log_file}.$((max_backups + 1)).gz"
@@ -177,13 +183,13 @@ rotate_log() {
 
 validate_backup() {
     local backup_file=$1
-    
+
     # 1. 파일 존재 확인
     if [ ! -f "$backup_file" ]; then
         log_error "백업 파일이 생성되지 않았습니다: $backup_file"
         return 1
     fi
-    
+
     # 2. 파일 크기 확인 (최소 1KB)
     local file_size=$(stat -c%s "$backup_file" 2>/dev/null || stat -f%z "$backup_file" 2>/dev/null)
     if [ "$file_size" -lt 1024 ]; then
@@ -191,14 +197,14 @@ validate_backup() {
         rm -f "$backup_file"
         return 1
     fi
-    
+
     # 3. gzip 파일 무결성 확인
     if ! gzip -t "$backup_file" 2>/dev/null; then
         log_error "백업 파일이 손상되었습니다: $backup_file"
         rm -f "$backup_file"
         return 1
     fi
-    
+
     log_success "백업 파일 검증 완료"
     return 0
 }
@@ -209,18 +215,18 @@ validate_backup() {
 
 check_disk_space() {
     local path=$1
-    
+
     # 디스크 여유 공간 확인 (GB 단위)
     local available_kb=$(df "$path" | tail -1 | awk '{print $4}')
     local available_gb=$((available_kb / 1024 / 1024))
-    
+
     log "디스크 여유 공간: ${available_gb}GB"
-    
+
     if [ "$available_gb" -lt "$MIN_DISK_SPACE_GB" ]; then
         log_error "디스크 공간 부족: ${available_gb}GB 남음 (최소 ${MIN_DISK_SPACE_GB}GB 필요)"
         return 1
     fi
-    
+
     return 0
 }
 
@@ -252,127 +258,129 @@ main() {
     # ---------------------------------------------------------------
     # 1. 인수 파싱 및 검증
     # ---------------------------------------------------------------
-    
+
     if [ -z "$1" ]; then
         echo "❌ 에러: DB명을 입력해주세요."
         echo ""
         usage
     fi
-    
+
     DB_NAME="$1"
     BACKUP_DIR="${2:-${DEFAULT_BACKUP_BASE}/${DB_NAME}}"
     RETENTION_DAYS="${3:-${DEFAULT_RETENTION_DAYS}}"
-    
+
     # ---------------------------------------------------------------
     # 2. 디렉토리 생성
     # ---------------------------------------------------------------
-    
+
     # 백업 디렉토리 생성
     if ! mkdir -p "$BACKUP_DIR" 2>/dev/null; then
         echo "❌ 에러: 백업 디렉토리 생성 실패: $BACKUP_DIR"
         echo "   권한을 확인해주세요."
         exit 1
     fi
-    
+
     # 로그 디렉토리 생성
     LOG_DIR="${BACKUP_DIR}/log"
     if ! mkdir -p "$LOG_DIR" 2>/dev/null; then
         echo "❌ 에러: 로그 디렉토리 생성 실패: $LOG_DIR"
         exit 1
     fi
-    
+
     # ---------------------------------------------------------------
     # 3. 로그 파일 초기화
     # ---------------------------------------------------------------
-    
+
     GENERAL_LOG="${LOG_DIR}/${DB_NAME}.log"
     ERROR_LOG="${LOG_DIR}/${DB_NAME}_error.log"
-    
+
     # 로그 파일이 없으면 생성
     touch "$GENERAL_LOG" 2>/dev/null
     touch "$ERROR_LOG" 2>/dev/null
-    
+
     # ---------------------------------------------------------------
     # 4. 로그 로테이션 (백업 시작 전)
     # ---------------------------------------------------------------
-    
+
     rotate_log "$GENERAL_LOG" "$LOG_MAX_SIZE" "$LOG_MAX_BACKUPS"
     rotate_log "$ERROR_LOG" "$ERROR_LOG_MAX_SIZE" "$ERROR_LOG_MAX_BACKUPS"
-    
+
     # ---------------------------------------------------------------
     # 5. 백업 시작 로그
     # ---------------------------------------------------------------
-    
+
     log "=========================================="
     log "PostgreSQL 백업 시작: ${DB_NAME}"
     log "=========================================="
     log "백업 경로: ${BACKUP_DIR}"
     log "보관 일수: ${RETENTION_DAYS}일"
     log "로그 경로: ${LOG_DIR}"
-    
+
     # ---------------------------------------------------------------
     # 6. 설정 파일 파싱
     # ---------------------------------------------------------------
-    
+
     log "설정 파일 로드 중: ${CONFIG_FILE}"
-    
+
     if [ ! -f "$CONFIG_FILE" ]; then
         log_error "설정 파일을 찾을 수 없습니다: $CONFIG_FILE"
         exit 1
     fi
-    
+
     DB_USER=$(get_postgres_config "username")
     DB_PASS=$(get_postgres_config "password")
     CONTAINER=$(get_postgres_config "container_name")
-    
+
     if [ -z "$DB_USER" ] || [ -z "$DB_PASS" ] || [ -z "$CONTAINER" ]; then
         log_error "설정 파일 파싱 실패: username, password, container_name을 확인해주세요"
         exit 1
     fi
-    
+
     log_success "설정 파일 로드 완료"
     log "컨테이너: ${CONTAINER}"
     log "사용자: ${DB_USER}"
-    
+
     # ---------------------------------------------------------------
     # 7. Docker 컨테이너 상태 확인
     # ---------------------------------------------------------------
-    
+
     log "Docker 컨테이너 상태 확인 중..."
-    
-    if ! docker ps --format "{{.Names}}" | grep -q "^${CONTAINER}$"; then
+
+    # sudo 권한으로 Docker 명령어 실행 (비밀번호는 database.yml에서 읽은 값 사용)
+    if ! echo "$DB_PASS" | sudo -S docker ps --format "{{.Names}}" 2>/dev/null | grep -q "^${CONTAINER}$"; then
         log_error "Docker 컨테이너 '${CONTAINER}'가 실행 중이 아닙니다"
-        log_error "다음 명령어로 확인하세요: docker ps"
+        log_error "다음 명령어로 확인하세요: sudo docker ps"
         exit 1
     fi
-    
+
     log_success "Docker 컨테이너 '${CONTAINER}' 실행 확인"
-    
+
     # ---------------------------------------------------------------
     # 8. 디스크 공간 확인
     # ---------------------------------------------------------------
-    
+
     if ! check_disk_space "$BACKUP_DIR"; then
         exit 1
     fi
-    
+
     # ---------------------------------------------------------------
     # 9. 백업 실행
     # ---------------------------------------------------------------
-    
+
     TIMESTAMP=$(date +%Y%m%d_%H%M%S)
     BACKUP_FILE="${BACKUP_DIR}/${DB_NAME}_${TIMESTAMP}.sql.gz"
-    
+
     log "백업 진행 중..."
     log "파일: ${BACKUP_FILE}"
-    
+
     # 시작 시간 기록
     START_TIME=$(date +%s)
-    
+
     # pg_dump 실행 (비밀번호는 환경 변수로 전달)
     export PGPASSWORD="$DB_PASS"
-    
-    if docker exec -t "$CONTAINER" pg_dump -U "$DB_USER" -d "$DB_NAME" 2>/dev/null | gzip > "$BACKUP_FILE"; then
+
+    # sudo 권한으로 Docker exec 실행
+    if echo "$DB_PASS" | sudo -S docker exec -t "$CONTAINER" pg_dump -U "$DB_USER" -d "$DB_NAME" 2>/dev/null | gzip > "$BACKUP_FILE"; then
         # 종료 시간 기록
         END_TIME=$(date +%s)
         ELAPSED=$((END_TIME - START_TIME))
