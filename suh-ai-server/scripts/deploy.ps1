@@ -47,13 +47,6 @@ if (-not (Test-Path $sourceFolder)) {
 # Copy files
 Write-Host "[INFO] Copying files to $TargetFolder..."
 
-# Create backup if target exists
-if (Test-Path $TargetFolder) {
-    $backupFolder = "$TargetFolder.backup.$(Get-Date -Format 'yyyyMMdd-HHmmss')"
-    Write-Host "[INFO] Creating backup at $backupFolder..."
-    Copy-Item -Path $TargetFolder -Destination $backupFolder -Recurse -Force
-}
-
 # Deploy new files
 Copy-Item -Path "$sourceFolder\*" -Destination $TargetFolder -Recurse -Force
 Write-Host "[SUCCESS] File deployment completed"
