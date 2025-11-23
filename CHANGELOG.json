@@ -1,11 +1,93 @@
 {
   "metadata": {
-    "lastUpdated": "2025-11-23T04:59:40Z",
-    "currentVersion": "1.1.3",
+    "lastUpdated": "2025-11-23T12:14:19Z",
+    "currentVersion": "1.1.18",
     "projectType": "basic",
-    "totalReleases": 7
+    "totalReleases": 9
   },
   "releases": [
+    {
+      "version": "1.1.18",
+      "project_type": "basic",
+      "date": "2025-11-23",
+      "pr_number": 27,
+      "raw_summary": "NoteAdds a Windows deploy workflow that injects API keys into nginx.conf, refactors server auth/config and scripts, adds Python port forwarding, and updates version/docs.\n\nCI/CD\n\nAdd GitHub Actions workflow /.github/workflows/SUH-AI-PROJECT-CONTROL.yaml to deploy to Windows: inject API keys into suh-ai-server/config/nginx.conf, SCP sync, run scripts/deploy.ps1 and scripts/deploy-nginx.ps1.\n\n\nServer config (Nginx)\n\nOverhaul suh-ai-server/config/nginx.conf: switch to map-based X-API-Key auth with injected keys, define public endpoints (/health, /api/tunnel-info), enable rate limiting, listen on 0.0.0.0:11435; remove file/Lua-based auth paths.\n\n\nScripts\n\nAdd suh-ai-server/scripts/deploy.ps1 (download/deploy preserving injected nginx.conf) and deploy-nginx.ps1 (validate/reload Nginx).\nAdd suh-ai-server/scripts/startup.bat to start Ollama and Nginx.\nRemove legacy Windows scripts and API helpers (e.g., api/generate-api-key.ps1, api/health-check.ps1, various scripts/*.bat).\n\n\nNetworking\n\nUpdate bin/suh_ai_proxy_manager.sh: add Python server forwarding 11436 → 172.30.1.14:11436 to setup/remove/status/usage.\n\n\nDocs/Versioning\n\nBump versions (version.yml to 1.1.18/code 23), update README.md latest version, refresh CHANGELOG.md/CHANGELOG.json.\n\n\n\nWritten by Cursor Bugbot for commit a137b71. This will update automatically on new commits. Configure here.\n\n\n\nSummary by CodeRabbit\n릴리스 노트\n\n\nNew Features\n\n자동화된 Windows 서버 배포 워크플로우 추가\nPython 포트 포워딩 지원 추가\nNginx 배포 스크립트 및 검증 추가\n\n\n\nBug Fixes\n\nNginx 인증 흐름 단순화 및 API 키 검증 개선\n\n\n\nDocumentation\n\n이전 서버 설정 파일 및 예제 제거\n\n\n\nRefactor\n\nNAT 규칙 관리 시스템 개선\n\n\n\nChores\n\n버전 업데이트 (1.1.18)\n\n\n\n✏️ Tip: You can customize this high-level summary in your review settings.",
+      "parsed_changes": {
+        "new_features": {
+          "title": "New Features",
+          "items": [
+            "자동화된 Windows 서버 배포 워크플로우 추가",
+            "Python 포트 포워딩 지원 추가",
+            "Nginx 배포 스크립트 및 검증 추가"
+          ]
+        },
+        "bug_fixes": {
+          "title": "Bug Fixes",
+          "items": [
+            "Nginx 인증 흐름 단순화 및 API 키 검증 개선"
+          ]
+        },
+        "documentation": {
+          "title": "Documentation",
+          "items": [
+            "이전 서버 설정 파일 및 예제 제거"
+          ]
+        },
+        "refactor": {
+          "title": "Refactor",
+          "items": [
+            "NAT 규칙 관리 시스템 개선"
+          ]
+        },
+        "chores": {
+          "title": "Chores",
+          "items": [
+            "버전 업데이트 (1.1.18)"
+          ]
+        }
+      }
+    },
+    {
+      "version": "1.1.18",
+      "project_type": "basic",
+      "date": "2025-11-23",
+      "pr_number": 27,
+      "raw_summary": "NoteAdds a Windows deploy workflow that injects API keys into nginx.conf, refactors server auth/config and scripts, adds Python port forwarding, and updates version/docs.\n\nCI/CD\n\nAdd GitHub Actions workflow /.github/workflows/SUH-AI-PROJECT-CONTROL.yaml to deploy to Windows: inject API keys into suh-ai-server/config/nginx.conf, SCP sync, run scripts/deploy.ps1 and scripts/deploy-nginx.ps1.\n\n\nServer config (Nginx)\n\nOverhaul suh-ai-server/config/nginx.conf: switch to map-based X-API-Key auth with injected keys, define public endpoints (/health, /api/tunnel-info), enable rate limiting, listen on 0.0.0.0:11435; remove file/Lua-based auth paths.\n\n\nScripts\n\nAdd suh-ai-server/scripts/deploy.ps1 (download/deploy preserving injected nginx.conf) and deploy-nginx.ps1 (validate/reload Nginx).\nAdd suh-ai-server/scripts/startup.bat to start Ollama and Nginx.\nRemove legacy Windows scripts and API helpers (e.g., api/generate-api-key.ps1, api/health-check.ps1, various scripts/*.bat).\n\n\nNetworking\n\nUpdate bin/suh_ai_proxy_manager.sh: add Python server forwarding 11436 → 172.30.1.14:11436 to setup/remove/status/usage.\n\n\nDocs/Versioning\n\nBump versions (version.yml to 1.1.18/code 23), update README.md latest version, refresh CHANGELOG.md/CHANGELOG.json.\n\n\n\nWritten by Cursor Bugbot for commit a137b71. This will update automatically on new commits. Configure here.\n\n\n\nSummary by CodeRabbit\n릴리스 노트\n\n\nNew Features\n\n자동화된 Windows 서버 배포 워크플로우 추가\nPython 포트 포워딩 지원 추가\nNginx 배포 스크립트 및 검증 추가\n\n\n\nBug Fixes\n\nNginx 인증 흐름 단순화 및 API 키 검증 개선\n\n\n\nDocumentation\n\n이전 서버 설정 파일 및 예제 제거\n\n\n\nRefactor\n\nNAT 규칙 관리 시스템 개선\n\n\n\nChores\n\n버전 업데이트 (1.1.18)\n\n\n\n✏️ Tip: You can customize this high-level summary in your review settings.",
+      "parsed_changes": {
+        "new_features": {
+          "title": "New Features",
+          "items": [
+            "자동화된 Windows 서버 배포 워크플로우 추가",
+            "Python 포트 포워딩 지원 추가",
+            "Nginx 배포 스크립트 및 검증 추가"
+          ]
+        },
+        "bug_fixes": {
+          "title": "Bug Fixes",
+          "items": [
+            "Nginx 인증 흐름 단순화 및 API 키 검증 개선"
+          ]
+        },
+        "documentation": {
+          "title": "Documentation",
+          "items": [
+            "이전 서버 설정 파일 및 예제 제거"
+          ]
+        },
+        "refactor": {
+          "title": "Refactor",
+          "items": [
+            "NAT 규칙 관리 시스템 개선"
+          ]
+        },
+        "chores": {
+          "title": "Chores",
+          "items": [
+            "버전 업데이트 (1.1.18)"
+          ]
+        }
+      }
+    },
     {
       "version": "1.1.3",
       "project_type": "basic",
