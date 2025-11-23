@@ -1,6 +1,0 @@
-tunnel: suh-ai-server
-credentials-file: config\credentials.json
-ingress:
-  - hostname: suh-project.synology.me
-    service: http://localhost:11435
-  - service: http_status:404

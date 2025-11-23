@@ -1,0 +1,26 @@
+name: SUH-AI-PROJECT-CONTROL
+
+on:
+  push:
+    branches: [ "main", "deploy" ]
+  workflow_dispatch:
+
+jobs:
+  deploy-to-windows:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 소스 코드 가져오기
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: suh-ai-server 폴더 Windows 서버로 업로드
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          port: 2023
+          password: ${{ secrets.SERVER_PASSWORD }}
+          source: "suh-ai-server/*"
+          target: "C:/AI/"
+          overwrite: true

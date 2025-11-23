@@ -1,3 +1,0 @@
-# Bearer Tokens for SUH AI Server
-# Add one token per line
-# Generate new tokens using: powershell .\api\generate-api-key.ps1 -Type bearer_token
