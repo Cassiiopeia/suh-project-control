@@ -14,13 +14,128 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: suh-ai-server 폴더 Windows 서버로 업로드
+      - name: Nginx 설정 파일에 API 키 주입
+        run: |
+          echo "🔑 API 키 리스트를 Nginx 설정에 주입 중..."
+
+          # API 키 리스트 파싱 (쉼표 구분)
+          IFS=',' read -ra KEYS <<< "${{ secrets.OLLAMA_API_KEY_LIST }}"
+
+          # Nginx map 형식으로 변환
+          API_KEY_MAP=""
+          for key in "${KEYS[@]}"; do
+            key=$(echo "$key" | xargs)  # 앞뒤 공백 제거
+            if [ -n "$key" ]; then
+              API_KEY_MAP="${API_KEY_MAP}\"${key}\" 1;\n        "
+            fi
+          done
+
+          # 플레이스홀더를 실제 키로 치환
+          sed -i "s|{{OLLAMA_API_KEY_LIST}}|${API_KEY_MAP}|g" suh-ai-server/config/nginx.conf
+
+          echo "✅ API 키 주입 완료 (${#KEYS[@]}개)"
+
+          # 검증 (민감 정보 마스킹)
+          echo "📋 생성된 설정 미리보기:"
+          grep -A 5 "map \$http_x_api_key" suh-ai-server/config/nginx.conf | sed 's/"[^"]*"/"****"/g' || echo "미리보기 실패 (정상 동작)"
+
+      - name: suh-ai-server.tar.gz 압축 생성
+        run: tar -czf suh-ai-server.tar.gz suh-ai-server/
+
+      - name: 압축 파일 Windows 서버로 업로드
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           port: 2023
           password: ${{ secrets.SERVER_PASSWORD }}
-          source: "suh-ai-server/"
-          target: "C:/AI/"
+          source: "suh-ai-server.tar.gz"
+          target: "C:/Temp/"
           overwrite: true
+
+      - name: Windows 서버에서 압축 해제 및 배포
+        uses: appleboy/ssh-action@v1.1.0
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          port: 2023
+          password: ${{ secrets.SERVER_PASSWORD }}
+          script: |
+            cd C:\Temp
+            tar -xzf suh-ai-server.tar.gz
+            xcopy /E /I /Y suh-ai-server C:\AI\suh-ai-server
+            del suh-ai-server.tar.gz
+            rmdir /S /Q suh-ai-server
+
+      - name: Nginx 설정 적용 및 재시작
+        uses: appleboy/ssh-action@v1.1.0
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          port: 2023
+          password: ${{ secrets.SERVER_PASSWORD }}
+          script: |
+            Write-Host "🔍 Nginx 설치 경로 탐색 중..."
+
+            # Nginx 경로 찾기 (Chocolatey 설치 기준)
+            $nginxPath = Get-ChildItem "C:\tools" -Directory -Filter "nginx-*" -ErrorAction SilentlyContinue | Where-Object { Test-Path "$($_.FullName)\nginx.exe" } | Select-Object -First 1 -ExpandProperty FullName
+
+            if (-not $nginxPath) {
+              Write-Host "❌ Nginx를 찾을 수 없습니다."
+              exit 1
+            }
+
+            Write-Host "✅ Nginx 경로: $nginxPath"
+
+            # 백업 생성
+            $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+            $confPath = Join-Path $nginxPath "conf\nginx.conf"
+            $backupPath = "$confPath.backup.$timestamp"
+
+            if (Test-Path $confPath) {
+              Copy-Item $confPath $backupPath -ErrorAction SilentlyContinue
+              Write-Host "💾 백업 생성: $backupPath"
+            }
+
+            # 새 설정 복사
+            Copy-Item "C:\AI\suh-ai-server\config\nginx.conf" $confPath -Force
+            Write-Host "📦 설정 파일 배포 완료"
+
+            # 설정 검증
+            $nginxExe = Join-Path $nginxPath "nginx.exe"
+            Write-Host "🔍 Nginx 설정 검증 중..."
+            $testOutput = & $nginxExe -t 2>&1
+            Write-Host $testOutput
+
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "❌ 설정 오류 - 롤백 중..."
+              if (Test-Path $backupPath) {
+                Copy-Item $backupPath $confPath -Force
+                Write-Host "✅ 이전 설정으로 롤백 완료"
+              }
+              exit 1
+            }
+
+            Write-Host "✅ 설정 검증 성공"
+
+            # 무중단 재시작
+            $nginxProcess = Get-Process nginx -ErrorAction SilentlyContinue
+            if ($nginxProcess) {
+              Write-Host "🔄 Nginx reload 중..."
+              & $nginxExe -s reload
+              if ($LASTEXITCODE -eq 0) {
+                Write-Host "✅ Nginx reload 완료"
+              } else {
+                Write-Host "⚠️ Reload 실패 - 재시작 시도..."
+                Stop-Process -Name nginx -Force -ErrorAction SilentlyContinue
+                Start-Sleep -Seconds 2
+                Start-Process -FilePath $nginxExe -WorkingDirectory $nginxPath -WindowStyle Hidden
+                Write-Host "✅ Nginx 재시작 완료"
+              }
+            } else {
+              Write-Host "🚀 Nginx 시작 중..."
+              Start-Process -FilePath $nginxExe -WorkingDirectory $nginxPath -WindowStyle Hidden
+              Write-Host "✅ Nginx 시작 완료"
+            }
+
+            Write-Host "🎉 Nginx 배포 완료!"
