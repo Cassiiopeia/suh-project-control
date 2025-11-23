@@ -1,11 +1,33 @@
 {
   "metadata": {
-    "lastUpdated": "2025-11-23T04:58:25Z",
+    "lastUpdated": "2025-11-23T04:59:40Z",
     "currentVersion": "1.1.3",
     "projectType": "basic",
-    "totalReleases": 6
+    "totalReleases": 7
   },
   "releases": [
+    {
+      "version": "1.1.3",
+      "project_type": "basic",
+      "date": "2025-11-23",
+      "pr_number": 24,
+      "raw_summary": "NoteAdds SSH port forwarding and refactors the NAT manager with MASQUERADE and improved status/help, plus version bump to 1.1.3.\n\nScripts\n\nUpdate bin/suh_ai_proxy_manager.sh:\n\nAdd SSH forwarding localhost:2023 → 172.30.1.14:2023 alongside AI service.\nRefactor into apply_nat/remove_nat and check_single_rule; add POSTROUTING MASQUERADE.\nEnhance status output (lists PREROUTING) and usage/install checks.\n\n\n\n\nVersioning\n\nUpdate version.yml to version: \"1.1.3\", version_code: 8; adjust flutter/basic version patterns; refresh metadata timestamp.\n\n\nDocs\n\nUpdate CHANGELOG.md/CHANGELOG.json with 1.1.3 release details.\nUpdate README.md latest version to v1.1.1 (2025-11-07).\n\n\n\nWritten by Cursor Bugbot for commit 09c4248. This will update automatically on new commits. Configure here.\n\n\n\nSummary by CodeRabbit\n릴리스 노트\n\n\nChores\n\n버전을 1.1.3으로 업데이트했습니다.\n빌드 번호를 증가시켰습니다.\n\n\n\nRefactor\n\nNAT 규칙 관리 시스템을 개선하여 더욱 안정적인 서비스 포트 매핑을 제공합니다.\n\n\n\n✏️ Tip: You can customize this high-level summary in your review settings.",
+      "parsed_changes": {
+        "chores": {
+          "title": "Chores",
+          "items": [
+            "버전을 1.1.3으로 업데이트했습니다.",
+            "빌드 번호를 증가시켰습니다."
+          ]
+        },
+        "refactor": {
+          "title": "Refactor",
+          "items": [
+            "NAT 규칙 관리 시스템을 개선하여 더욱 안정적인 서비스 포트 매핑을 제공합니다."
+          ]
+        }
+      }
+    },
     {
       "version": "1.1.3",
       "project_type": "basic",
