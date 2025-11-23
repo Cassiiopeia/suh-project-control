@@ -21,7 +21,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           port: 2023
           password: ${{ secrets.SERVER_PASSWORD }}
-          source: "suh-ai-server/*"
+          source: "suh-ai-server/"
           target: "C:/AI/"
           overwrite: true
-          tar_exec: "tar -xf"
+          rm: true
