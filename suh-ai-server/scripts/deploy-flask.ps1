@@ -33,20 +33,19 @@ try {
 
     Write-Host "[SUCCESS] Flask path: $flaskPath"
 
-    # Find Python installation (version-agnostic)
+    # Find Python installation
     Write-Host "[INFO] Locating Python installation..."
 
-    $pythonExe = Get-ChildItem "C:\Python*\python.exe" -ErrorAction SilentlyContinue |
+    $pythonExe = Get-ChildItem "C:\Users\*\AppData\Local\Programs\Python\Python*\python.exe" -ErrorAction SilentlyContinue |
                  Sort-Object Name -Descending |
                  Select-Object -First 1 -ExpandProperty FullName
 
     if (-not $pythonExe) {
-        Write-Host "[ERROR] Python not found in C:\Python*"
-        Write-Host "[ERROR] Please install Python to C:\Python3xx\ directory"
+        Write-Host "[ERROR] Python not found in C:\Users\*\AppData\Local\Programs\Python\"
         exit 1
     }
 
-    Write-Host "[INFO] Found Python: $pythonExe"
+    Write-Host "[INFO] Using Python: $pythonExe"
 
     # Verify Python works
     try {
@@ -54,7 +53,7 @@ try {
         Write-Host "[SUCCESS] Python verified: $pythonVersion"
     }
     catch {
-        Write-Host "[ERROR] Python executable failed: $pythonExe"
+        Write-Host "[ERROR] Python failed to execute"
         exit 1
     }
 
