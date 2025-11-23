@@ -50,10 +50,16 @@ try {
     $nginxExe = Join-Path $nginxPath "nginx.exe"
     Write-Host "[INFO] Validating Nginx configuration..."
 
-    $testOutput = & $nginxExe -t 2>&1
-    Write-Host $testOutput
+    # 경로에 공백이 있을 수 있으므로 Start-Process 사용
+    $testProcess = Start-Process -FilePath $nginxExe -ArgumentList "-t" -WorkingDirectory $nginxPath -NoNewWindow -Wait -PassThru -RedirectStandardError "$env:TEMP\nginx-test-error.txt" -RedirectStandardOutput "$env:TEMP\nginx-test-output.txt"
 
-    if ($LASTEXITCODE -ne 0) {
+    $testOutput = Get-Content "$env:TEMP\nginx-test-output.txt" -ErrorAction SilentlyContinue
+    $testError = Get-Content "$env:TEMP\nginx-test-error.txt" -ErrorAction SilentlyContinue
+
+    if ($testOutput) { Write-Host $testOutput }
+    if ($testError) { Write-Host $testError }
+
+    if ($testProcess.ExitCode -ne 0) {
         Write-Host "[ERROR] Configuration validation failed - rolling back..."
         if (Test-Path $backupPath) {
             Copy-Item $backupPath $confPath -Force
@@ -68,9 +74,9 @@ try {
     $nginxProcess = Get-Process nginx -ErrorAction SilentlyContinue
     if ($nginxProcess) {
         Write-Host "[INFO] Reloading Nginx..."
-        & $nginxExe -s reload
+        $reloadProcess = Start-Process -FilePath $nginxExe -ArgumentList "-s", "reload" -WorkingDirectory $nginxPath -NoNewWindow -Wait -PassThru
 
-        if ($LASTEXITCODE -eq 0) {
+        if ($reloadProcess.ExitCode -eq 0) {
             Write-Host "[SUCCESS] Nginx reloaded"
         }
         else {
