@@ -76,6 +76,14 @@ try {
 
     Write-Host "[SUCCESS] NSSM found: $nssmPath"
 
+    # Ensure logs directory exists
+    $logsPath = Join-Path $flaskPath "logs"
+    if (-not (Test-Path $logsPath)) {
+        Write-Host "[INFO] Creating logs directory..."
+        New-Item -Path $logsPath -ItemType Directory -Force | Out-Null
+        Write-Host "[SUCCESS] Logs directory created"
+    }
+
     # Check if service exists
     $serviceExists = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
 
