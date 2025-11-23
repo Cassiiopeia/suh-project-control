@@ -47,8 +47,15 @@ try {
     Write-Host "[SUCCESS] Configuration file deployed"
 
     # 설정 검증
-    $nginxExe = Join-Path $nginxPath "nginx.exe"
+    $nginxExe = Join-Path -Path $nginxPath -ChildPath "nginx.exe"
+
+    if (-not (Test-Path $nginxExe)) {
+        Write-Host "[ERROR] nginx.exe not found at: $nginxExe"
+        exit 1
+    }
+
     Write-Host "[INFO] Validating Nginx configuration..."
+    Write-Host "[DEBUG] Nginx executable: $nginxExe"
 
     # 경로에 공백이 있을 수 있으므로 Start-Process 사용
     $testProcess = Start-Process -FilePath $nginxExe -ArgumentList "-t" -WorkingDirectory $nginxPath -NoNewWindow -Wait -PassThru -RedirectStandardError "$env:TEMP\nginx-test-error.txt" -RedirectStandardOutput "$env:TEMP\nginx-test-output.txt"
@@ -74,6 +81,7 @@ try {
     $nginxProcess = Get-Process nginx -ErrorAction SilentlyContinue
     if ($nginxProcess) {
         Write-Host "[INFO] Reloading Nginx..."
+        Write-Host "[DEBUG] Executing: $nginxExe -s reload"
         $reloadProcess = Start-Process -FilePath $nginxExe -ArgumentList "-s", "reload" -WorkingDirectory $nginxPath -NoNewWindow -Wait -PassThru
 
         if ($reloadProcess.ExitCode -eq 0) {
@@ -83,12 +91,14 @@ try {
             Write-Host "[WARN] Reload failed - attempting restart..."
             Stop-Process -Name nginx -Force -ErrorAction SilentlyContinue
             Start-Sleep -Seconds 2
+            Write-Host "[DEBUG] Starting: $nginxExe"
             Start-Process -FilePath $nginxExe -WorkingDirectory $nginxPath -WindowStyle Hidden
             Write-Host "[SUCCESS] Nginx restarted"
         }
     }
     else {
         Write-Host "[INFO] Starting Nginx..."
+        Write-Host "[DEBUG] Starting: $nginxExe"
         Start-Process -FilePath $nginxExe -WorkingDirectory $nginxPath -WindowStyle Hidden
         Write-Host "[SUCCESS] Nginx started"
     }

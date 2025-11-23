@@ -47,8 +47,27 @@ if (-not (Test-Path $sourceFolder)) {
 # Copy files
 Write-Host "[INFO] Copying files to $TargetFolder..."
 
+# Backup nginx.conf if it exists and has been modified by GitHub Actions
+$nginxConfBackup = $null
+$nginxConfPath = Join-Path $TargetFolder "config\nginx.conf"
+if (Test-Path $nginxConfPath) {
+    $nginxContent = Get-Content $nginxConfPath -Raw
+    # Check if API keys have been injected (no placeholder remaining)
+    if ($nginxContent -notmatch '\{\{OLLAMA_API_KEY_LIST\}\}') {
+        Write-Host "[INFO] Preserving nginx.conf with injected API keys..."
+        $nginxConfBackup = $nginxContent
+    }
+}
+
 # Deploy new files
 Copy-Item -Path "$sourceFolder\*" -Destination $TargetFolder -Recurse -Force
+
+# Restore nginx.conf with injected API keys
+if ($nginxConfBackup) {
+    Set-Content -Path $nginxConfPath -Value $nginxConfBackup -NoNewline
+    Write-Host "[SUCCESS] Restored nginx.conf with API keys"
+}
+
 Write-Host "[SUCCESS] File deployment completed"
 
 # Cleanup
