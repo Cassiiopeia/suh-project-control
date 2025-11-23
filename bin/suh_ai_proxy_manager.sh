@@ -6,6 +6,7 @@
 # 📝 설명:
 # - AI 서비스: localhost:11435 → 172.30.1.14:11435
 # - SSH 서비스: localhost:2023 → 172.30.1.14:2023
+# - Python 서버: localhost:11436 → 172.30.1.14:11436
 # - 시놀로지 부팅 시 자동 실행되도록 스케줄러 등록
 # - iptables 규칙 추가/제거/상태 확인 기능 제공
 #
@@ -34,6 +35,11 @@ AI_TARGET_PORT=11435
 SSH_LOCAL_PORT=2023
 SSH_TARGET_IP=172.30.1.14
 SSH_TARGET_PORT=2023
+
+# Python 서버 포트 포워딩
+PYTHON_LOCAL_PORT=11436
+PYTHON_TARGET_IP=172.30.1.14
+PYTHON_TARGET_PORT=11436
 
 # 스크립트 경로
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -142,12 +148,14 @@ setup_nat_rule() {
     log_info "==== NAT 규칙 적용 ===="
     apply_nat $AI_LOCAL_PORT $AI_TARGET_IP $AI_TARGET_PORT
     apply_nat $SSH_LOCAL_PORT $SSH_TARGET_IP $SSH_TARGET_PORT
+    apply_nat $PYTHON_LOCAL_PORT $PYTHON_TARGET_IP $PYTHON_TARGET_PORT
 }
 
 remove_nat_rule() {
     log_info "==== NAT 규칙 제거 ===="
     remove_nat $AI_LOCAL_PORT $AI_TARGET_IP $AI_TARGET_PORT
     remove_nat $SSH_LOCAL_PORT $SSH_TARGET_IP $SSH_TARGET_PORT
+    remove_nat $PYTHON_LOCAL_PORT $PYTHON_TARGET_IP $PYTHON_TARGET_PORT
 }
 
 check_status() {
@@ -155,6 +163,7 @@ check_status() {
 
     check_single_rule "AI 서버" $AI_LOCAL_PORT $AI_TARGET_IP $AI_TARGET_PORT
     check_single_rule "SSH 서버" $SSH_LOCAL_PORT $SSH_TARGET_IP $SSH_TARGET_PORT
+    check_single_rule "Python 서버" $PYTHON_LOCAL_PORT $PYTHON_TARGET_IP $PYTHON_TARGET_PORT
 
     echo ""
     log_info "PREROUTING 전체 목록:"
@@ -236,6 +245,7 @@ usage() {
     echo "  setup      NAT 규칙 추가"
     echo "             - AI 서비스: localhost:${AI_LOCAL_PORT} → ${AI_TARGET_IP}:${AI_TARGET_PORT}"
     echo "             - SSH 서비스: localhost:${SSH_LOCAL_PORT} → ${SSH_TARGET_IP}:${SSH_TARGET_PORT}"
+    echo "             - Python 서버: localhost:${PYTHON_LOCAL_PORT} → ${PYTHON_TARGET_IP}:${PYTHON_TARGET_PORT}"
     echo "  remove     NAT 규칙 제거"
     echo "  status     NAT 규칙 상태 확인"
     echo "  install    부팅 시 자동 실행 등록 (rc.local)"

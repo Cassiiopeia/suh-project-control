@@ -1,4 +1,0 @@
-# API Keys for SUH AI Server
-# Add one key per line
-# Generate new keys using: powershell .\api\generate-api-key.ps1
-test123@

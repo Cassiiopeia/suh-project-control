@@ -1,0 +1,73 @@
+name: SUH-AI-PROJECT-CONTROL
+
+on:
+  push:
+    branches: [ "main", "deploy" ]
+  workflow_dispatch:
+
+jobs:
+  deploy-to-windows:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 소스 코드 가져오기
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Nginx 설정 파일에 API 키 주입
+        run: |
+          echo "[INFO] API key list injection started..."
+
+          # API 키 리스트 파싱 (쉼표 구분)
+          IFS=',' read -ra KEYS <<< "${{ secrets.OLLAMA_API_KEY_LIST }}"
+
+          # Nginx map 형식으로 변환
+          API_KEY_MAP=""
+          for key in "${KEYS[@]}"; do
+            key=$(echo "$key" | xargs)  # 앞뒤 공백 제거
+            if [ -n "$key" ]; then
+              API_KEY_MAP="${API_KEY_MAP}\"${key}\" 1;\n        "
+            fi
+          done
+
+          # 플레이스홀더를 실제 키로 치환
+          sed -i "s|{{OLLAMA_API_KEY_LIST}}|${API_KEY_MAP}|g" suh-ai-server/config/nginx.conf
+
+          echo "[SUCCESS] API key injection completed (${#KEYS[@]} keys)"
+
+          # 검증 (민감 정보 마스킹)
+          echo "[INFO] Configuration preview:"
+          grep -A 5 "map \$http_x_api_key" suh-ai-server/config/nginx.conf | sed 's/"[^"]*"/"****"/g' || echo "[WARN] Preview failed (may be normal)"
+
+      - name: suh-ai-server 폴더 업로드
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          port: 2023
+          password: ${{ secrets.SERVER_PASSWORD }}
+          source: "suh-ai-server"
+          target: "C:/AI/"
+          rm: false
+
+      - name: 배포 스크립트 실행
+        uses: appleboy/ssh-action@v1.1.0
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          port: 2023
+          password: ${{ secrets.SERVER_PASSWORD }}
+          script_stop: true
+          script: |
+            powershell -ExecutionPolicy Bypass -File "C:\AI\suh-ai-server\scripts\deploy.ps1" -CommitSha "${{ github.sha }}"
+
+      - name: Nginx 설정 적용 및 재시작
+        uses: appleboy/ssh-action@v1.1.0
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          port: 2023
+          password: ${{ secrets.SERVER_PASSWORD }}
+          script_stop: true
+          script: |
+            powershell -ExecutionPolicy Bypass -File "C:\AI\suh-ai-server\scripts\deploy-nginx.ps1"
