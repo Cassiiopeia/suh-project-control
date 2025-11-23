@@ -47,7 +47,12 @@ try {
     Write-Host "[SUCCESS] Configuration file deployed"
 
     # 설정 검증
-    $nginxExe = Join-Path -Path $nginxPath -ChildPath "nginx.exe"
+    if ([string]::IsNullOrEmpty($nginxPath)) {
+        Write-Host "[ERROR] Nginx path is null or empty"
+        exit 1
+    }
+
+    $nginxExe = "$nginxPath\nginx.exe"
 
     if (-not (Test-Path $nginxExe)) {
         Write-Host "[ERROR] nginx.exe not found at: $nginxExe"
