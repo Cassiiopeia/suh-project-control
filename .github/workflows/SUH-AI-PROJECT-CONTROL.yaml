@@ -24,4 +24,3 @@ jobs:
           source: "suh-ai-server/"
           target: "C:/AI/"
           overwrite: true
-          rm: true
