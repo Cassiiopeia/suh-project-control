@@ -24,3 +24,4 @@ jobs:
           source: "suh-ai-server/*"
           target: "C:/AI/"
           overwrite: true
+          tar_exec: "tar -xf"
