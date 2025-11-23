@@ -33,73 +33,28 @@ try {
 
     Write-Host "[SUCCESS] Flask path: $flaskPath"
 
-    # Dynamically find Python installation
-    Write-Host "[INFO] Searching for Python installation..."
-    $pythonExe = $null
+    # Find Python installation (version-agnostic)
+    Write-Host "[INFO] Locating Python installation..."
 
-    # Method 1: Try common Python installation paths (ordered by preference)
-    $pythonPaths = @(
-        "C:\Python312\python.exe",
-        "C:\Python311\python.exe",
-        "C:\Python310\python.exe",
-        "C:\Python39\python.exe",
-        "C:\Python38\python.exe",
-        "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe",
-        "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe",
-        "$env:LOCALAPPDATA\Programs\Python\Python310\python.exe"
-    )
+    $pythonExe = Get-ChildItem "C:\Python*\python.exe" -ErrorAction SilentlyContinue |
+                 Sort-Object Name -Descending |
+                 Select-Object -First 1 -ExpandProperty FullName
 
-    foreach ($path in $pythonPaths) {
-        if (Test-Path $path) {
-            $pythonExe = $path
-            Write-Host "[INFO] Found Python at: $pythonExe"
-            break
-        }
-    }
-
-    # Method 2: Try PATH environment variable
     if (-not $pythonExe) {
-        try {
-            $pythonCmd = Get-Command python -ErrorAction Stop
-            $pythonExe = $pythonCmd.Source
-            Write-Host "[INFO] Found Python in PATH: $pythonExe"
-        }
-        catch {
-            # Python not in PATH, continue
-        }
-    }
-
-    # Method 3: Search C:\ for Python installations
-    if (-not $pythonExe) {
-        Write-Host "[INFO] Searching C:\ for Python installations..."
-        $foundPythons = Get-ChildItem -Path "C:\" -Filter "python.exe" -Recurse -ErrorAction SilentlyContinue -Depth 2 |
-            Where-Object { $_.FullName -match "Python\d+" } |
-            Sort-Object { $_.FullName } -Descending |
-            Select-Object -First 1
-
-        if ($foundPythons) {
-            $pythonExe = $foundPythons.FullName
-            Write-Host "[INFO] Found Python via search: $pythonExe"
-        }
-    }
-
-    # Verify Python was found and is working
-    if (-not $pythonExe -or -not (Test-Path $pythonExe)) {
-        Write-Host "[ERROR] Python installation not found. Please install Python 3.8 or higher."
-        Write-Host "[ERROR] Searched paths:"
-        $pythonPaths | ForEach-Object { Write-Host "  - $_" }
+        Write-Host "[ERROR] Python not found in C:\Python*"
+        Write-Host "[ERROR] Please install Python to C:\Python3xx\ directory"
         exit 1
     }
+
+    Write-Host "[INFO] Found Python: $pythonExe"
 
     # Verify Python works
     try {
         $pythonVersion = & $pythonExe --version 2>&1
-        Write-Host "[SUCCESS] Python found and verified: $pythonVersion"
-        Write-Host "[INFO] Python executable: $pythonExe"
+        Write-Host "[SUCCESS] Python verified: $pythonVersion"
     }
     catch {
-        Write-Host "[ERROR] Python found but failed to execute: $pythonExe"
-        Write-Host "[ERROR] Error: $($_.Exception.Message)"
+        Write-Host "[ERROR] Python executable failed: $pythonExe"
         exit 1
     }
 
