@@ -29,16 +29,6 @@ def health():
     }), 200
 
 
-@app.route('/api/tunnel-info', methods=['GET'])
-def tunnel_info():
-    """Tunnel information endpoint"""
-    return jsonify({
-        'service': 'ollama-ocr-api',
-        'port': 5000,
-        'nginx_port': 11436
-    }), 200
-
-
 @app.route('/ocr', methods=['POST'])
 def ocr():
     """
