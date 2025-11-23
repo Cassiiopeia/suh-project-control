@@ -23,7 +23,7 @@ try {
     # Configuration
     $flaskPath = "C:\AI\suh-ai-server\flask"
     $serviceName = "FlaskOCRService"
-    $pythonExe = "python"
+    $pythonExe = "C:\Python312\python.exe"  # Full path to Python executable
     $runScript = "run.py"
 
     # Verify Flask directory exists
