@@ -1,10 +1,11 @@
 #!/bin/bash
 # ===================================================================
-# AI 서버 포트 포워딩 관리 스크립트 (시놀로지 환경)
+# AI 서버 + SSH 포트 포워딩 관리 스크립트 (시놀로지 환경)
 # ===================================================================
 #
 # 📝 설명:
-# - localhost:11435 → 172.30.1.14:11435로 iptables NAT 규칙 설정
+# - AI 서비스: localhost:11435 → 172.30.1.14:11435
+# - SSH 서비스: localhost:2023 → 172.30.1.14:2023
 # - 시놀로지 부팅 시 자동 실행되도록 스케줄러 등록
 # - iptables 규칙 추가/제거/상태 확인 기능 제공
 #
@@ -24,10 +25,15 @@
 # 설정 및 상수
 # ===================================================================
 
-# 포트 및 대상 서버 설정
-LOCAL_PORT=11435
-TARGET_IP=172.30.1.14
-TARGET_PORT=11435
+# AI 서비스 포트
+AI_LOCAL_PORT=11435
+AI_TARGET_IP=172.30.1.14
+AI_TARGET_PORT=11435
+
+# SSH 포트 포워딩
+SSH_LOCAL_PORT=2023
+SSH_TARGET_IP=172.30.1.14
+SSH_TARGET_PORT=2023
 
 # 스크립트 경로
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -47,17 +53,9 @@ log() {
     echo "[${timestamp}] ${message}"
 }
 
-log_success() {
-    log "✅ $1"
-}
-
-log_error() {
-    log "❌ $1" >&2
-}
-
-log_info() {
-    log "ℹ️  $1"
-}
+log_success() { log "✅ $1"; }
+log_error() { log "❌ $1" >&2; }
+log_info() { log "ℹ️  $1"; }
 
 # ===================================================================
 # 권한 확인
@@ -83,88 +81,87 @@ check_iptables() {
 }
 
 # ===================================================================
-# NAT 규칙 설정 함수
+# NAT 규칙 반복 적용 함수
+# ===================================================================
+
+apply_nat() {
+    local LPORT=$1
+    local TIP=$2
+    local TPORT=$3
+
+    log_info "규칙 적용: ${LPORT} → ${TIP}:${TPORT}"
+
+    if iptables -t nat -C PREROUTING -p tcp --dport ${LPORT} -j DNAT --to-destination ${TIP}:${TPORT} 2>/dev/null; then
+        log_info "규칙 이미 존재함"
+        return
+    fi
+
+    iptables -t nat -A PREROUTING -p tcp --dport ${LPORT} -j DNAT --to-destination ${TIP}:${TPORT}
+    iptables -t nat -A POSTROUTING -p tcp -d ${TIP} --dport ${TPORT} -j MASQUERADE
+    log_success "NAT 규칙 추가됨"
+}
+
+remove_nat() {
+    local LPORT=$1
+    local TIP=$2
+    local TPORT=$3
+
+    log_info "규칙 제거: ${LPORT} → ${TIP}:${TPORT}"
+
+    if iptables -t nat -C PREROUTING -p tcp --dport ${LPORT} -j DNAT --to-destination ${TIP}:${TPORT} 2>/dev/null; then
+        iptables -t nat -D PREROUTING -p tcp --dport ${LPORT} -j DNAT --to-destination ${TIP}:${TPORT}
+        iptables -t nat -D POSTROUTING -p tcp -d ${TIP} --dport ${TPORT} -j MASQUERADE
+        log_success "규칙 제거됨"
+    else
+        log_info "제거할 규칙 없음"
+    fi
+}
+
+check_single_rule() {
+    local NAME=$1
+    local LPORT=$2
+    local TIP=$3
+    local TPORT=$4
+
+    echo "----- $NAME 규칙 상태 -----"
+
+    if iptables -t nat -C PREROUTING -p tcp --dport ${LPORT} -j DNAT --to-destination ${TIP}:${TPORT} 2>/dev/null; then
+        log_success "활성화됨 (${LPORT} → ${TIP}:${TPORT})"
+    else
+        log_error "비활성화됨"
+    fi
+
+    echo ""
+}
+
+# ===================================================================
+# 명령 구현
 # ===================================================================
 
 setup_nat_rule() {
-    log_info "NAT 규칙 설정 중..."
-    log_info "포트: ${LOCAL_PORT} → ${TARGET_IP}:${TARGET_PORT}"
-    
-    # 기존 규칙 확인
-    if iptables -t nat -C PREROUTING -p tcp --dport ${LOCAL_PORT} -j DNAT --to-destination ${TARGET_IP}:${TARGET_PORT} 2>/dev/null; then
-        log_info "이미 NAT 규칙이 존재합니다."
-        return 0
-    fi
-    
-    # NAT 규칙 추가
-    if iptables -t nat -A PREROUTING -p tcp --dport ${LOCAL_PORT} -j DNAT --to-destination ${TARGET_IP}:${TARGET_PORT}; then
-        log_success "NAT 규칙이 추가되었습니다."
-        
-        # 규칙 확인
-        if iptables -t nat -C PREROUTING -p tcp --dport ${LOCAL_PORT} -j DNAT --to-destination ${TARGET_IP}:${TARGET_PORT} 2>/dev/null; then
-            log_success "규칙 확인 완료: localhost:${LOCAL_PORT} → ${TARGET_IP}:${TARGET_PORT}"
-            return 0
-        else
-            log_error "규칙 추가 후 확인에 실패했습니다."
-            return 1
-        fi
-    else
-        log_error "NAT 규칙 추가에 실패했습니다."
-        return 1
-    fi
+    log_info "==== NAT 규칙 적용 ===="
+    apply_nat $AI_LOCAL_PORT $AI_TARGET_IP $AI_TARGET_PORT
+    apply_nat $SSH_LOCAL_PORT $SSH_TARGET_IP $SSH_TARGET_PORT
 }
-
-# ===================================================================
-# NAT 규칙 제거 함수
-# ===================================================================
 
 remove_nat_rule() {
-    log_info "NAT 규칙 제거 중..."
-    
-    # 규칙 존재 확인
-    if ! iptables -t nat -C PREROUTING -p tcp --dport ${LOCAL_PORT} -j DNAT --to-destination ${TARGET_IP}:${TARGET_PORT} 2>/dev/null; then
-        log_info "제거할 NAT 규칙이 존재하지 않습니다."
-        return 0
-    fi
-    
-    # NAT 규칙 제거
-    if iptables -t nat -D PREROUTING -p tcp --dport ${LOCAL_PORT} -j DNAT --to-destination ${TARGET_IP}:${TARGET_PORT}; then
-        log_success "NAT 규칙이 제거되었습니다."
-        return 0
-    else
-        log_error "NAT 규칙 제거에 실패했습니다."
-        return 1
-    fi
+    log_info "==== NAT 규칙 제거 ===="
+    remove_nat $AI_LOCAL_PORT $AI_TARGET_IP $AI_TARGET_PORT
+    remove_nat $SSH_LOCAL_PORT $SSH_TARGET_IP $SSH_TARGET_PORT
 }
 
-# ===================================================================
-# NAT 규칙 상태 확인 함수
-# ===================================================================
-
 check_status() {
-    log_info "NAT 규칙 상태 확인 중..."
+    log_info "==== NAT 규칙 상태 ===="
+
+    check_single_rule "AI 서버" $AI_LOCAL_PORT $AI_TARGET_IP $AI_TARGET_PORT
+    check_single_rule "SSH 서버" $SSH_LOCAL_PORT $SSH_TARGET_IP $SSH_TARGET_PORT
+
     echo ""
-    
-    # 규칙 존재 여부 확인
-    if iptables -t nat -C PREROUTING -p tcp --dport ${LOCAL_PORT} -j DNAT --to-destination ${TARGET_IP}:${TARGET_PORT} 2>/dev/null; then
-        log_success "NAT 규칙이 활성화되어 있습니다."
-        echo ""
-        echo "규칙 정보:"
-        echo "  포트: localhost:${LOCAL_PORT} → ${TARGET_IP}:${TARGET_PORT}"
-        echo ""
-        
-        # 전체 NAT 규칙 출력
-        echo "전체 NAT PREROUTING 규칙:"
-        iptables -t nat -L PREROUTING -n --line-numbers | grep -E "(Chain|${LOCAL_PORT}|target|DNAT)" || echo "  (관련 규칙 없음)"
-    else
-        log_info "NAT 규칙이 설정되어 있지 않습니다."
-        echo ""
-        echo "설정하려면 다음 명령어를 실행하세요:"
-        echo "  sudo $0 setup"
-    fi
-    
+    log_info "PREROUTING 전체 목록:"
+    iptables -t nat -L PREROUTING -n --line-numbers
+
     echo ""
-    
+
     # rc.local 등록 여부 확인
     if [ -f "$RC_LOCAL" ]; then
         if grep -q "$SCRIPT_PATH.*setup" "$RC_LOCAL" 2>/dev/null; then
@@ -236,7 +233,9 @@ usage() {
     echo "사용법: sudo $0 <명령어>"
     echo ""
     echo "명령어:"
-    echo "  setup      NAT 규칙 추가 (localhost:${LOCAL_PORT} → ${TARGET_IP}:${TARGET_PORT})"
+    echo "  setup      NAT 규칙 추가"
+    echo "             - AI 서비스: localhost:${AI_LOCAL_PORT} → ${AI_TARGET_IP}:${AI_TARGET_PORT}"
+    echo "             - SSH 서비스: localhost:${SSH_LOCAL_PORT} → ${SSH_TARGET_IP}:${SSH_TARGET_PORT}"
     echo "  remove     NAT 규칙 제거"
     echo "  status     NAT 규칙 상태 확인"
     echo "  install    부팅 시 자동 실행 등록 (rc.local)"
