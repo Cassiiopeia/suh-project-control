@@ -2,15 +2,15 @@
 
 <#
 .SYNOPSIS
-    Nginx 설정 파일 배포 및 재시작 스크립트
+    Nginx configuration deployment and restart script
 
 .DESCRIPTION
-    C:\AI\suh-ai-server\config\nginx.conf를 Nginx 설치 경로로 복사하고
-    설정을 검증한 후 무중단 재시작(reload)를 수행합니다.
+    Copies C:\AI\suh-ai-server\config\nginx.conf to Nginx installation path,
+    validates the configuration, and performs zero-downtime reload.
 
 .NOTES
-    작성자: GitHub Actions
-    버전: 1.0.0
+    Author: GitHub Actions
+    Version: 1.0.0
 #>
 
 param()
@@ -20,7 +20,7 @@ $ErrorActionPreference = "Stop"
 try {
     Write-Host "[INFO] Searching for Nginx installation..."
 
-    # Nginx 경로 찾기 (Chocolatey 설치 기준)
+    # Find Nginx path (Chocolatey installation)
     $nginxPath = Get-ChildItem "C:\tools" -Directory -Filter "nginx-*" -ErrorAction SilentlyContinue |
         Where-Object { Test-Path "$($_.FullName)\nginx.exe" } |
         Select-Object -First 1 -ExpandProperty FullName
@@ -32,7 +32,7 @@ try {
 
     Write-Host "[SUCCESS] Nginx path: $nginxPath"
 
-    # 백업 생성
+    # Create backup
     $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
     $confPath = Join-Path $nginxPath "conf\nginx.conf"
     $backupPath = "$confPath.backup.$timestamp"
@@ -42,11 +42,11 @@ try {
         Write-Host "[INFO] Backup created: $backupPath"
     }
 
-    # 새 설정 복사
+    # Copy new configuration
     Copy-Item "C:\AI\suh-ai-server\config\nginx.conf" $confPath -Force
     Write-Host "[SUCCESS] Configuration file deployed"
 
-    # 설정 검증
+    # Validate configuration
     if ([string]::IsNullOrEmpty($nginxPath)) {
         Write-Host "[ERROR] Nginx path is null or empty"
         exit 1
@@ -62,7 +62,7 @@ try {
     Write-Host "[INFO] Validating Nginx configuration..."
     Write-Host "[DEBUG] Nginx executable: $nginxExe"
 
-    # 경로에 공백이 있을 수 있으므로 Start-Process 사용
+    # Use Start-Process to handle paths with spaces
     $testProcess = Start-Process -FilePath $nginxExe -ArgumentList "-t" -WorkingDirectory $nginxPath -NoNewWindow -Wait -PassThru -RedirectStandardError "$env:TEMP\nginx-test-error.txt" -RedirectStandardOutput "$env:TEMP\nginx-test-output.txt"
 
     $testOutput = Get-Content "$env:TEMP\nginx-test-output.txt" -ErrorAction SilentlyContinue
@@ -82,7 +82,7 @@ try {
 
     Write-Host "[SUCCESS] Configuration validation passed"
 
-    # 무중단 재시작
+    # Zero-downtime restart
     $nginxProcess = Get-Process nginx -ErrorAction SilentlyContinue
     if ($nginxProcess) {
         Write-Host "[INFO] Reloading Nginx..."
