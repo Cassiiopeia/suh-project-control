@@ -1,11 +1,47 @@
 {
   "metadata": {
-    "lastUpdated": "2025-11-23T14:04:26Z",
+    "lastUpdated": "2025-11-23T14:05:28Z",
     "currentVersion": "1.1.25",
     "projectType": "basic",
-    "totalReleases": 10
+    "totalReleases": 11
   },
   "releases": [
+    {
+      "version": "1.1.25",
+      "project_type": "basic",
+      "date": "2025-11-23",
+      "pr_number": 29,
+      "raw_summary": "NoteIntroduces a Flask OCR API proxied by Nginx, updates the Windows deploy workflow to run init and restart the Flask service, and adds supporting scripts/config with version/docs updates.\n\nBackend/API:\n\nAdd Flask OCR service (suh-ai-server/flask/*): health//ocr endpoints (app.py), OCR logic (ocr_service.py), prod runner (run.py), deps (requirements.txt), tests/docs.\nAdd PowerShell OCR client script suh-ai-server/data/ollama-OCR.ps1.\n\n\nNginx (suh-ai-server/config/nginx.conf):\n\nAdd python_backend upstream and route location /api/flask/ with API-key auth, rate limiting, rewrites, and proxy settings.\nIntroduce python_limit rate zone; keep global auth/rate limiting; public /health retained.\n\n\nCI/CD (.github/workflows/SUH-AI-PROJECT-CONTROL.yaml):\n\nInject API keys into nginx.conf, SCP sync to Windows, run deploy-init.ps1, apply Nginx, and restart Flask via deploy-flask.ps1.\n\n\nScripts:\n\nAdd suh-ai-server/scripts/deploy-flask.ps1 to manage Flask service with NSSM.\n\n\nHousekeeping:\n\nExtend .gitignore for Python artifacts.\nUpdate CHANGELOG.md/CHANGELOG.json, README.md (version), and bump version.yml to 1.1.25/code 30.\n\n\n\nWritten by Cursor Bugbot for commit 4094e02. This will update automatically on new commits. Configure here.\n\n\n\nSummary by CodeRabbit\n릴리스 노트\n\n\n새로운 기능\n\nOllama 기반 이미지 OCR 인식 API 추가\n자동화된 Windows 서버 배포 워크플로우\nFlask 백엔드 서버 및 포트 포워딩 기능\n\n\n\n버그 수정\n\nNginx 인증 흐름 간소화\nAPI 키 검증 로직 개선\n\n\n\n문서화\n\nFlask OCR API 설정 및 배포 가이드 추가\n\n\n\n기타\n\n버전 1.1.25로 업그레이드\n\n\n\n✏️ Tip: You can customize this high-level summary in your review settings.",
+      "parsed_changes": {
+        "새로운_기능": {
+          "title": "새로운 기능",
+          "items": [
+            "Ollama 기반 이미지 OCR 인식 API 추가",
+            "자동화된 Windows 서버 배포 워크플로우",
+            "Flask 백엔드 서버 및 포트 포워딩 기능"
+          ]
+        },
+        "버그_수정": {
+          "title": "버그 수정",
+          "items": [
+            "Nginx 인증 흐름 간소화",
+            "API 키 검증 로직 개선"
+          ]
+        },
+        "문서화": {
+          "title": "문서화",
+          "items": [
+            "Flask OCR API 설정 및 배포 가이드 추가"
+          ]
+        },
+        "기타": {
+          "title": "기타",
+          "items": [
+            "버전 1.1.25로 업그레이드"
+          ]
+        }
+      }
+    },
     {
       "version": "1.1.25",
       "project_type": "basic",
