@@ -1,3 +1,37 @@
+# ===================================================================
+# SUH AI 프로젝트 자동 배포 워크플로우
+# ===================================================================
+#
+# 이 워크플로우는 suh-ai-server 프로젝트를 Windows 서버에 자동으로 배포합니다.
+#
+# 주요 기능:
+# - 소스 코드 체크아웃 및 Nginx 설정 파일에 API 키 주입
+# - SCP를 통한 Windows 서버로 파일 업로드
+# - PowerShell 스크립트를 통한 초기 배포 및 서비스 재시작
+#
+# 배포 프로세스:
+# 1. prepare-and-upload Job:
+#    - 소스 코드 가져오기
+#    - Nginx 설정 파일에 API 키 주입 (secrets.OLLAMA_API_KEY_LIST)
+#    - suh-ai-server 폴더를 Windows 서버(C:/AI/)로 SCP 업로드
+#
+# 2. deploy-and-restart Job:
+#    - 초기 배포 스크립트 실행 (deploy-init.ps1)
+#    - Nginx 설정 적용 및 재시작 (deploy-nginx.ps1)
+#    - Flask 서버 재시작 (deploy-flask.ps1)
+#
+# 트리거 조건:
+# - main, deploy 브랜치에 push 시 자동 실행
+# - workflow_dispatch를 통한 수동 실행
+#
+# 필요한 Secrets:
+# - SERVER_HOST: Windows 서버 호스트 주소
+# - SERVER_USER: Windows 서버 사용자명
+# - SERVER_PASSWORD: Windows 서버 비밀번호
+# - OLLAMA_API_KEY_LIST: Nginx 인증용 API 키 리스트 (쉼표 구분)
+#
+# ===================================================================
+
 name: SUH-AI-PROJECT-CONTROL
 
 on:
