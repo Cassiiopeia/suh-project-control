@@ -119,6 +119,20 @@ def swagger_json():
                                 }
                             }
                         }
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "OCR completed successfully"
+                        },
+                        "400": {
+                            "description": "Bad request - missing required parameters"
+                        },
+                        "404": {
+                            "description": "Image not found"
+                        },
+                        "500": {
+                            "description": "Internal server error"
+                        }
                     }
                 }
             }
@@ -159,23 +173,45 @@ def ocr():
         model = data.get('model', 'deepseek-ocr')
 
         # Process image source
-        if 'image_url' in data:
-            logger.info(f"Processing image from URL: {data['image_url']}")
-            base64_image = ocr_service.get_image_base64(data['image_url'])
-        elif 'image_base64' in data:
+        # Priority: image_base64 (if non-empty) > image_url
+        base64_image = None
+        
+        if 'image_base64' in data and data['image_base64']:
+            # Process base64 image
             logger.info("Processing base64 image")
             base64_image = data['image_base64']
+            
             # Validate base64 string format
-            if not base64_image or not isinstance(base64_image, str):
+            if not isinstance(base64_image, str):
                 return jsonify({
-                    'error': 'Invalid base64 image format'
+                    'error': 'Invalid base64 image format - must be a string'
                 }), 400
+            
             # Remove data URL prefix if present (e.g., "data:image/jpeg;base64,...")
-            if ',' in base64_image:
-                base64_image = base64_image.split(',')[-1]
+            if base64_image.startswith('data:'):
+                if ',' in base64_image:
+                    base64_image = base64_image.split(',', 1)[1]
+                else:
+                    return jsonify({
+                        'error': 'Invalid data URL format'
+                    }), 400
+            
+            # Strip whitespace
+            base64_image = base64_image.strip()
+            
+            # Validate non-empty after processing
+            if not base64_image:
+                return jsonify({
+                    'error': 'Empty base64 image data'
+                }), 400
+                
+        elif 'image_url' in data and data['image_url']:
+            # Process image URL
+            logger.info(f"Processing image from URL: {data['image_url']}")
+            base64_image = ocr_service.get_image_base64(data['image_url'])
         else:
             return jsonify({
-                'error': 'Either image_url or image_base64 required'
+                'error': 'Either image_url or image_base64 required (non-empty)'
             }), 400
 
         # Perform OCR
