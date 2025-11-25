@@ -10,6 +10,10 @@ import logging
 # Initialize Flask app
 app = Flask(__name__)
 
+# Set APPLICATION_ROOT for proper URL generation behind reverse proxy
+# This ensures Swagger UI redirects use the correct base path (/api/flask)
+app.config['APPLICATION_ROOT'] = '/api/flask'
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -28,7 +32,8 @@ swaggerui_blueprint = get_swaggerui_blueprint(
     SWAGGER_URL,
     API_URL,
     config={
-        'app_name': "Flask OCR API"
+        'app_name': "Flask OCR API",
+        'base_path': '/api/flask/docs/swagger'
     }
 )
 app.register_blueprint(swaggerui_blueprint, url_prefix=SWAGGER_URL)
