@@ -2,9 +2,9 @@
 Ollama OCR Service
 Converts PowerShell OCR script logic to Python
 """
-import ollama
 import os
 import logging
+import requests
 from util.common_util import (
     download_image_from_url,
     save_bytes_to_temp_file,
@@ -21,7 +21,7 @@ class OCRService:
     """Handles OCR operations using Ollama"""
 
     def __init__(self, ollama_url: str = "http://localhost:11434"):
-        self.ollama_url = ollama_url
+        self.ollama_url = ollama_url.rstrip('/')
 
     def get_image_base64(self, source: str) -> str:
         """
@@ -127,7 +127,7 @@ class OCRService:
 
     def perform_ocr(self, base64_image: str, prompt: str, model: str) -> str:
         """
-        Perform OCR using Ollama
+        Perform OCR using Ollama API (direct HTTP call, matching PowerShell script behavior)
 
         Args:
             base64_image: Base64 encoded image
@@ -141,19 +141,59 @@ class OCRService:
             Exception: If Ollama API call fails
         """
         logger.info(f"Sending to Ollama ({model})...")
-
+        
         try:
-            response = ollama.chat(
-                model=model,
-                messages=[{
-                    'role': 'user',
-                    'content': prompt,
-                    'images': [base64_image]
-                }]
+            # Prepare API request body (matching PowerShell script format)
+            api_url = f"{self.ollama_url}/api/chat"
+            
+            request_body = {
+                "model": model,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": prompt,
+                        "images": [base64_image]
+                    }
+                ],
+                "stream": False
+            }
+            
+            logger.debug(f"Calling Ollama API: {api_url}")
+            
+            # Make HTTP request to Ollama API
+            response = requests.post(
+                api_url,
+                json=request_body,
+                headers={"Content-Type": "application/json"},
+                timeout=120  # OCR can take time
             )
+            
+            # Check response status
+            response.raise_for_status()
+            
+            # Parse response
+            result = response.json()
+            
+            if 'message' not in result or 'content' not in result['message']:
+                raise ValueError(f"Invalid Ollama API response format: {result}")
+            
+            extracted_text = result['message']['content']
+            logger.info(f"OCR completed successfully, extracted {len(extracted_text)} characters")
+            
+            return extracted_text
 
-            return response['message']['content']
-
+        except requests.exceptions.RequestException as e:
+            error_msg = f"Ollama API request failed: {str(e)}"
+            if hasattr(e, 'response') and e.response is not None:
+                try:
+                    error_detail = e.response.json()
+                    error_msg += f" - Response: {error_detail}"
+                except:
+                    error_msg += f" - Status: {e.response.status_code}"
+            logger.error(error_msg)
+            raise Exception(f"Ollama API error: {error_msg}")
+        
         except Exception as e:
+            logger.error(f"Ollama OCR failed: {str(e)}")
             raise Exception(f"Ollama API error: {str(e)}")
 
