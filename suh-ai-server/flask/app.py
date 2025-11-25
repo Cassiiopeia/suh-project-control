@@ -2,29 +2,20 @@
 Flask OCR API
 REST API for Ollama OCR service
 """
-from flask import Flask, request, jsonify
+from flask import Flask, jsonify
 from flask_swagger_ui import get_swaggerui_blueprint
-from ocr_service import OCRService
-import logging
+from router.ocr_router import ocr_bp
+from router.swagger_router import swagger_bp
+from config.app_config import SWAGGER_URL, API_URL
+from config.logging_config import setup_logging
 
 # Initialize Flask app
 app = Flask(__name__)
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s'
-)
-logger = logging.getLogger(__name__)
-
-# Initialize OCR service
-ocr_service = OCRService()
+# Setup logging
+logger = setup_logging()
 
 # Swagger UI configuration
-# Register Swagger UI with full path to maintain browser URL
-SWAGGER_URL = '/api/flask/docs/swagger'
-API_URL = '/api/flask/docs/swagger.json'
-
 swaggerui_blueprint = get_swaggerui_blueprint(
     SWAGGER_URL,
     API_URL,
@@ -34,208 +25,9 @@ swaggerui_blueprint = get_swaggerui_blueprint(
 )
 app.register_blueprint(swaggerui_blueprint, url_prefix=SWAGGER_URL)
 
-
-@app.route('/api/flask/docs/swagger.json', methods=['GET'])
-def swagger_json():
-    """Swagger API specification"""
-    swagger_spec = {
-        "openapi": "3.0.0",
-        "info": {
-            "title": "Flask OCR API",
-            "version": "1.0.0",
-            "description": "OCR API using Ollama vision models"
-        },
-        "servers": [
-            {
-                "url": "/api/flask",
-                "description": "Production server"
-            }
-        ],
-        "components": {
-            "securitySchemes": {
-                "ApiKeyAuth": {
-                    "type": "apiKey",
-                    "in": "header",
-                    "name": "X-API-Key",
-                    "description": "API Key for authentication (optional - Nginx handles auth)"
-                }
-            }
-        },
-        "security": [
-            {
-                "ApiKeyAuth": []
-            }
-        ],
-        "paths": {
-            "/ocr": {
-                "post": {
-                    "tags": ["OCR"],
-                    "summary": "Perform OCR on an image",
-                    "description": "Extract text from an image using Ollama vision models",
-                    "security": [
-                        {
-                            "ApiKeyAuth": []
-                        }
-                    ],
-                    "requestBody": {
-                        "required": True,
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "image_url": {
-                                            "type": "string",
-                                            "format": "uri",
-                                            "description": "URL of the image to process (either image_url or image_base64 required)",
-                                            "example": "https://example.com/image.jpg"
-                                        },
-                                        "image_base64": {
-                                            "type": "string",
-                                            "description": "Base64 encoded image (alternative to image_url, either image_url or image_base64 required)",
-                                            "example": "iVBORw0KGgoAAAANSUhEUgAA..."
-                                        },
-                                        "prompt": {
-                                            "type": "string",
-                                            "description": "OCR prompt (optional)",
-                                            "default": "Extract all text from this image",
-                                            "example": "Extract all text from this image"
-                                        },
-                                        "model": {
-                                            "type": "string",
-                                            "description": "Ollama model name (optional)",
-                                            "default": "deepseek-ocr",
-                                            "enum": [
-                                                "deepseek-ocr",
-                                                "qwen3-vl",
-                                                "qwen2.5vl",
-                                                "granite3.2-vision",
-                                                "minicpm-v",
-                                                "llava-phi3"
-                                            ],
-                                            "example": "deepseek-ocr"
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "responses": {
-                        "200": {
-                            "description": "OCR completed successfully"
-                        },
-                        "400": {
-                            "description": "Bad request - missing required parameters"
-                        },
-                        "404": {
-                            "description": "Image not found"
-                        },
-                        "500": {
-                            "description": "Internal server error"
-                        }
-                    }
-                }
-            }
-        }
-    }
-    return jsonify(swagger_spec), 200
-
-
-@app.route('/ocr', methods=['POST'])
-def ocr():
-    """
-    OCR endpoint
-
-    Request Body:
-    {
-        "image_url": "https://...",     # OR
-        "image_base64": "base64string",
-        "prompt": "Extract all text",   # Optional
-        "model": "deepseek-ocr"        # Optional
-    }
-
-    Response:
-    {
-        "success": true,
-        "result": "extracted text",
-        "model": "deepseek-ocr",
-        "prompt": "..."
-    }
-    """
-    try:
-        data = request.get_json()
-
-        if not data:
-            return jsonify({'error': 'JSON body required'}), 400
-
-        # Extract parameters
-        prompt = data.get('prompt', 'Extract all text from this image')
-        model = data.get('model', 'deepseek-ocr')
-
-        # Process image source
-        # Priority: image_base64 (if non-empty) > image_url
-        base64_image = None
-        
-        # Check image_base64 first (must be non-empty string)
-        image_base64_value = data.get('image_base64', '')
-        image_url_value = data.get('image_url', '')
-        
-        if image_base64_value and isinstance(image_base64_value, str) and image_base64_value.strip():
-            # Process base64 image
-            logger.info("Processing base64 image")
-            base64_image = image_base64_value.strip()
-            
-            # Remove data URL prefix if present (e.g., "data:image/jpeg;base64,...")
-            if base64_image.startswith('data:'):
-                if ',' in base64_image:
-                    base64_image = base64_image.split(',', 1)[1].strip()
-                else:
-                    return jsonify({
-                        'error': 'Invalid data URL format'
-                    }), 400
-            
-            # Validate non-empty after processing
-            if not base64_image:
-                return jsonify({
-                    'error': 'Empty base64 image data after processing'
-                }), 400
-                
-        elif image_url_value and isinstance(image_url_value, str) and image_url_value.strip():
-            # Process image URL
-            image_url_value = image_url_value.strip()
-            
-            # Validate URL format (must start with http:// or https://)
-            if not image_url_value.startswith(('http://', 'https://')):
-                return jsonify({
-                    'error': 'Invalid image_url format - must be a valid HTTP/HTTPS URL'
-                }), 400
-            
-            logger.info(f"Processing image from URL: {image_url_value}")
-            base64_image = ocr_service.get_image_base64(image_url_value)
-        else:
-            return jsonify({
-                'error': 'Either image_url or image_base64 required (non-empty)'
-            }), 400
-
-        # Perform OCR
-        result = ocr_service.perform_ocr(base64_image, prompt, model)
-
-        logger.info(f"OCR completed successfully (model={model})")
-
-        return jsonify({
-            'success': True,
-            'result': result,
-            'model': model,
-            'prompt': prompt
-        }), 200
-
-    except FileNotFoundError as e:
-        logger.error(f"File not found: {str(e)}")
-        return jsonify({'error': str(e)}), 404
-
-    except Exception as e:
-        logger.error(f"OCR error: {str(e)}")
-        return jsonify({'error': f'OCR failed: {str(e)}'}), 500
+# Register routers
+app.register_blueprint(ocr_bp)
+app.register_blueprint(swagger_bp)
 
 
 @app.errorhandler(404)
