@@ -5,14 +5,12 @@ param(
     [string]$CommitSha = "main",
     [string]$RepoUrl = "https://github.com/Cassiiopeia/suh-project-control",
     [string]$TargetFolder = "C:\AI\suh-ai-server",
-    [string]$TempDir = "C:\Temp\suh-deploy"
+    [string]$TempDir = "C:\Temp\suh-deploy",
+    [bool]$GitHubAction = $false
 )
 
 Write-Host "[INFO] Deployment started"
 Write-Host "[INFO] Commit SHA: $CommitSha"
-
-# Check if running in GitHub Actions
-$isGitHubActions = $env:GITHUB_ACTIONS -eq "true"
 
 # Backup nginx.conf if it exists and has been modified by GitHub Actions
 # This needs to be done before any file operations to preserve API keys
@@ -27,7 +25,7 @@ if (Test-Path $nginxConfPath) {
     }
 }
 
-if ($isGitHubActions) {
+if ($GitHubAction) {
     # GitHub Actions: Files already uploaded via SCP, skip download and file operations
     Write-Host "[INFO] Running in GitHub Actions - skipping download (files already uploaded via SCP)"
 } else {
