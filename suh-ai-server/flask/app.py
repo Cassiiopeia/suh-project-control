@@ -67,35 +67,6 @@ def swagger_json():
             }
         ],
         "paths": {
-            "/health": {
-                "get": {
-                    "tags": ["Health"],
-                    "summary": "Health check endpoint",
-                    "description": "Returns the health status of the API",
-                    "responses": {
-                        "200": {
-                            "description": "Service is healthy",
-                            "content": {
-                                "application/json": {
-                                    "schema": {
-                                        "type": "object",
-                                        "properties": {
-                                            "status": {
-                                                "type": "string",
-                                                "example": "healthy"
-                                            },
-                                            "service": {
-                                                "type": "string",
-                                                "example": "ollama-ocr-api"
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            },
             "/ocr": {
                 "post": {
                     "tags": ["OCR"],
@@ -112,17 +83,16 @@ def swagger_json():
                             "application/json": {
                                 "schema": {
                                     "type": "object",
-                                    "required": ["image_url"],
                                     "properties": {
                                         "image_url": {
                                             "type": "string",
                                             "format": "uri",
-                                            "description": "URL of the image to process",
+                                            "description": "URL of the image to process (either image_url or image_base64 required)",
                                             "example": "https://example.com/image.jpg"
                                         },
                                         "image_base64": {
                                             "type": "string",
-                                            "description": "Base64 encoded image (alternative to image_url)",
+                                            "description": "Base64 encoded image (alternative to image_url, either image_url or image_base64 required)",
                                             "example": "iVBORw0KGgoAAAANSUhEUgAA..."
                                         },
                                         "prompt": {
@@ -149,100 +119,12 @@ def swagger_json():
                                 }
                             }
                         }
-                    },
-                    "responses": {
-                        "200": {
-                            "description": "OCR completed successfully",
-                            "content": {
-                                "application/json": {
-                                    "schema": {
-                                        "type": "object",
-                                        "properties": {
-                                            "success": {
-                                                "type": "boolean",
-                                                "example": True
-                                            },
-                                            "result": {
-                                                "type": "string",
-                                                "description": "Extracted text from image",
-                                                "example": "Extracted text content..."
-                                            },
-                                            "model": {
-                                                "type": "string",
-                                                "example": "deepseek-ocr"
-                                            },
-                                            "prompt": {
-                                                "type": "string",
-                                                "example": "Extract all text from this image"
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        },
-                        "400": {
-                            "description": "Bad request - missing required parameters",
-                            "content": {
-                                "application/json": {
-                                    "schema": {
-                                        "type": "object",
-                                        "properties": {
-                                            "error": {
-                                                "type": "string",
-                                                "example": "Either image_url or image_base64 required"
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        },
-                        "404": {
-                            "description": "Image not found",
-                            "content": {
-                                "application/json": {
-                                    "schema": {
-                                        "type": "object",
-                                        "properties": {
-                                            "error": {
-                                                "type": "string",
-                                                "example": "Image source not found: https://example.com/image.jpg"
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        },
-                        "500": {
-                            "description": "Internal server error",
-                            "content": {
-                                "application/json": {
-                                    "schema": {
-                                        "type": "object",
-                                        "properties": {
-                                            "error": {
-                                                "type": "string",
-                                                "example": "OCR failed: Ollama API error"
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
                     }
                 }
             }
         }
     }
     return jsonify(swagger_spec), 200
-
-
-@app.route('/health', methods=['GET'])
-def health():
-    """Health check endpoint"""
-    return jsonify({
-        'status': 'healthy',
-        'service': 'ollama-ocr-api'
-    }), 200
 
 
 @app.route('/ocr', methods=['POST'])
@@ -283,6 +165,14 @@ def ocr():
         elif 'image_base64' in data:
             logger.info("Processing base64 image")
             base64_image = data['image_base64']
+            # Validate base64 string format
+            if not base64_image or not isinstance(base64_image, str):
+                return jsonify({
+                    'error': 'Invalid base64 image format'
+                }), 400
+            # Remove data URL prefix if present (e.g., "data:image/jpeg;base64,...")
+            if ',' in base64_image:
+                base64_image = base64_image.split(',')[-1]
         else:
             return jsonify({
                 'error': 'Either image_url or image_base64 required'
