@@ -1,0 +1,301 @@
+"""
+Swagger router
+"""
+from flask import Blueprint, jsonify
+from config.app_config import SWAGGER_URL, API_URL
+
+swagger_bp = Blueprint('swagger', __name__)
+
+
+@swagger_bp.route('/api/flask/docs/swagger.json', methods=['GET'])
+def swagger_json():
+    """Swagger API specification"""
+    swagger_spec = {
+        "openapi": "3.0.0",
+        "info": {
+            "title": "Flask OCR API",
+            "version": "1.0.0",
+            "description": "OCR API using Ollama vision models"
+        },
+        "servers": [
+            {
+                "url": "/api/flask",
+                "description": "Production server"
+            }
+        ],
+        "components": {
+            "securitySchemes": {
+                "ApiKeyAuth": {
+                    "type": "apiKey",
+                    "in": "header",
+                    "name": "X-API-Key",
+                    "description": "API Key for authentication (optional - Nginx handles auth)"
+                }
+            }
+        },
+        "security": [
+            {
+                "ApiKeyAuth": []
+            }
+        ],
+        "paths": {
+            "/ocr/url": {
+                "post": {
+                    "tags": ["OCR"],
+                    "summary": "Perform OCR on an image from URL",
+                    "description": "Extract text from an image using image URL",
+                    "security": [
+                        {
+                            "ApiKeyAuth": []
+                        }
+                    ],
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["image_url"],
+                                    "properties": {
+                                        "image_url": {
+                                            "type": "string",
+                                            "format": "uri",
+                                            "description": "URL of the image to process",
+                                            "example": "https://example.com/image.jpg"
+                                        },
+                                        "prompt": {
+                                            "type": "string",
+                                            "description": "OCR prompt (optional)",
+                                            "default": "Extract all text from this image",
+                                            "example": "Extract all text from this image"
+                                        },
+                                        "model": {
+                                            "type": "string",
+                                            "description": "Ollama model name (optional)",
+                                            "default": "deepseek-ocr",
+                                            "enum": [
+                                                "deepseek-ocr",
+                                                "qwen3-vl",
+                                                "qwen2.5vl",
+                                                "granite3.2-vision",
+                                                "minicpm-v",
+                                                "llava-phi3"
+                                            ],
+                                            "example": "deepseek-ocr"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "OCR completed successfully"
+                        },
+                        "400": {
+                            "description": "Bad request - missing or invalid parameters"
+                        },
+                        "404": {
+                            "description": "Image not found"
+                        },
+                        "500": {
+                            "description": "Internal server error"
+                        }
+                    }
+                }
+            },
+            "/ocr/base64": {
+                "post": {
+                    "tags": ["OCR"],
+                    "summary": "Perform OCR on a base64 encoded image",
+                    "description": "Extract text from a base64 encoded image",
+                    "security": [
+                        {
+                            "ApiKeyAuth": []
+                        }
+                    ],
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["image_base64"],
+                                    "properties": {
+                                        "image_base64": {
+                                            "type": "string",
+                                            "description": "Base64 encoded image (with or without data URL prefix)",
+                                            "example": "iVBORw0KGgoAAAANSUhEUgAA..."
+                                        },
+                                        "prompt": {
+                                            "type": "string",
+                                            "description": "OCR prompt (optional)",
+                                            "default": "Extract all text from this image",
+                                            "example": "Extract all text from this image"
+                                        },
+                                        "model": {
+                                            "type": "string",
+                                            "description": "Ollama model name (optional)",
+                                            "default": "deepseek-ocr",
+                                            "enum": [
+                                                "deepseek-ocr",
+                                                "qwen3-vl",
+                                                "qwen2.5vl",
+                                                "granite3.2-vision",
+                                                "minicpm-v",
+                                                "llava-phi3"
+                                            ],
+                                            "example": "deepseek-ocr"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "OCR completed successfully"
+                        },
+                        "400": {
+                            "description": "Bad request - missing or invalid parameters"
+                        },
+                        "500": {
+                            "description": "Internal server error"
+                        }
+                    }
+                }
+            },
+            "/ocr/upload": {
+                "post": {
+                    "tags": ["OCR"],
+                    "summary": "Perform OCR on an uploaded image file",
+                    "description": "Extract text from an uploaded image file (multipart/form-data)",
+                    "security": [
+                        {
+                            "ApiKeyAuth": []
+                        }
+                    ],
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "multipart/form-data": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["file"],
+                                    "properties": {
+                                        "file": {
+                                            "type": "string",
+                                            "format": "binary",
+                                            "description": "Image file to upload"
+                                        },
+                                        "prompt": {
+                                            "type": "string",
+                                            "description": "OCR prompt (optional)",
+                                            "default": "Extract all text from this image",
+                                            "example": "Extract all text from this image"
+                                        },
+                                        "model": {
+                                            "type": "string",
+                                            "description": "Ollama model name (optional)",
+                                            "default": "deepseek-ocr",
+                                            "enum": [
+                                                "deepseek-ocr",
+                                                "qwen3-vl",
+                                                "qwen2.5vl",
+                                                "granite3.2-vision",
+                                                "minicpm-v",
+                                                "llava-phi3"
+                                            ],
+                                            "example": "deepseek-ocr"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "OCR completed successfully"
+                        },
+                        "400": {
+                            "description": "Bad request - missing or invalid file"
+                        },
+                        "500": {
+                            "description": "Internal server error"
+                        }
+                    }
+                }
+            },
+            "/ocr": {
+                "post": {
+                    "tags": ["OCR"],
+                    "summary": "Perform OCR on an image",
+                    "description": "Extract text from an image using Ollama vision models",
+                    "security": [
+                        {
+                            "ApiKeyAuth": []
+                        }
+                    ],
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "image_url": {
+                                            "type": "string",
+                                            "format": "uri",
+                                            "description": "URL of the image to process (either image_url or image_base64 required)",
+                                            "example": "https://example.com/image.jpg"
+                                        },
+                                        "image_base64": {
+                                            "type": "string",
+                                            "description": "Base64 encoded image (alternative to image_url, either image_url or image_base64 required)",
+                                            "example": "iVBORw0KGgoAAAANSUhEUgAA..."
+                                        },
+                                        "prompt": {
+                                            "type": "string",
+                                            "description": "OCR prompt (optional)",
+                                            "default": "Extract all text from this image",
+                                            "example": "Extract all text from this image"
+                                        },
+                                        "model": {
+                                            "type": "string",
+                                            "description": "Ollama model name (optional)",
+                                            "default": "deepseek-ocr",
+                                            "enum": [
+                                                "deepseek-ocr",
+                                                "qwen3-vl",
+                                                "qwen2.5vl",
+                                                "granite3.2-vision",
+                                                "minicpm-v",
+                                                "llava-phi3"
+                                            ],
+                                            "example": "deepseek-ocr"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "OCR completed successfully"
+                        },
+                        "400": {
+                            "description": "Bad request - missing required parameters"
+                        },
+                        "404": {
+                            "description": "Image not found"
+                        },
+                        "500": {
+                            "description": "Internal server error"
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return jsonify(swagger_spec), 200
+
