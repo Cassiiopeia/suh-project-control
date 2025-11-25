@@ -66,6 +66,24 @@ try {
 
     Write-Host "[SUCCESS] Flask run script found"
 
+    # Install/update Python dependencies
+    Write-Host "[INFO] Installing Python dependencies..."
+    $requirementsPath = Join-Path $flaskPath "requirements.txt"
+    
+    if (-not (Test-Path $requirementsPath)) {
+        Write-Host "[ERROR] requirements.txt not found: $requirementsPath"
+        exit 1
+    }
+
+    try {
+        & $pythonExe -m pip install -r $requirementsPath --quiet --upgrade
+        Write-Host "[SUCCESS] Python dependencies installed/updated"
+    }
+    catch {
+        Write-Host "[ERROR] Failed to install dependencies: $($_.Exception.Message)"
+        exit 1
+    }
+
     # Check if NSSM is installed
     Write-Host "[INFO] Checking NSSM installation..."
     $nssmPath = (Get-Command nssm -ErrorAction SilentlyContinue).Source

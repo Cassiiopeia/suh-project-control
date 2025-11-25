@@ -3,6 +3,7 @@ Flask OCR API
 REST API for Ollama OCR service
 """
 from flask import Flask, request, jsonify
+from flask_swagger_ui import get_swaggerui_blueprint
 from ocr_service import OCRService
 import logging
 
@@ -18,6 +19,220 @@ logger = logging.getLogger(__name__)
 
 # Initialize OCR service
 ocr_service = OCRService()
+
+# Swagger UI configuration
+SWAGGER_URL = '/docs/swagger'
+API_URL = '/docs/swagger.json'
+
+swaggerui_blueprint = get_swaggerui_blueprint(
+    SWAGGER_URL,
+    API_URL,
+    config={
+        'app_name': "Flask OCR API"
+    }
+)
+app.register_blueprint(swaggerui_blueprint, url_prefix=SWAGGER_URL)
+
+
+@app.route('/docs/swagger.json', methods=['GET'])
+def swagger_json():
+    """Swagger API specification"""
+    swagger_spec = {
+        "openapi": "3.0.0",
+        "info": {
+            "title": "Flask OCR API",
+            "version": "1.0.0",
+            "description": "OCR API using Ollama vision models"
+        },
+        "servers": [
+            {
+                "url": "/api/flask",
+                "description": "Production server"
+            }
+        ],
+        "components": {
+            "securitySchemes": {
+                "ApiKeyAuth": {
+                    "type": "apiKey",
+                    "in": "header",
+                    "name": "X-API-Key",
+                    "description": "API Key for authentication (optional - Nginx handles auth)"
+                }
+            }
+        },
+        "security": [
+            {
+                "ApiKeyAuth": []
+            }
+        ],
+        "paths": {
+            "/health": {
+                "get": {
+                    "tags": ["Health"],
+                    "summary": "Health check endpoint",
+                    "description": "Returns the health status of the API",
+                    "responses": {
+                        "200": {
+                            "description": "Service is healthy",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "status": {
+                                                "type": "string",
+                                                "example": "healthy"
+                                            },
+                                            "service": {
+                                                "type": "string",
+                                                "example": "ollama-ocr-api"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "/ocr": {
+                "post": {
+                    "tags": ["OCR"],
+                    "summary": "Perform OCR on an image",
+                    "description": "Extract text from an image using Ollama vision models",
+                    "security": [
+                        {
+                            "ApiKeyAuth": []
+                        }
+                    ],
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["image_url"],
+                                    "properties": {
+                                        "image_url": {
+                                            "type": "string",
+                                            "format": "uri",
+                                            "description": "URL of the image to process",
+                                            "example": "https://example.com/image.jpg"
+                                        },
+                                        "image_base64": {
+                                            "type": "string",
+                                            "description": "Base64 encoded image (alternative to image_url)",
+                                            "example": "iVBORw0KGgoAAAANSUhEUgAA..."
+                                        },
+                                        "prompt": {
+                                            "type": "string",
+                                            "description": "OCR prompt (optional)",
+                                            "default": "Extract all text from this image",
+                                            "example": "Extract all text from this image"
+                                        },
+                                        "model": {
+                                            "type": "string",
+                                            "description": "Ollama model name (optional)",
+                                            "default": "deepseek-ocr",
+                                            "enum": [
+                                                "deepseek-ocr",
+                                                "qwen3-vl",
+                                                "qwen2.5vl",
+                                                "granite3.2-vision",
+                                                "minicpm-v",
+                                                "llava-phi3"
+                                            ],
+                                            "example": "deepseek-ocr"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "OCR completed successfully",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "success": {
+                                                "type": "boolean",
+                                                "example": True
+                                            },
+                                            "result": {
+                                                "type": "string",
+                                                "description": "Extracted text from image",
+                                                "example": "Extracted text content..."
+                                            },
+                                            "model": {
+                                                "type": "string",
+                                                "example": "deepseek-ocr"
+                                            },
+                                            "prompt": {
+                                                "type": "string",
+                                                "example": "Extract all text from this image"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        "400": {
+                            "description": "Bad request - missing required parameters",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "error": {
+                                                "type": "string",
+                                                "example": "Either image_url or image_base64 required"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        "404": {
+                            "description": "Image not found",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "error": {
+                                                "type": "string",
+                                                "example": "Image source not found: https://example.com/image.jpg"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        "500": {
+                            "description": "Internal server error",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "error": {
+                                                "type": "string",
+                                                "example": "OCR failed: Ollama API error"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return jsonify(swagger_spec), 200
 
 
 @app.route('/health', methods=['GET'])
