@@ -1,11 +1,81 @@
 {
   "metadata": {
-    "lastUpdated": "2025-11-23T14:05:28Z",
-    "currentVersion": "1.1.25",
+    "lastUpdated": "2025-11-25T02:29:58Z",
+    "currentVersion": "2.0.1",
     "projectType": "basic",
-    "totalReleases": 11
+    "totalReleases": 13
   },
   "releases": [
+    {
+      "version": "2.0.1",
+      "project_type": "basic",
+      "date": "2025-11-25",
+      "pr_number": 30,
+      "raw_summary": "NoteAutomates Windows deployment with a two-job workflow (API key injection, SCP upload, init/nginx/flask restart), updates deploy-init to support GitHub Actions mode, and bumps project/version metadata.\n\nCI/CD (.github/workflows/SUH-AI-PROJECT-CONTROL.yaml)\n\nSplit into two jobs: prepare-and-upload (checkout, inject API keys into suh-ai-server/config/nginx.conf, SCP upload) and deploy-and-restart (run deploy-init.ps1 with -GitHubAction $true, apply Nginx, restart Flask).\n\n\nScripts\n\nUpdate suh-ai-server/scripts/deploy-init.ps1 to support -GitHubAction mode, conditionally skip download/SCP, preserve injected nginx.conf, and streamline local download/extract/copy/cleanup.\n\n\nDocs/Versioning\n\nUpdate README.md latest version to v1.1.25.\nRefresh CHANGELOG.md/CHANGELOG.json metadata and entries.\nBump version.yml to 2.0.1 with version_code: 33 and adjust version patterns/metadata.\n\n\n\nWritten by Cursor Bugbot for commit 4c9055d. This will update automatically on new commits. Configure here.\n\n\n\nSummary by CodeRabbit\n릴리스 노트\n\n\n새로운 기능\n\nOllama 기반 이미지 OCR API 추가\nFlask 백엔드 서버 포트 포워딩 기능 추가\n\n\n\n버그 수정\n\nAPI 키 검증 로직 개선\nNginx 인증 흐름 간소화\n\n\n\n문서화\n\nFlask OCR API 설정 및 배포 가이드 추가\n\n\n\nChores\n\n버전 2.0.1로 업그레이드\n\n\n\n✏️ Tip: You can customize this high-level summary in your review settings.",
+      "parsed_changes": {
+        "새로운_기능": {
+          "title": "새로운 기능",
+          "items": [
+            "Ollama 기반 이미지 OCR API 추가",
+            "Flask 백엔드 서버 포트 포워딩 기능 추가"
+          ]
+        },
+        "버그_수정": {
+          "title": "버그 수정",
+          "items": [
+            "API 키 검증 로직 개선",
+            "Nginx 인증 흐름 간소화"
+          ]
+        },
+        "문서화": {
+          "title": "문서화",
+          "items": [
+            "Flask OCR API 설정 및 배포 가이드 추가"
+          ]
+        },
+        "chores": {
+          "title": "Chores",
+          "items": [
+            "버전 2.0.1로 업그레이드"
+          ]
+        }
+      }
+    },
+    {
+      "version": "2.0.1",
+      "project_type": "basic",
+      "date": "2025-11-25",
+      "pr_number": 30,
+      "raw_summary": "NoteAutomates Windows deployment with a two-job workflow (API key injection, SCP upload, init/nginx/flask restart), updates deploy-init to support GitHub Actions mode, and bumps project/version metadata.\n\nCI/CD (.github/workflows/SUH-AI-PROJECT-CONTROL.yaml)\n\nSplit into two jobs: prepare-and-upload (checkout, inject API keys into suh-ai-server/config/nginx.conf, SCP upload) and deploy-and-restart (run deploy-init.ps1 with -GitHubAction $true, apply Nginx, restart Flask).\n\n\nScripts\n\nUpdate suh-ai-server/scripts/deploy-init.ps1 to support -GitHubAction mode, conditionally skip download/SCP, preserve injected nginx.conf, and streamline local download/extract/copy/cleanup.\n\n\nDocs/Versioning\n\nUpdate README.md latest version to v1.1.25.\nRefresh CHANGELOG.md/CHANGELOG.json metadata and entries.\nBump version.yml to 2.0.1 with version_code: 33 and adjust version patterns/metadata.\n\n\n\nWritten by Cursor Bugbot for commit 4c9055d. This will update automatically on new commits. Configure here.\n\n\n\nSummary by CodeRabbit\n릴리스 노트\n\n\n새로운 기능\n\nOllama 기반 이미지 OCR API 추가\nFlask 백엔드 서버 포트 포워딩 기능 추가\n\n\n\n버그 수정\n\nAPI 키 검증 로직 개선\nNginx 인증 흐름 간소화\n\n\n\n문서화\n\nFlask OCR API 설정 및 배포 가이드 추가\n\n\n\nChores\n\n버전 2.0.1로 업그레이드\n\n\n\n✏️ Tip: You can customize this high-level summary in your review settings.",
+      "parsed_changes": {
+        "새로운_기능": {
+          "title": "새로운 기능",
+          "items": [
+            "Ollama 기반 이미지 OCR API 추가",
+            "Flask 백엔드 서버 포트 포워딩 기능 추가"
+          ]
+        },
+        "버그_수정": {
+          "title": "버그 수정",
+          "items": [
+            "API 키 검증 로직 개선",
+            "Nginx 인증 흐름 간소화"
+          ]
+        },
+        "문서화": {
+          "title": "문서화",
+          "items": [
+            "Flask OCR API 설정 및 배포 가이드 추가"
+          ]
+        },
+        "chores": {
+          "title": "Chores",
+          "items": [
+            "버전 2.0.1로 업그레이드"
+          ]
+        }
+      }
+    },
     {
       "version": "1.1.25",
       "project_type": "basic",
