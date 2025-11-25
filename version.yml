@@ -6,7 +6,7 @@
 # GitHub Actions 워크플로우 이 파일을 읽어 자동으로 버전을 관리
 #
 # 사용법:
-# 1. version: "2.0.9"
+# 1. version: "2.0.10"
 # 2. project_type: 프로젝트 타입 (spring, flutter, react, node, python 등)
 # 3. version_file: 각 프로젝트 타입별 실제 버전이 저장된 파일 경로
 #
@@ -22,8 +22,8 @@
 # - https://github.com/Cassiiopeia/suh-github-template
 # ===================================================================
 
-version: "2.0.9"
-version_code: 41  # app build number
+version: "2.0.10"
+version_code: 42  # app build number
 project_type: "basic" # spring, flutter, react, react-native, react-native-expo, node, basic 등
 version_file: "version.yml" # 버전 정보가 저장된 파일 경로
 # 프로젝트 타입별 버전 파일 매핑
@@ -35,8 +35,8 @@ project_configs:
     version_format: "version = '{version}'"
   flutter:
     version_file: "pubspec.yaml"
-    version_pattern: "version: "2.0.9"
-    version_format: "version: "2.0.9"
+    version_pattern: "version: "2.0.10"
+    version_format: "version: "2.0.10"
   react:
     version_file: "package.json"
     version_pattern: '"version":'
@@ -56,12 +56,12 @@ project_configs:
     version_format: '"version": "{version}"'
   basic:
     version_file: "version.yml"
-    version_pattern: "version: "2.0.9"
-    version_format: 'version: "2.0.9"
+    version_pattern: "version: "2.0.10"
+    version_format: 'version: "2.0.10"
     # basic 타입은 특정 프레임워크에 종속되지 않는 기본 타입으로, version.yml만 관리합니다
 # 메타데이터
 metadata:
-  last_updated: "2025-11-25 05:23:14"
+  last_updated: "2025-11-25 05:28:11"
   last_updated_by: "Cassiiopeia"
   auto_increment: true # patch 버전 자동 증가 여부
   changelog_enabled: true # 체인지로그 자동 생성 여부
