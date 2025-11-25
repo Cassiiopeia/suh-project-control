@@ -17,7 +17,7 @@
 #
 # 2. deploy-and-restart Job:
 #    - 초기 배포 스크립트 실행 (deploy-init.ps1)
-#      * -GitHubAction 1 파라미터 전달: 파일이 이미 SCP로 업로드되었으므로
+#      * -GitHubAction 스위치 파라미터 전달: 파일이 이미 SCP로 업로드되었으므로
 #        GitHub에서 다운로드하는 로직을 스킵하고 바로 배포 진행
 #      * 로컬 실행 시: 파라미터 없이 실행하면 GitHub에서 자동 다운로드 수행
 #    - Nginx 설정 적용 및 재시작 (deploy-nginx.ps1)
@@ -102,7 +102,7 @@ jobs:
           password: ${{ secrets.SERVER_PASSWORD }}
           script_stop: true
           script: |
-            powershell -ExecutionPolicy Bypass -File "C:\AI\suh-ai-server\scripts\deploy-init.ps1" -CommitSha "${{ github.sha }}" -GitHubAction 1
+            powershell -ExecutionPolicy Bypass -File "C:\AI\suh-ai-server\scripts\deploy-init.ps1" -CommitSha "${{ github.sha }}" -GitHubAction
 
       - name: Nginx 설정 적용 및 재시작
         uses: appleboy/ssh-action@v1.1.0

@@ -6,7 +6,7 @@ param(
     [string]$RepoUrl = "https://github.com/Cassiiopeia/suh-project-control",
     [string]$TargetFolder = "C:\AI\suh-ai-server",
     [string]$TempDir = "C:\Temp\suh-deploy",
-    [bool]$GitHubAction = $false
+    [switch]$GitHubAction
 )
 
 Write-Host "[INFO] Deployment started"
