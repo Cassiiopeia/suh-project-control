@@ -176,39 +176,42 @@ def ocr():
         # Priority: image_base64 (if non-empty) > image_url
         base64_image = None
         
-        if 'image_base64' in data and data['image_base64']:
+        # Check image_base64 first (must be non-empty string)
+        image_base64_value = data.get('image_base64', '')
+        image_url_value = data.get('image_url', '')
+        
+        if image_base64_value and isinstance(image_base64_value, str) and image_base64_value.strip():
             # Process base64 image
             logger.info("Processing base64 image")
-            base64_image = data['image_base64']
-            
-            # Validate base64 string format
-            if not isinstance(base64_image, str):
-                return jsonify({
-                    'error': 'Invalid base64 image format - must be a string'
-                }), 400
+            base64_image = image_base64_value.strip()
             
             # Remove data URL prefix if present (e.g., "data:image/jpeg;base64,...")
             if base64_image.startswith('data:'):
                 if ',' in base64_image:
-                    base64_image = base64_image.split(',', 1)[1]
+                    base64_image = base64_image.split(',', 1)[1].strip()
                 else:
                     return jsonify({
                         'error': 'Invalid data URL format'
                     }), 400
             
-            # Strip whitespace
-            base64_image = base64_image.strip()
-            
             # Validate non-empty after processing
             if not base64_image:
                 return jsonify({
-                    'error': 'Empty base64 image data'
+                    'error': 'Empty base64 image data after processing'
                 }), 400
                 
-        elif 'image_url' in data and data['image_url']:
+        elif image_url_value and isinstance(image_url_value, str) and image_url_value.strip():
             # Process image URL
-            logger.info(f"Processing image from URL: {data['image_url']}")
-            base64_image = ocr_service.get_image_base64(data['image_url'])
+            image_url_value = image_url_value.strip()
+            
+            # Validate URL format (must start with http:// or https://)
+            if not image_url_value.startswith(('http://', 'https://')):
+                return jsonify({
+                    'error': 'Invalid image_url format - must be a valid HTTP/HTTPS URL'
+                }), 400
+            
+            logger.info(f"Processing image from URL: {image_url_value}")
+            base64_image = ocr_service.get_image_base64(image_url_value)
         else:
             return jsonify({
                 'error': 'Either image_url or image_base64 required (non-empty)'
