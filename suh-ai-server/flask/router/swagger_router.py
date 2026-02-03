@@ -74,6 +74,9 @@ def swagger_json():
                                             "description": "Ollama model name (optional)",
                                             "default": "deepseek-ocr",
                                             "enum": [
+                                                "glm-ocr",
+                                                "glm-ocr:q8_0",
+                                                "glm-ocr:bf16",
                                                 "deepseek-ocr",
                                                 "qwen3-vl",
                                                 "qwen2.5vl",
@@ -138,6 +141,9 @@ def swagger_json():
                                             "description": "Ollama model name (optional)",
                                             "default": "deepseek-ocr",
                                             "enum": [
+                                                "glm-ocr",
+                                                "glm-ocr:q8_0",
+                                                "glm-ocr:bf16",
                                                 "deepseek-ocr",
                                                 "qwen3-vl",
                                                 "qwen2.5vl",
@@ -199,6 +205,9 @@ def swagger_json():
                                             "description": "Ollama model name (optional)",
                                             "default": "deepseek-ocr",
                                             "enum": [
+                                                "glm-ocr",
+                                                "glm-ocr:q8_0",
+                                                "glm-ocr:bf16",
                                                 "deepseek-ocr",
                                                 "qwen3-vl",
                                                 "qwen2.5vl",
@@ -265,6 +274,9 @@ def swagger_json():
                                             "description": "Ollama model name (optional)",
                                             "default": "deepseek-ocr",
                                             "enum": [
+                                                "glm-ocr",
+                                                "glm-ocr:q8_0",
+                                                "glm-ocr:bf16",
                                                 "deepseek-ocr",
                                                 "qwen3-vl",
                                                 "qwen2.5vl",
