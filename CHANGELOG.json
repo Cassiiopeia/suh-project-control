@@ -1,11 +1,50 @@
 {
   "metadata": {
-    "lastUpdated": "2025-11-25T02:29:58Z",
-    "currentVersion": "2.0.1",
+    "lastUpdated": "2026-02-03T08:09:36Z",
+    "currentVersion": "2.0.15",
     "projectType": "basic",
-    "totalReleases": 13
+    "totalReleases": 14
   },
   "releases": [
+    {
+      "version": "2.0.15",
+      "project_type": "basic",
+      "date": "2026-02-03",
+      "pr_number": 36,
+      "raw_summary": "## Summary by CodeRabbit\n\n## 릴리스 노트 (v2.0.1)\n\n* **새로운 기능**\n  * Ollama 기반 이미지 OCR API 추가 (텍스트 자동 추출)\n  * Flask 백엔드 포트 포워딩 지원\n  * API Swagger 문서 자동 생성\n\n* **버그 수정**\n  * API 키 검증 로직 개선\n  * Nginx 인증 흐름 단순화\n\n* **문서화**\n  * Flask OCR API 설치 및 배포 가이드 추가\n  * 이슈 관리 레이블 개선\n\n* **기타**\n  * 버전 관리 시스템 개선\n  * 배포 자동화 워크플로우 최적화",
+      "parsed_changes": {
+        "새로운_기능": {
+          "title": "새로운 기능",
+          "items": [
+            "Ollama 기반 이미지 OCR API 추가 (텍스트 자동 추출)",
+            "Flask 백엔드 포트 포워딩 지원",
+            "API Swagger 문서 자동 생성"
+          ]
+        },
+        "버그_수정": {
+          "title": "버그 수정",
+          "items": [
+            "API 키 검증 로직 개선",
+            "Nginx 인증 흐름 단순화"
+          ]
+        },
+        "문서화": {
+          "title": "문서화",
+          "items": [
+            "Flask OCR API 설치 및 배포 가이드 추가",
+            "이슈 관리 레이블 개선"
+          ]
+        },
+        "기타": {
+          "title": "기타",
+          "items": [
+            "버전 관리 시스템 개선",
+            "배포 자동화 워크플로우 최적화"
+          ]
+        }
+      },
+      "parse_method": "markdown"
+    },
     {
       "version": "2.0.1",
       "project_type": "basic",
