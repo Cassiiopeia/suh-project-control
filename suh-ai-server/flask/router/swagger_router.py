@@ -235,6 +235,93 @@ def swagger_json():
                     }
                 }
             },
+            "/logs": {
+                "get": {
+                    "tags": ["Logs"],
+                    "summary": "서버 로그 조회 (JSON)",
+                    "description": "최근 서버 로그를 JSON 형식으로 반환합니다. 레벨 필터 및 키워드 검색을 지원합니다.",
+                    "security": [
+                        {
+                            "ApiKeyAuth": []
+                        }
+                    ],
+                    "parameters": [
+                        {
+                            "name": "lines",
+                            "in": "query",
+                            "schema": {
+                                "type": "integer",
+                                "default": 50,
+                                "maximum": 500
+                            },
+                            "description": "최근 N줄 (기본: 50, 최대: 500)"
+                        },
+                        {
+                            "name": "level",
+                            "in": "query",
+                            "schema": {
+                                "type": "string",
+                                "enum": ["INFO", "ERROR", "WARNING"]
+                            },
+                            "description": "로그 레벨 필터"
+                        },
+                        {
+                            "name": "search",
+                            "in": "query",
+                            "schema": {
+                                "type": "string"
+                            },
+                            "description": "키워드 검색"
+                        }
+                    ],
+                    "responses": {
+                        "200": {
+                            "description": "로그 조회 성공"
+                        },
+                        "404": {
+                            "description": "로그 파일 없음"
+                        },
+                        "500": {
+                            "description": "서버 오류"
+                        }
+                    }
+                }
+            },
+            "/logs/stream": {
+                "get": {
+                    "tags": ["Logs"],
+                    "summary": "서버 로그 조회 (Plain Text)",
+                    "description": "최근 서버 로그를 텍스트로 반환합니다. 브라우저에서 바로 보기 편합니다.",
+                    "security": [
+                        {
+                            "ApiKeyAuth": []
+                        }
+                    ],
+                    "parameters": [
+                        {
+                            "name": "lines",
+                            "in": "query",
+                            "schema": {
+                                "type": "integer",
+                                "default": 100,
+                                "maximum": 500
+                            },
+                            "description": "최근 N줄 (기본: 100, 최대: 500)"
+                        }
+                    ],
+                    "responses": {
+                        "200": {
+                            "description": "로그 조회 성공 (text/plain)"
+                        },
+                        "404": {
+                            "description": "로그 파일 없음"
+                        },
+                        "500": {
+                            "description": "서버 오류"
+                        }
+                    }
+                }
+            },
             "/ocr": {
                 "post": {
                     "tags": ["OCR"],

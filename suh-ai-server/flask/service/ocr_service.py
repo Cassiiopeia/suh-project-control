@@ -4,7 +4,7 @@ Converts PowerShell OCR script logic to Python
 """
 import os
 import logging
-from ollama import chat, ChatResponse
+from ollama import Client, ChatResponse
 from util.common_util import (
     download_image_from_url,
     save_bytes_to_temp_file,
@@ -20,8 +20,11 @@ logger = logging.getLogger(__name__)
 class OCRService:
     """Handles OCR operations using Ollama"""
 
-    def __init__(self, ollama_url: str = "http://localhost:11434"):
+    def __init__(self, ollama_url: str = "http://127.0.0.1:11434"):
         self.ollama_url = ollama_url.rstrip('/')
+        # 명시적으로 Client를 생성하여 OLLAMA_HOST 환경변수(0.0.0.0)에 의존하지 않음
+        # 0.0.0.0은 리스닝용으로는 유효하지만 Windows에서 접속 대상으로는 사용 불가
+        self.client = Client(host=self.ollama_url)
 
     def get_image_base64(self, source: str) -> str:
         """
@@ -140,11 +143,11 @@ class OCRService:
         Raises:
             Exception: If Ollama API call fails
         """
-        logger.info(f"Sending to Ollama ({model})...")
+        logger.info(f"Sending to Ollama ({model}) at {self.ollama_url}...")
 
         try:
-            # Use Ollama Python SDK
-            response: ChatResponse = chat(
+            # 명시적 Client 사용 (OLLAMA_HOST 환경변수 무시)
+            response: ChatResponse = self.client.chat(
                 model=model,
                 messages=[
                     {
