@@ -1,11 +1,41 @@
 {
   "metadata": {
-    "lastUpdated": "2026-02-03T08:09:36Z",
-    "currentVersion": "2.0.15",
+    "lastUpdated": "2026-02-13T15:10:41Z",
+    "currentVersion": "2.0.16",
     "projectType": "basic",
-    "totalReleases": 14
+    "totalReleases": 15
   },
   "releases": [
+    {
+      "version": "2.0.16",
+      "project_type": "basic",
+      "date": "2026-02-13",
+      "pr_number": 40,
+      "raw_summary": "## Summary by CodeRabbit\n\n## 릴리스 노트\n\n* **New Features**\n  * 서버 로그 조회 API 엔드포인트 추가 (JSON 및 텍스트 스트림 형식)\n  * 향상된 Git 워크트리 생성 기능 및 원격 분기 지원\n  * 자동화된 GitHub Issue 생성 템플릿 시스템\n\n* **Documentation**\n  * 워크트리 초기화 및 Issue 모드 사용 가이드 추가\n\n* **Chores**\n  * 버전 v2.0.15에서 v2.0.16으로 업그레이드",
+      "parsed_changes": {
+        "new_features": {
+          "title": "New Features",
+          "items": [
+            "서버 로그 조회 API 엔드포인트 추가 (JSON 및 텍스트 스트림 형식)",
+            "향상된 Git 워크트리 생성 기능 및 원격 분기 지원",
+            "자동화된 GitHub Issue 생성 템플릿 시스템"
+          ]
+        },
+        "documentation": {
+          "title": "Documentation",
+          "items": [
+            "워크트리 초기화 및 Issue 모드 사용 가이드 추가"
+          ]
+        },
+        "chores": {
+          "title": "Chores",
+          "items": [
+            "버전 v2.0.15에서 v2.0.16으로 업그레이드"
+          ]
+        }
+      },
+      "parse_method": "markdown"
+    },
     {
       "version": "2.0.15",
       "project_type": "basic",
