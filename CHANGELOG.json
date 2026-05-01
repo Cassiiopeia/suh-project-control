@@ -1,11 +1,27 @@
 {
   "metadata": {
-    "lastUpdated": "2026-02-13T15:10:41Z",
-    "currentVersion": "2.0.16",
+    "lastUpdated": "2026-05-01T16:06:16Z",
+    "currentVersion": "2.0.17",
     "projectType": "basic",
-    "totalReleases": 15
+    "totalReleases": 16
   },
   "releases": [
+    {
+      "version": "2.0.17",
+      "project_type": "basic",
+      "date": "2026-05-01",
+      "pr_number": 43,
+      "raw_summary": "## Summary by CodeRabbit\n\n## 릴리스 노트\n\n* **새 기능**\n  * MongoDB 자동 백업 기능 추가",
+      "parsed_changes": {
+        "새_기능": {
+          "title": "새 기능",
+          "items": [
+            "MongoDB 자동 백업 기능 추가"
+          ]
+        }
+      },
+      "parse_method": "markdown"
+    },
     {
       "version": "2.0.16",
       "project_type": "basic",
