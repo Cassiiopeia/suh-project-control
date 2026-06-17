@@ -5,6 +5,7 @@ REST API for Ollama OCR service
 from flask import Flask, jsonify
 from flask_swagger_ui import get_swaggerui_blueprint
 from router.ocr_router import ocr_bp
+from router.vision_router import vision_bp
 from router.swagger_router import swagger_bp
 from router.log_router import log_bp
 from config.app_config import SWAGGER_URL, API_URL
@@ -28,6 +29,7 @@ app.register_blueprint(swaggerui_blueprint, url_prefix=SWAGGER_URL)
 
 # Register routers
 app.register_blueprint(ocr_bp)
+app.register_blueprint(vision_bp)
 app.register_blueprint(swagger_bp)
 app.register_blueprint(log_bp)
 
