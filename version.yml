@@ -8,7 +8,8 @@
 # 사용법:
 # 1. version: "1.0.0" - 사용자에게 표시되는 버전
 # 2. version_code: 1 - Play Store/App Store 빌드 번호 (1부터 자동 증가)
-# 3. project_type: 프로젝트 타입 지정
+# 3. project_types: 프로젝트 타입 배열 — 첫 항목이 primary
+# 4. project_paths: 타입별 프로젝트 폴더 (레포 루트 기준 상대경로, 모노레포용)
 #
 # 자동 버전 업데이트:
 # - patch: 자동으로 세 번째 자리 증가 (x.x.x -> x.x.x+1)
@@ -27,26 +28,37 @@
 # 연관된 워크플로우:
 # - .github/workflows/PROJECT-VERSION-CONTROL.yaml
 # - .github/workflows/PROJECT-README-VERSION-UPDATE.yaml
-# - .github/workflows/PROJECT-AUTO-CHANGELOG-CONTROL.yaml
+# - .github/workflows/PROJECT-RELEASE-CHANGELOG.yaml
 #
 # 주의사항:
-# - project_type은 최초 설정 후 변경하지 마세요
+# - project_types는 최초 설정 후 변경하지 마세요
 # - 버전은 항상 높은 버전으로 자동 동기화됩니다
 # ===================================================================
 
 version: "2.0.20"
-version_code: 52 # app build number
-project_type: "basic" # spring, flutter, react, react-native, react-native-expo, node, python, basic
+version_code: 52  # app build number
+project_types: ["python"]   # 멀티타입 배열 — 첫 항목이 primary, 직접 편집 가능
+project_paths:                # 타입별 프로젝트 폴더 (레포 루트 기준 상대경로)
+  python: "suh-ai-server/flask"   # suh-ai-server/flask/pyproject.toml
 metadata:
-  last_updated: "2026-06-17 15:00:32"
-  last_updated_by: "Cassiiopeia"
+  last_updated: "2026-07-13 13:59:33"
+  last_updated_by: "template_integrator"
   default_branch: "main"
-  integrated_from: "SUH-DEVOPS-TEMPLATE"
-  integration_date: "2026-01-25"
+  deploy_branch: "develop"
+  integrated_from: "projectops"
+  integration_date: "2026-07-13"
   template:
-    source: "SUH-DEVOPS-TEMPLATE"
-    version: "2.7.7"
-    integrated_date: "2026-01-25"
-    last_update_date: "2026-01-25"
+    source: "projectops"
+    version: "4.2.14"
+    integrated_date: "2026-07-13"
+    last_update_date: "2026-07-13"
     options:
-      synology: false
+      intent: "app"   # 프로젝트 성격(app/library/both/none/manual) — 배포 질문 유도 기준
+      deploy: "docker-ssh"
+      publish: []
+      secret_backup: true
+      code_review:
+        coderabbit: true
+      changelog:
+        provider: "coderabbit"
+        base_url: ""

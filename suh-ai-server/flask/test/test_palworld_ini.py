@@ -45,3 +45,8 @@ def test_update_boolean_passthrough():
 
 def test_roundtrip_no_changes_is_identical():
     assert update_option_settings(SAMPLE, {}) == SAMPLE
+
+
+def test_update_rejects_value_with_double_quote():
+    with pytest.raises(ValueError):
+        update_option_settings(SAMPLE, {"ServerName": 'Say "Hi"'})

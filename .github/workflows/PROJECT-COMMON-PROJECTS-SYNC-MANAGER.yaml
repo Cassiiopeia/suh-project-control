@@ -37,7 +37,7 @@ name: 🔄 Projects Sync - Label to Status
 
 on:
   issues:
-    types: [labeled, unlabeled]
+    types: [labeled]
 
   workflow_dispatch:
     inputs:
@@ -75,7 +75,7 @@ env:
   # - .github/config/issue-labels.yml 파일로 라벨을 관리하세요
   # - 자세한 내용: docs/PROJECTS-SYNC.md
   # ============================================
-  PROJECT_URL: 'https://github.com/users/Cassiiopeia/projects/2'
+  # PROJECT_URL: 'https://github.com/orgs/YOUR-ORG/projects/1'
 
 jobs:
   sync-label-to-status:
