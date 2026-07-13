@@ -1,4 +1,61 @@
 @import "tailwindcss";
 @plugin "daisyui";
+
+@layer components {
+  .settings-toolbar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .settings-title { font-size: 1.125rem; font-weight: 700; }
+  .settings-subtitle { margin-top: .25rem; font-size: .8rem; color: color-mix(in oklab, currentColor 65%, transparent); }
+
+  .settings-head,
+  .setting-row {
+    display: grid;
+    grid-template-columns: minmax(11rem, 1.15fr) minmax(13rem, 1.4fr) minmax(10rem, 1fr) minmax(14rem, 1.5fr);
+    gap: 1rem;
+    align-items: center;
+  }
+
+  .settings-head {
+    padding: .65rem 1rem;
+    border-block: 1px solid var(--color-base-300);
+    font-size: .75rem;
+    font-weight: 700;
+    color: color-mix(in oklab, currentColor 65%, transparent);
+  }
+
+  .settings-list { border-bottom: 1px solid var(--color-base-300); }
+  .setting-row { min-height: 4.75rem; padding: .75rem 1rem; border-top: 1px solid var(--color-base-300); }
+  .setting-row:first-child { border-top: 0; }
+  .setting-row:hover { background: color-mix(in oklab, var(--color-base-200) 65%, transparent); }
+  .setting-name { min-width: 0; }
+  .setting-label { display: block; font-size: .875rem; font-weight: 700; }
+  .setting-key { display: block; margin-top: .2rem; overflow-wrap: anywhere; font-family: var(--font-mono); font-size: .68rem; color: color-mix(in oklab, currentColor 55%, transparent); }
+  .setting-control { width: 100%; max-width: 20rem; }
+  .setting-toggle { display: flex; align-items: center; gap: .75rem; min-height: 2.5rem; }
+  .setting-toggle-state { min-width: 2.5rem; font-size: .8rem; font-weight: 700; }
+  .setting-guide { font-size: .75rem; line-height: 1.45; }
+  .setting-guide span { display: block; }
+  .setting-guide strong { color: var(--color-primary); }
+  .setting-description { font-size: .8rem; line-height: 1.45; color: color-mix(in oklab, currentColor 72%, transparent); }
+  .settings-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1rem; }
+
+  @media (max-width: 900px) {
+    .settings-head { display: none; }
+    .setting-row { grid-template-columns: minmax(9rem, .85fr) minmax(13rem, 1.3fr); gap: .65rem 1rem; }
+    .setting-guide, .setting-description { grid-column: 2; }
+  }
+
+  @media (max-width: 600px) {
+    .settings-toolbar { align-items: stretch; flex-direction: column; }
+    .setting-row { display: block; }
+    .setting-control, .setting-guide, .setting-description { margin-top: .65rem; max-width: none; }
+  }
+}
 @source "../templates/**/*.html";
 @source "../static/js/*.js";

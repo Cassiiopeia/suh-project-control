@@ -22,7 +22,7 @@ STRING_KEYS = {
 # 관리자 페이지에서 편집 허용하는 키 (그 외 키는 PUT 시 무시)
 EDITABLE_KEYS = [
     "ServerName", "ServerDescription", "ServerPassword", "ServerPlayerMaxNum",
-    "bCrossplay", "ExpRate", "PalCaptureRate", "DeathPenalty",
+    "CrossplayPlatforms", "ExpRate", "PalCaptureRate", "DeathPenalty",
     "bEnablePlayerToPlayerDamage", "DayTimeSpeedRate", "NightTimeSpeedRate",
     "PalSpawnNumRate", "CollectionDropRate", "WorkSpeedRate",
 ]

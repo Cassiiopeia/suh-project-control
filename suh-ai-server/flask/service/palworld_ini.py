@@ -9,12 +9,18 @@ _OPTION_RE = re.compile(r'^(OptionSettings=\()(.*)(\))(\s*)$', re.MULTILINE)
 
 
 def _split_pairs(inner: str) -> list[str]:
-    parts, buf, in_quotes = [], [], False
+    parts, buf, in_quotes, nested_depth = [], [], False, 0
     for ch in inner:
         if ch == '"':
             in_quotes = not in_quotes
             buf.append(ch)
-        elif ch == ',' and not in_quotes:
+        elif ch == '(' and not in_quotes:
+            nested_depth += 1
+            buf.append(ch)
+        elif ch == ')' and not in_quotes:
+            nested_depth = max(0, nested_depth - 1)
+            buf.append(ch)
+        elif ch == ',' and not in_quotes and nested_depth == 0:
             parts.append(''.join(buf))
             buf = []
         else:

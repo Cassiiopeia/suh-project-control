@@ -3,7 +3,7 @@ import pytest
 from service.palworld_ini import parse_option_settings, update_option_settings
 
 SAMPLE = '''[/Script/Pal.PalGameWorldSettings]
-OptionSettings=(Difficulty=None,DayTimeSpeedRate=1.000000,ServerName="My, Server",ServerPassword="",ServerPlayerMaxNum=32,bCrossplay=False,RESTAPIEnabled=True)
+OptionSettings=(Difficulty=None,DayTimeSpeedRate=1.000000,ServerName="My, Server",ServerPassword="",ServerPlayerMaxNum=32,CrossplayPlatforms=(Steam,Xbox,PS5,Mac),RESTAPIEnabled=True)
 '''
 
 
@@ -11,7 +11,7 @@ def test_parse_basic_values():
     result = parse_option_settings(SAMPLE)
     assert result["Difficulty"] == "None"
     assert result["ServerPlayerMaxNum"] == "32"
-    assert result["bCrossplay"] == "False"
+    assert result["CrossplayPlatforms"] == "(Steam,Xbox,PS5,Mac)"
 
 
 def test_parse_quoted_string_with_comma():
@@ -39,8 +39,14 @@ def test_update_wraps_string_keys_in_quotes():
 
 
 def test_update_boolean_passthrough():
-    updated = update_option_settings(SAMPLE, {"bCrossplay": "True"})
-    assert parse_option_settings(updated)["bCrossplay"] == "True"
+    updated = update_option_settings(SAMPLE, {"bEnablePlayerToPlayerDamage": "True"})
+    assert parse_option_settings(updated)["bEnablePlayerToPlayerDamage"] == "True"
+
+
+def test_update_preserves_nested_crossplay_platform_list():
+    updated = update_option_settings(SAMPLE, {"ExpRate": "2.000000"})
+    result = parse_option_settings(updated)
+    assert result["CrossplayPlatforms"] == "(Steam,Xbox,PS5,Mac)"
 
 
 def test_roundtrip_no_changes_is_identical():

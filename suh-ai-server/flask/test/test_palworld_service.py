@@ -4,7 +4,7 @@ from unittest.mock import patch, MagicMock
 from service.palworld_service import PalworldService, ServerRunningError
 
 SAMPLE_INI = '''[/Script/Pal.PalGameWorldSettings]
-OptionSettings=(ServerName="Test",AdminPassword="secret",ServerPlayerMaxNum=32,bCrossplay=False,RESTAPIEnabled=True)
+OptionSettings=(ServerName="Test",AdminPassword="secret",ServerPlayerMaxNum=32,CrossplayPlatforms=(Steam,Xbox,PS5,Mac),RESTAPIEnabled=True)
 '''
 
 
@@ -52,6 +52,16 @@ def test_update_settings_writes_when_stopped(service, tmp_path):
         result = service.update_settings({"ServerName": "New"})
     assert result["settings"]["ServerName"] == '"New"'
     assert 'ServerName="New"' in ini.read_text(encoding='utf-8')
+
+
+def test_update_settings_can_switch_to_steam_only_without_corrupting_ini(service, tmp_path):
+    ini = tmp_path / "PalWorldSettings.ini"
+    ini.write_text(SAMPLE_INI, encoding='utf-8')
+    with patch.object(service, 'get_service_state', return_value='stopped'), \
+         patch('service.palworld_service.INI_PATH', str(ini)):
+        result = service.update_settings({"CrossplayPlatforms": "(Steam)"})
+    assert result["settings"]["CrossplayPlatforms"] == "(Steam)"
+    assert result["settings"]["RESTAPIEnabled"] == "True"
 
 
 def test_update_settings_ignores_non_editable_keys(service, tmp_path):
