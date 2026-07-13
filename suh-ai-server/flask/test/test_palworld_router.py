@@ -51,3 +51,8 @@ def test_create_backup(client):
         resp = client.post('/palworld/backups')
     assert resp.status_code == 200
     assert resp.get_json()['name'] == '20260713_120000'
+
+
+def test_logs_invalid_lines_returns_400(client):
+    resp = client.get('/palworld/logs?lines=abc')
+    assert resp.status_code == 400

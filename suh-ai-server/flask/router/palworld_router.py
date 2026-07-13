@@ -82,6 +82,9 @@ def logs():
     """서버 로그 tail"""
     try:
         lines = int(request.args.get('lines', 200))
+    except ValueError:
+        return jsonify({'error': 'lines must be an integer'}), 400
+    try:
         return jsonify({'logs': palworld_service.tail_logs(lines)}), 200
     except Exception as e:
         logger.error(f"Log read error: {str(e)}")
