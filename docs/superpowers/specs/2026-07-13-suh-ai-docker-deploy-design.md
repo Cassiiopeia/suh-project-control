@@ -129,3 +129,18 @@ services:
 
 - nginx 컨테이너화 + API 키 인증 프록시 (사용자: "nginx는 나중에")
 - Ollama 컨테이너화 (하지 않음 — GPU/모델 관리상 네이티브 유지)
+
+## ⚠️ 제약: Palworld 관리 기능과의 충돌 (2026-07-13 추가)
+
+이슈 #46(Palworld 관리자 페이지)이 Flask에 추가하는 `palworld_router`/`palworld_service`는
+**컨테이너 안에서 동작할 수 없다**:
+
+- Windows 서비스 제어 (`sc query`, `Start-Service`/`Stop-Service`로 PalServer NSSM 서비스 제어)
+- 호스트 파일 직접 접근 (`C:\AI\palworld\` — PalWorldSettings.ini, SaveGames 백업, 로그)
+
+**따라서 이 Docker 전환을 실행할 때 반드시 다음 중 하나를 선행해야 한다:**
+1. 팰월드 제어 로직을 호스트 네이티브 미니 서비스(palworld-agent)로 분리하고
+   컨테이너 Flask는 `host.docker.internal`로 중계만 하도록 리팩토링, 또는
+2. Flask 컨테이너화 스코프에서 palworld 라우터를 제외 (팰월드 기능만 네이티브 Flask 유지)
+
+이 결정 없이 NSSM FlaskOCRService를 제거하면 팰월드 관리 기능이 전부 깨진다.
