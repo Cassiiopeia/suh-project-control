@@ -121,7 +121,23 @@ flask/
   4. NSSM 서비스 "PalServer" 등록 — 기동 옵션 `-port=8211 -players=32 -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS` (크로스플레이 시 `-publiclobby` 추가)
   5. 방화벽 인바운드 8211/UDP, 27015/UDP 개방
   6. 일일 백업 작업 스케줄러 등록
-- 공유기 포트포워딩은 자동화 불가 — 수동 안내 문서 제공.
+### 네트워크 토폴로지 (2026-07-13 시놀로지 SSH로 실측 확인)
+
+```
+인터넷 ──(Cloudflare)── ai.suhsaechan.kr
+   ↓
+공유기 172.30.1.254 (DMZ: 미지정 포트 전부 → 시놀로지)
+   ↓
+시놀로지 172.30.1.99 "SUH-PROJECT" (SSH :2022, DSM 리버스 프록시 :443)
+   ↓  ai.suhsaechan.kr → http://172.30.1.14:11435
+Windows PC 172.30.1.14 (nginx :11435 → Flask :5000 / Ollama :11434)
+```
+
+- 공인 IP: 183.98.211.213, DDNS: suh-project.synology.me (Cloudflare 비경유 → 게임 접속용 주소로 사용)
+- **웹 관리 페이지는 네트워크 변경 불필요** — 기존 ai.suhsaechan.kr/api/flask/ 경로 재사용.
+- **팰월드 UDP 8211만 예외 필요**: DMZ가 전부 시놀로지로 가므로, 공유기에 명시적 포트포워딩(UDP 8211 → 172.30.1.14) 1건 추가. 명시적 포워딩 규칙이 DMZ보다 우선한다. 공유기 접근이 불가하면 대안으로 시놀로지 iptables DNAT 또는 playit.gg 터널.
+- 친구 접속 주소: `suh-project.synology.me:8211` (ai.suhsaechan.kr은 Cloudflare 프록시라 게임 UDP 불가).
+- Windows PC(172.30.1.14)는 공유기 DHCP 고정 할당 필요 — IP가 바뀌면 시놀로지 프록시 규칙과 게임 포워딩이 동시에 깨진다.
 
 ## 구현 순서
 
