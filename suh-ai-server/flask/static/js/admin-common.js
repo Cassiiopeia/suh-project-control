@@ -38,6 +38,12 @@
     return resp;
   };
 
+  window.escapeHtml = function (value) {
+    return String(value).replace(/[&<>"']/g, function (ch) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+    });
+  };
+
   window.showToast = function (message, type = 'info') {
     const toast = document.getElementById('toast-container');
     const alert = document.createElement('div');

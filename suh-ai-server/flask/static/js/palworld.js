@@ -24,7 +24,7 @@ async function refreshStatus() {
     const tbody = document.getElementById('player-list');
     if (data.players && data.players.length) {
       tbody.innerHTML = data.players.map(p =>
-        '<tr><td>' + p.name + '</td><td>' + p.level + '</td><td>' + Math.round(p.ping) + 'ms</td></tr>'
+        '<tr><td>' + escapeHtml(p.name) + '</td><td>' + escapeHtml(p.level) + '</td><td>' + Math.round(p.ping) + 'ms</td></tr>'
       ).join('');
     } else {
       tbody.innerHTML = '<tr><td colspan="3">접속자 없음</td></tr>';
@@ -60,13 +60,13 @@ async function loadSettings() {
       const value = raw.replace(/^"|"$/g, '');
       const isBool = raw === 'True' || raw === 'False';
       if (isBool) {
-        return '<label class="label cursor-pointer justify-start gap-4"><span class="label-text w-56">' + key +
-          '</span><input type="checkbox" class="toggle toggle-primary" data-key="' + key + '"' +
+        return '<label class="label cursor-pointer justify-start gap-4"><span class="label-text w-56">' + escapeHtml(key) +
+          '</span><input type="checkbox" class="toggle toggle-primary" data-key="' + escapeHtml(key) + '"' +
           (raw === 'True' ? ' checked' : '') + '></label>';
       }
-      return '<label class="label justify-start gap-4"><span class="label-text w-56">' + key +
-        '</span><input type="text" class="input input-bordered input-sm w-64" data-key="' + key +
-        '" value="' + value.replace(/"/g, '&quot;') + '"></label>';
+      return '<label class="label justify-start gap-4"><span class="label-text w-56">' + escapeHtml(key) +
+        '</span><input type="text" class="input input-bordered input-sm w-64" data-key="' + escapeHtml(key) +
+        '" value="' + escapeHtml(value) + '"></label>';
     }).join('');
   } catch (e) { /* ignore */ }
 }
@@ -126,7 +126,7 @@ async function loadBackups() {
     const resp = await apiFetch(API + '/backups');
     const data = await resp.json();
     document.getElementById('backup-list').innerHTML = (data.backups || []).map(b =>
-      '<tr><td>' + b.name + '</td><td>' + b.size_mb + '</td><td>' + b.created + '</td></tr>'
+      '<tr><td>' + escapeHtml(b.name) + '</td><td>' + escapeHtml(b.size_mb) + '</td><td>' + escapeHtml(b.created) + '</td></tr>'
     ).join('') || '<tr><td colspan="3">백업 없음</td></tr>';
   } catch (e) { /* ignore */ }
 }
