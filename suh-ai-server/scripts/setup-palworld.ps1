@@ -21,6 +21,9 @@ $steamCmdDir = Join-Path $baseDir "steamcmd"
 $steamCmdExe = Join-Path $steamCmdDir "steamcmd.exe"
 $palServerDir = Join-Path $steamCmdDir "steamapps\common\PalServer"
 $palServerExe = Join-Path $palServerDir "PalServer.exe"
+# NSSM은 런처(PalServer.exe)가 아닌 Shipping 바이너리를 직접 실행한다.
+# 런처는 세션 0(비대화형 서비스) 컨텍스트에서 자식 프로세스를 띄우지 못해 서비스가 즉시 종료된다.
+$palServerShippingExe = Join-Path $palServerDir "Pal\Binaries\Win64\PalServer-Win64-Shipping-Cmd.exe"
 $configDir = Join-Path $palServerDir "Pal\Saved\Config\WindowsServer"
 $iniPath = Join-Path $configDir "PalWorldSettings.ini"
 $defaultIniPath = Join-Path $palServerDir "DefaultPalWorldSettings.ini"
@@ -89,9 +92,10 @@ if (-not $nssmPath) {
 }
 $existing = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
 if (-not $existing) {
-    & nssm install $serviceName $palServerExe "-port=8211 -players=32 -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS"
+    & nssm install $serviceName $palServerShippingExe "-port=8211 -players=32 -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS"
     Write-Host "[SUCCESS] NSSM service '$serviceName' created"
 } else {
+    & nssm set $serviceName Application $palServerShippingExe
     & nssm set $serviceName AppParameters "-port=8211 -players=32 -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS"
     Write-Host "[INFO] Service '$serviceName' already exists - reapplying configuration"
 }

@@ -78,16 +78,22 @@ class PalworldService:
         if status['state'] != 'running':
             return status
         auth = self._rest_auth()
-        try:
-            info = requests.get(f'{REST_BASE_URL}/v1/api/info', auth=auth, timeout=3)
-            players = requests.get(f'{REST_BASE_URL}/v1/api/players', auth=auth, timeout=3)
-            metrics = requests.get(f'{REST_BASE_URL}/v1/api/metrics', auth=auth, timeout=3)
-            status['info'] = info.json()
-            status['players'] = players.json().get('players', [])
-            status['metrics'] = metrics.json()
-            status['rest_available'] = True
-        except Exception as e:
-            logger.warning(f'Palworld REST API unavailable: {e}')
+        # info/players/metrics를 독립적으로 조회한다. 한 엔드포인트가 실패해도
+        # 성공한 나머지 데이터는 버리지 않는다. 하나라도 응답하면 rest_available=True.
+        endpoints = {
+            'info': f'{REST_BASE_URL}/v1/api/info',
+            'players': f'{REST_BASE_URL}/v1/api/players',
+            'metrics': f'{REST_BASE_URL}/v1/api/metrics',
+        }
+        for name, url in endpoints.items():
+            try:
+                resp = requests.get(url, auth=auth, timeout=3)
+                resp.raise_for_status()
+                data = resp.json()
+                status[name] = data.get('players', []) if name == 'players' else data
+                status['rest_available'] = True
+            except Exception as e:
+                logger.warning(f'Palworld REST API {name} unavailable: {e}')
         return status
 
     # --- 설정 ---
