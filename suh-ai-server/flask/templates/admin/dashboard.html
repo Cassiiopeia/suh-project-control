@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SUH AI Server Admin</title>
+  <link rel="stylesheet" href="./static/css/app.css">
+</head>
+<body class="min-h-screen bg-base-200">
+  <div class="navbar bg-base-100 shadow">
+    <div class="flex-1"><span class="text-xl font-bold px-4">🖥 SUH AI Server Admin</span></div>
+    <div class="flex-none px-4">
+      <button class="btn btn-ghost btn-sm" onclick="resetApiKey()">🔑 API Key</button>
+    </div>
+  </div>
+
+  <main class="container mx-auto p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+    <a href="./admin/palworld" class="card bg-base-100 shadow-md hover:shadow-xl transition-shadow">
+      <div class="card-body">
+        <h2 class="card-title">🎮 팰월드 서버 관리
+          <span id="pal-badge" class="badge badge-ghost">확인중…</span>
+        </h2>
+        <p>서버 시작/중지, 설정, 로그, 백업 관리</p>
+      </div>
+    </a>
+    <a href="./docs/swagger" class="card bg-base-100 shadow-md hover:shadow-xl transition-shadow">
+      <div class="card-body">
+        <h2 class="card-title">📄 OCR API</h2>
+        <p>Swagger 문서로 이동</p>
+      </div>
+    </a>
+    <a href="./docs/swagger" class="card bg-base-100 shadow-md hover:shadow-xl transition-shadow">
+      <div class="card-body">
+        <h2 class="card-title">👁 Vision API</h2>
+        <p>Swagger 문서로 이동</p>
+      </div>
+    </a>
+    <div class="card bg-base-100 shadow-md">
+      <div class="card-body">
+        <h2 class="card-title">📋 Flask 서버 로그</h2>
+        <pre id="flask-logs" class="mockup-code text-xs overflow-x-auto max-h-48 p-4">불러오는 중…</pre>
+      </div>
+    </div>
+  </main>
+
+  <dialog id="api-key-modal" class="modal">
+    <div class="modal-box">
+      <h3 class="font-bold text-lg">🔑 API Key 입력</h3>
+      <p class="py-2 text-sm">nginx 인증용 X-API-Key를 입력하세요. 브라우저에 저장됩니다.</p>
+      <input id="api-key-input" type="password" class="input input-bordered w-full" placeholder="API Key">
+      <div class="modal-action">
+        <button class="btn btn-primary" onclick="saveApiKey()">저장</button>
+      </div>
+    </div>
+  </dialog>
+  <div id="toast-container" class="toast toast-end"></div>
+
+  <script src="./static/js/admin-common.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', async function () {
+      try {
+        const resp = await apiFetch('./palworld/status');
+        const data = await resp.json();
+        const badge = document.getElementById('pal-badge');
+        badge.textContent = data.state === 'running' ? 'RUNNING' : data.state.toUpperCase();
+        badge.className = 'badge ' + (data.state === 'running' ? 'badge-success' : 'badge-error');
+      } catch (e) { /* 401 modal은 apiFetch가 처리 */ }
+      try {
+        const resp = await apiFetch('./logs?lines=30');
+        const data = await resp.json();
+        document.getElementById('flask-logs').textContent = (data.logs || []).join('\n') || '(로그 없음)';
+      } catch (e) { /* ignore */ }
+    });
+  </script>
+</body>
+</html>
