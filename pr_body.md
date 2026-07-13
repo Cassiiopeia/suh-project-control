@@ -1,15 +1,13 @@
+
+
 <!-- This is an auto-generated comment: release notes by coderabbit.ai -->
 
 ## Summary by CodeRabbit
 
-## 릴리스 노트
-
-* **버그 수정**
-  * 서버 설정 화면의 정렬과 입력 오류를 해결했습니다
-
-* **개선**
-  * 추천 설정값과 항목별 설명을 추가했습니다
-  * 크로스플레이 설정을 최신 서버 형식에 맞췄습니다
+* **새로운 기능**
+  * Palworld 게임 서버의 UDP 8211 포트 포워딩을 지원합니다.
+  * NAT 규칙에서 TCP와 UDP 등 프로토콜을 선택할 수 있습니다.
+  * 포트 포워딩 상태와 활성화 로그에 프로토콜 정보가 표시됩니다.
+  * Palworld 포워딩 설정 및 사용 안내가 추가되었습니다.
 
 <!-- end of auto-generated comment: release notes by coderabbit.ai -->
-
