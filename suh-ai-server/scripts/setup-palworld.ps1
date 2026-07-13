@@ -58,6 +58,10 @@ Write-Host "[SUCCESS] PalServer installed: $palServerDir"
 # 4. ini 초기화 (DefaultPalWorldSettings.ini 복사 후 값 수정)
 if (-not (Test-Path $configDir)) { New-Item -ItemType Directory -Force -Path $configDir | Out-Null }
 if (-not (Test-Path $iniPath)) {
+    if (-not (Test-Path $defaultIniPath)) {
+        Write-Host "[ERROR] DefaultPalWorldSettings.ini not found: $defaultIniPath"
+        exit 1
+    }
     Copy-Item $defaultIniPath $iniPath
     Write-Host "[SUCCESS] PalWorldSettings.ini created from default"
 }
@@ -86,16 +90,19 @@ if (-not $nssmPath) {
 $existing = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
 if (-not $existing) {
     & nssm install $serviceName $palServerExe "-port=8211 -players=32 -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS"
-    & nssm set $serviceName AppDirectory $palServerDir
-    & nssm set $serviceName DisplayName "Palworld Dedicated Server"
-    & nssm set $serviceName Start SERVICE_AUTO_START
-    & nssm set $serviceName AppStdout "$logsDir\palserver-stdout.log"
-    & nssm set $serviceName AppStderr "$logsDir\palserver-stderr.log"
-    & nssm set $serviceName AppStopMethodConsole 15000
     Write-Host "[SUCCESS] NSSM service '$serviceName' created"
 } else {
-    Write-Host "[INFO] Service '$serviceName' already exists"
+    & nssm set $serviceName AppParameters "-port=8211 -players=32 -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS"
+    Write-Host "[INFO] Service '$serviceName' already exists - reapplying configuration"
 }
+
+# Apply configuration on every run (both new and existing services)
+& nssm set $serviceName AppDirectory $palServerDir
+& nssm set $serviceName DisplayName "Palworld Dedicated Server"
+& nssm set $serviceName Start SERVICE_AUTO_START
+& nssm set $serviceName AppStdout "$logsDir\palserver-stdout.log"
+& nssm set $serviceName AppStderr "$logsDir\palserver-stderr.log"
+& nssm set $serviceName AppStopMethodConsole 15000
 
 # 6. 방화벽 개방 (UDP 8211 게임, UDP 27015 스팀 서버목록)
 foreach ($rule in @(
