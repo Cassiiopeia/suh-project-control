@@ -41,6 +41,8 @@ def update_option_settings(text: str, changes: dict) -> str:
     current = parse_option_settings(text)
     for key, value in changes.items():
         value = str(value)
+        if '"' in value.strip('"'):
+            raise ValueError(f'Value for {key} must not contain double quotes')
         if key in STRING_KEYS and not (value.startswith('"') and value.endswith('"')):
             value = f'"{value}"'
         current[key] = value
