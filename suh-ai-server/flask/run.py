@@ -34,11 +34,12 @@ if __name__ == '__main__':
     logger.info(f"Log file: {log_file}")
     logger.info("=" * 50)
 
-    # 팰월드 접속/퇴장 이벤트 폴러 (daemon thread)
+    # 팰월드 접속/퇴장 이벤트 폴러 + 메트릭 히스토리 적재 (daemon thread)
     from service.palworld_service import PalworldService
     from service.palworld_event_poller import PalworldEventPoller
-    PalworldEventPoller(PalworldService()).start()
-    logger.info("Palworld event poller started (10s interval)")
+    from service.palworld_metrics_history import metrics_history
+    PalworldEventPoller(PalworldService(), metrics_history=metrics_history).start()
+    logger.info("Palworld event poller started (10s interval, metrics history on)")
 
     # Start production server
     serve(
