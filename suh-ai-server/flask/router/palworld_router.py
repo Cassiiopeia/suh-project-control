@@ -79,7 +79,7 @@ def put_settings():
 
 @palworld_bp.route('/palworld/logs', methods=['GET'])
 def logs():
-    """서버 로그 tail"""
+    """서버 로그 tail (source: events|game|stdout|stderr)"""
     try:
         lines = int(request.args.get('lines', 200))
     except ValueError:

@@ -56,3 +56,27 @@ def test_create_backup(client):
 def test_logs_invalid_lines_returns_400(client):
     resp = client.get('/palworld/logs?lines=abc')
     assert resp.status_code == 400
+
+
+def test_logs_invalid_source_returns_400(client):
+    with patch('router.palworld_router.palworld_service.tail_logs',
+               side_effect=ValueError('Unknown log source: nope')):
+        resp = client.get('/palworld/logs?source=nope')
+    assert resp.status_code == 400
+
+
+def test_logs_passes_source_and_lines(client):
+    fake = {'source': 'events', 'log_file': 'x.jsonl', 'exists': True, 'size_bytes': 10, 'logs': ['a']}
+    with patch('router.palworld_router.palworld_service.tail_logs', return_value=fake) as mock_tail:
+        resp = client.get('/palworld/logs?source=events&lines=100')
+    assert resp.status_code == 200
+    assert resp.get_json()['logs'] == ['a']
+    mock_tail.assert_called_once_with('events', 100)
+
+
+def test_logs_defaults_to_game_source(client):
+    fake = {'source': 'game', 'log_file': 'Pal.log', 'exists': True, 'size_bytes': 10, 'logs': []}
+    with patch('router.palworld_router.palworld_service.tail_logs', return_value=fake) as mock_tail:
+        resp = client.get('/palworld/logs')
+    assert resp.status_code == 200
+    mock_tail.assert_called_once_with('game', 200)

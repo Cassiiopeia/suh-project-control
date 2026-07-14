@@ -57,13 +57,17 @@ PALWORLD_SWAGGER_PATHS = {
     },
     "/palworld/logs": {
         "get": {
-            "tags": ["Palworld"], "summary": "서버 로그 tail",
+            "tags": ["Palworld"], "summary": "서버 로그 tail (source 선택)",
             "security": [{"ApiKeyAuth": []}],
-            "parameters": [{
-                "name": "lines", "in": "query",
-                "schema": {"type": "integer", "default": 200, "maximum": 500}
-            }],
-            "responses": {"200": {"description": "로그 조회 성공"}}
+            "parameters": [
+                {"name": "source", "in": "query", "required": False,
+                 "schema": {"type": "string", "enum": ["events", "game", "stdout", "stderr"], "default": "game"},
+                 "description": "events=접속/퇴장 이벤트, game=Pal.log, stdout/stderr=NSSM 리다이렉트"},
+                {"name": "lines", "in": "query", "required": False,
+                 "schema": {"type": "integer", "default": 200, "maximum": 500}}
+            ],
+            "responses": {"200": {"description": "조회 성공 (exists=false면 파일 없음, log_file 경로 확인)"},
+                          "400": {"description": "잘못된 source 또는 lines"}}
         }
     },
     "/palworld/backups": {
