@@ -8,7 +8,21 @@ PALSERVER_DIR = os.path.join(PALWORLD_BASE_DIR, "steamcmd", "steamapps", "common
 INI_PATH = os.path.join(PALSERVER_DIR, "Pal", "Saved", "Config", "WindowsServer", "PalWorldSettings.ini")
 SAVE_DIR = os.path.join(PALSERVER_DIR, "Pal", "Saved", "SaveGames")
 BACKUP_DIR = os.path.join(PALWORLD_BASE_DIR, "backups")
-LOG_FILE = os.path.join(PALWORLD_BASE_DIR, "logs", "palserver-stdout.log")
+
+# 로그 소스: 팰월드 로그 탭에서 선택 조회하는 파일들
+# events  = Flask 폴러가 자체 생성하는 접속/퇴장 이벤트 (JSON Lines)
+# game    = UE 엔진이 직접 쓰는 진짜 서버 로그 (장애 분석용)
+# stdout/stderr = NSSM 리다이렉트 (크래시·프로세스 단서)
+LOG_SOURCES = {
+    "events": os.path.join(PALWORLD_BASE_DIR, "logs", "palworld-events.jsonl"),
+    "game":   os.path.join(PALSERVER_DIR, "Pal", "Saved", "Logs", "Pal.log"),
+    "stdout": os.path.join(PALWORLD_BASE_DIR, "logs", "palserver-stdout.log"),
+    "stderr": os.path.join(PALWORLD_BASE_DIR, "logs", "palserver-stderr.log"),
+}
+
+# 게임 접속 가이드에 표시할 공개 주소
+PUBLIC_HOST = "suh-project.synology.me"
+PUBLIC_PORT = 8211
 
 SERVICE_NAME = "PalServer"
 REST_BASE_URL = "http://127.0.0.1:8212"

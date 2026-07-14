@@ -1,108 +1,156 @@
-<!DOCTYPE html>
-<html lang="ko" data-theme="dark">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>팰월드 서버 관리</title>
-  <link rel="stylesheet" href="../static/css/app.css">
-</head>
-<body class="min-h-screen bg-base-200">
-  <div class="navbar bg-base-100 shadow">
-    <div class="flex-1">
-      <a href="../admin" class="btn btn-ghost">← 대시보드</a>
-      <span class="text-xl font-bold px-2">🎮 팰월드 서버</span>
-      <span id="state-badge" class="badge badge-ghost">확인중…</span>
-    </div>
-    <div class="flex-none gap-2 px-4">
-      <button id="btn-start" class="btn btn-success btn-sm" onclick="controlServer('start')">시작</button>
-      <button id="btn-stop" class="btn btn-error btn-sm" onclick="controlServer('stop')">중지</button>
-      <button id="btn-restart" class="btn btn-warning btn-sm" onclick="controlServer('restart')">재시작</button>
+{% extends "admin/base.html" %}
+{% block title %}팰월드 서버 관리 | SUH AI Server{% endblock %}
+{% block page_title %}팰월드 서버{% endblock %}
+{% block navbar_extra %}
+<span id="state-badge" class="badge badge-ghost ml-2">확인중</span>
+{% endblock %}
+{% block content %}
+<div class="space-y-6 max-w-5xl mx-auto">
+
+  <div class="card bg-base-100 shadow">
+    <div class="card-body gap-4">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <h2 class="card-title text-base">
+          <i data-lucide="activity" class="size-5"></i>서버 상태
+        </h2>
+        <div class="flex gap-2">
+          <button id="btn-start" class="btn btn-success btn-sm" onclick="controlServer('start')">
+            <i data-lucide="play" class="size-4"></i>시작
+          </button>
+          <button id="btn-stop" class="btn btn-error btn-sm" onclick="controlServer('stop')">
+            <i data-lucide="square" class="size-4"></i>중지
+          </button>
+          <button id="btn-restart" class="btn btn-warning btn-sm" onclick="controlServer('restart')">
+            <i data-lucide="rotate-cw" class="size-4"></i>재시작
+          </button>
+        </div>
+      </div>
+      <div class="stats stats-vertical sm:stats-horizontal w-full bg-base-200">
+        <div class="stat">
+          <div class="stat-figure text-primary"><i data-lucide="users" class="size-6"></i></div>
+          <div class="stat-title">접속자</div>
+          <div id="stat-players" class="stat-value text-2xl">-</div>
+          <div id="stat-maxplayers" class="stat-desc">/ - 명</div>
+        </div>
+        <div class="stat">
+          <div class="stat-figure text-primary"><i data-lucide="gauge" class="size-6"></i></div>
+          <div class="stat-title">서버 FPS</div>
+          <div id="stat-fps" class="stat-value text-2xl">-</div>
+        </div>
+        <div class="stat">
+          <div class="stat-figure text-primary"><i data-lucide="clock" class="size-6"></i></div>
+          <div class="stat-title">업타임</div>
+          <div id="stat-uptime" class="stat-value text-2xl">-</div>
+        </div>
+      </div>
     </div>
   </div>
 
-  <main class="container mx-auto p-6 space-y-6">
-    <div class="stats shadow w-full bg-base-100">
-      <div class="stat">
-        <div class="stat-title">접속자</div>
-        <div id="stat-players" class="stat-value">-</div>
-        <div id="stat-maxplayers" class="stat-desc">/ - 명</div>
-      </div>
-      <div class="stat">
-        <div class="stat-title">서버 FPS</div>
-        <div id="stat-fps" class="stat-value">-</div>
-      </div>
-      <div class="stat">
-        <div class="stat-title">업타임</div>
-        <div id="stat-uptime" class="stat-value text-2xl">-</div>
-      </div>
-    </div>
-
-    <div role="tablist" class="tabs tabs-lifted">
-      <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="⚙️ 설정" checked>
-      <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-6">
-        <div class="alert alert-warning mb-4 text-sm">
-          <span>⚠️ 설정은 서버를 <b>완전히 중지한 뒤</b> 저장해야 합니다. 실행 중 수정하면 종료 시 기존 값으로 덮어써집니다.</span>
-        </div>
-        <div class="settings-toolbar">
-          <div>
-            <h2 class="settings-title">서버 기본 설정</h2>
-            <p class="settings-subtitle">현재 저장값을 보여줍니다. 추천값은 버튼으로 한 번에 적용할 수 있습니다.</p>
+  <div class="card bg-base-100 shadow border border-primary/30">
+    <div class="card-body">
+      <h2 class="card-title text-base">
+        <i data-lucide="map" class="size-5"></i>게임 접속 방법
+      </h2>
+      <ul class="steps steps-vertical sm:steps-horizontal w-full my-2 text-sm">
+        <li class="step step-primary">타이틀 → 멀티플레이<br>참가하기 (전용서버)</li>
+        <li class="step step-primary">"비밀번호를 입력해주세요"<br>체크</li>
+        <li class="step step-primary">아래 주소·비밀번호 입력</li>
+      </ul>
+      <div class="grid gap-3 sm:grid-cols-2">
+        <div class="bg-base-200 rounded-box p-4">
+          <div class="text-xs opacity-60 mb-1">서버 주소</div>
+          <div class="flex items-center justify-between gap-2">
+            <code id="guide-address" class="font-mono text-sm break-all">불러오는 중…</code>
+            <button type="button" class="btn btn-ghost btn-xs" onclick="copyGuide('guide-address', '서버 주소')" title="복사">
+              <i data-lucide="copy" class="size-4"></i>
+            </button>
           </div>
-          <button type="button" class="btn btn-outline btn-sm" onclick="applyRecommendedSettings()">추천값 적용</button>
         </div>
-        <div class="settings-head" aria-hidden="true">
-          <span>항목</span><span>현재값</span><span>기본값 / 추천값</span><span>설명</span>
-        </div>
-        <div id="settings-form" class="settings-list"></div>
-        <div class="settings-actions">
-          <button class="btn btn-primary" onclick="saveSettings()">저장</button>
-          <button class="btn btn-secondary" onclick="stopSaveRestart()">중지 → 저장 → 재시작</button>
+        <div class="bg-base-200 rounded-box p-4">
+          <div class="text-xs opacity-60 mb-1">접속 비밀번호</div>
+          <div class="flex items-center justify-between gap-2">
+            <code id="guide-password" class="font-mono text-sm">불러오는 중…</code>
+            <button type="button" id="guide-password-copy" class="btn btn-ghost btn-xs" onclick="copyGuide('guide-password', '비밀번호')" title="복사">
+              <i data-lucide="copy" class="size-4"></i>
+            </button>
+          </div>
         </div>
       </div>
+      <p id="guide-server-info" class="text-sm opacity-70 mt-1"></p>
+    </div>
+  </div>
 
-      <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="📋 로그">
-      <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-6">
-        <pre id="log-view" class="mockup-code text-xs overflow-x-auto max-h-96 p-4">불러오는 중…</pre>
+  <div role="tablist" class="tabs tabs-lift">
+    <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="설정" checked>
+    <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-6">
+      <div class="alert alert-warning mb-4 text-sm">
+        <i data-lucide="triangle-alert" class="size-5"></i>
+        <span>설정은 서버를 <b>완전히 중지한 뒤</b> 저장해야 합니다. 실행 중 수정하면 종료 시 기존 값으로 덮어써집니다.</span>
       </div>
-
-      <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="💾 백업">
-      <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-6">
-        <button class="btn btn-primary mb-4" onclick="createBackup()">지금 백업</button>
-        <div class="overflow-x-auto">
-          <table class="table table-zebra">
-            <thead><tr><th>이름</th><th>크기(MB)</th><th>생성 시각</th></tr></thead>
-            <tbody id="backup-list"></tbody>
-          </table>
+      <div class="settings-toolbar">
+        <div>
+          <h2 class="settings-title">서버 기본 설정</h2>
+          <p class="settings-subtitle">현재 저장값을 보여줍니다. 추천값은 버튼으로 한 번에 적용할 수 있습니다.</p>
         </div>
+        <button type="button" class="btn btn-outline btn-sm" onclick="applyRecommendedSettings()">추천값 적용</button>
+      </div>
+      <div class="settings-head" aria-hidden="true">
+        <span>항목</span><span>현재값</span><span>기본값 / 추천값</span><span>설명</span>
+      </div>
+      <div id="settings-form" class="settings-list"></div>
+      <div class="settings-actions">
+        <button class="btn btn-primary" onclick="saveSettings()">저장</button>
+        <button class="btn btn-secondary" onclick="stopSaveRestart()">중지 → 저장 → 재시작</button>
       </div>
     </div>
 
-    <div class="card bg-base-100 shadow">
-      <div class="card-body">
-        <h2 class="card-title text-base">👥 접속 중인 플레이어</h2>
-        <div class="overflow-x-auto">
-          <table class="table table-sm">
-            <thead><tr><th>이름</th><th>레벨</th><th>Ping</th></tr></thead>
-            <tbody id="player-list"><tr><td colspan="3">-</td></tr></tbody>
-          </table>
-        </div>
+    <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="로그">
+    <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-6">
+      <div id="palworld-log-viewer"></div>
+    </div>
+
+    <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="백업">
+    <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-6">
+      <button class="btn btn-primary mb-4" onclick="createBackup()">
+        <i data-lucide="archive" class="size-4"></i>지금 백업
+      </button>
+      <div class="overflow-x-auto">
+        <table class="table table-zebra">
+          <thead><tr><th>이름</th><th>크기(MB)</th><th>생성 시각</th></tr></thead>
+          <tbody id="backup-list"></tbody>
+        </table>
       </div>
     </div>
-  </main>
 
-  <dialog id="api-key-modal" class="modal">
-    <div class="modal-box">
-      <h3 class="font-bold text-lg">🔑 API Key 입력</h3>
-      <p class="py-2 text-sm">nginx 인증용 X-API-Key를 입력하세요. 브라우저에 저장됩니다.</p>
-      <input id="api-key-input" type="password" class="input input-bordered w-full" placeholder="API Key">
-      <div class="modal-action">
-        <button class="btn btn-primary" onclick="saveApiKey()">저장</button>
+    <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="플레이어">
+    <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-6">
+      <div class="overflow-x-auto">
+        <table class="table table-sm">
+          <thead><tr><th>이름</th><th>레벨</th><th>Ping</th></tr></thead>
+          <tbody id="player-list"><tr><td colspan="3">-</td></tr></tbody>
+        </table>
       </div>
     </div>
-  </dialog>
-  <div id="toast-container" class="toast toast-end"></div>
+  </div>
+</div>
 
-  <script src="../static/js/admin-common.js"></script>
-  <script src="../static/js/palworld.js"></script>
-</body>
-</html>
+<dialog id="confirm-modal" class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg flex items-center gap-2">
+      <i data-lucide="circle-help" class="size-5"></i>확인
+    </h3>
+    <p id="confirm-message" class="py-3 text-sm"></p>
+    <div class="modal-action">
+      <form method="dialog" class="flex gap-2">
+        <button class="btn btn-ghost">취소</button>
+        <button class="btn btn-primary" value="ok">확인</button>
+      </form>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button aria-label="닫기">close</button></form>
+</dialog>
+{% endblock %}
+{% block extra_js %}
+<script src="{{ root }}/static/js/log-viewer.js"></script>
+<script src="{{ root }}/static/js/palworld.js"></script>
+{% endblock %}

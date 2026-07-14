@@ -2,11 +2,14 @@
   "name": "suh-ai-admin-frontend",
   "private": true,
   "scripts": {
-    "build": "tailwindcss -i input.css -o ../static/css/app.css --minify"
+    "build": "tailwindcss -i input.css -o ../static/css/app.css --minify && node copy-vendor.js"
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.1.0",
-    "tailwindcss": "^4.1.0",
-    "daisyui": "^5.0.0"
+    "daisyui": "^5.0.0",
+    "tailwindcss": "^4.1.0"
+  },
+  "dependencies": {
+    "lucide": "^1.24.0"
   }
 }

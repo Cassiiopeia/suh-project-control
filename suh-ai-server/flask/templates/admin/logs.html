@@ -1,0 +1,45 @@
+{% extends "admin/base.html" %}
+{% block title %}Flask 로그 | SUH AI Server{% endblock %}
+{% block page_title %}Flask 서버 로그{% endblock %}
+{% block content %}
+<div class="card bg-base-100 shadow max-w-5xl mx-auto">
+  <div class="card-body">
+    <h2 class="card-title text-base">
+      <i data-lucide="scroll-text" class="size-5"></i>Flask 서버 로그
+    </h2>
+    <div class="flex flex-wrap gap-2 mb-2">
+      <select id="log-level" class="select select-sm w-36">
+        <option value="">전체 레벨</option>
+        <option value="ERROR">ERROR</option>
+        <option value="WARNING">WARNING</option>
+        <option value="INFO">INFO</option>
+      </select>
+      <input id="log-search" class="input input-sm w-56" placeholder="검색어 입력 후 Enter">
+    </div>
+    <div id="flask-log-viewer"></div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script src="{{ root }}/static/js/log-viewer.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const viewer = createLogViewer(document.getElementById('flask-log-viewer'), {
+      sources: [{ id: 'flask', label: 'nssm-stderr.log' }],
+      fetchLogs: async function (source, lines) {
+        const level = document.getElementById('log-level').value;
+        const search = document.getElementById('log-search').value.trim();
+        let url = '../logs?lines=' + lines;
+        if (level) url += '&level=' + encodeURIComponent(level);
+        if (search) url += '&search=' + encodeURIComponent(search);
+        const resp = await apiFetch(url);
+        const data = await resp.json();
+        if (resp.status === 404) return { logs: [], exists: false, log_file: data.log_file };
+        return { logs: data.logs || [], exists: true, log_file: data.log_file };
+      },
+    });
+    document.getElementById('log-level').addEventListener('change', function () { viewer.refresh(); });
+    document.getElementById('log-search').addEventListener('change', function () { viewer.refresh(); });
+  });
+</script>
+{% endblock %}
