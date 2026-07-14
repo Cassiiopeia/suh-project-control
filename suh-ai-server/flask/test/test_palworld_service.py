@@ -160,6 +160,14 @@ def test_tail_logs_unknown_source_raises(service):
         service.tail_logs('nope', 100)
 
 
+def test_log_sources_game_points_at_real_stdout_capture():
+    # Palworld는 Pal.log를 만들지 않으므로 game=stdout 캡처를 가리켜야 한다.
+    from config.palworld_config import LOG_SOURCES
+    assert LOG_SOURCES['game'] == LOG_SOURCES['stdout']
+    assert LOG_SOURCES['game'].endswith('palserver-stdout.log')
+    assert 'flask' in LOG_SOURCES  # 관리자 시스템 로그 소스
+
+
 def test_tail_logs_missing_file_reports_path(service, tmp_path):
     missing = str(tmp_path / 'Pal.log')
     with patch.dict('service.palworld_service.LOG_SOURCES', {'game': missing}):

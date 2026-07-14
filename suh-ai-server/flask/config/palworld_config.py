@@ -11,14 +11,18 @@ BACKUP_DIR = os.path.join(PALWORLD_BASE_DIR, "backups")
 
 # 로그 소스: 팰월드 로그 탭에서 선택 조회하는 파일들
 # events  = Flask 폴러가 자체 생성하는 접속/퇴장 이벤트 (JSON Lines)
-# game    = UE 엔진이 직접 쓰는 진짜 서버 로그 (장애 분석용)
-# stdout/stderr = NSSM 리다이렉트 (크래시·프로세스 단서)
+# game    = 엔진의 진짜 서버 로그. Palworld 데디(Pocket Pair 빌드)는 UE 파일 로그를
+#           꺼서 배포하므로 Pal/Saved/Logs/Pal.log는 생성되지 않는다(-log/-abslog 미동작).
+#           엔진 출력은 stdout으로만 나가고 NSSM이 palserver-stdout.log로 캡처하므로,
+#           "게임 로그"는 이 캡처 파일을 가리킨다.
+# stderr  = NSSM 표준에러 리다이렉트 (크래시·프로세스 단서)
+# flask   = Flask 앱(관리자 서버) 자체 로그 — 관리자 시스템 로그 조회용
+_PAL_STDOUT = os.path.join(PALWORLD_BASE_DIR, "logs", "palserver-stdout.log")
 LOG_SOURCES = {
     "events": os.path.join(PALWORLD_BASE_DIR, "logs", "palworld-events.jsonl"),
-    "game":   os.path.join(PALSERVER_DIR, "Pal", "Saved", "Logs", "Pal.log"),
-    "stdout": os.path.join(PALWORLD_BASE_DIR, "logs", "palserver-stdout.log"),
+    "game":   _PAL_STDOUT,
+    "stdout": _PAL_STDOUT,
     "stderr": os.path.join(PALWORLD_BASE_DIR, "logs", "palserver-stderr.log"),
-    # Flask 앱(관리자 서버) 자체 로그 — NSSM 리다이렉트. 관리자 시스템 로그 조회용.
     "flask":  os.path.join(r"C:\AI\suh-ai-server", "flask", "logs", "nssm-stderr.log"),
 }
 
