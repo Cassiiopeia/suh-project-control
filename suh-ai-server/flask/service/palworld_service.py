@@ -225,7 +225,10 @@ class PalworldService:
         if size > read_bytes and all_lines:
             all_lines = all_lines[1:]  # seek 지점의 첫 줄은 중간에서 잘렸을 수 있다
         if hide_noise:
-            all_lines = [ln for ln in all_lines if self.NOISE_MARKER not in ln]
+            # REST 폴링 잡음 + 빈 줄(stdout이 줄마다 공백행을 끼워 넣음)을 함께 제거해
+            # 실제 이벤트만 남긴다.
+            all_lines = [ln for ln in all_lines
+                         if ln.strip() and self.NOISE_MARKER not in ln]
         result['logs'] = all_lines[-lines:]
         return result
 

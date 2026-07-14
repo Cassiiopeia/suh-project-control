@@ -119,14 +119,15 @@ function renderWorldInfo(data) {
     box.innerHTML = '<div class="opacity-60 col-span-full">서버 정지 중 — 정보를 불러올 수 없습니다.</div>';
     return;
   }
-  // 각 항목을 라벨(위, 작고 흐리게) + 값(아래) 스택 블록으로. 절대 옆 칸과 겹치지 않고 어느 폭에서도 깔끔.
+  // 라벨(고정폭, 좌측 muted) + 값(바로 옆 좌측정렬) 한 줄 key-value.
+  // justify-between으로 양끝에 붙이지 않으므로 옆 칸 라벨과 겹치지 않는다.
   box.innerHTML = WORLD_INFO_ROWS.map(row => {
     let v = row.get(data);
     if (v == null || v === '') v = '-';
     else if (row.suffix) v = v + row.suffix;
-    return '<div class="bg-base-200/50 rounded-lg px-3 py-2 min-w-0">' +
-      '<div class="text-[11px] uppercase tracking-wide opacity-50 mb-0.5">' + escapeHtml(row.label) + '</div>' +
-      '<div class="min-w-0 break-words ' + (row.mono ? 'font-mono text-xs' : 'font-medium') + '">' + escapeHtml(v) + '</div>' +
+    return '<div class="flex items-baseline gap-3 py-1.5 px-2 rounded odd:bg-base-200/40 min-w-0">' +
+      '<span class="opacity-50 w-20 shrink-0">' + escapeHtml(row.label) + '</span>' +
+      '<span class="min-w-0 break-words font-medium ' + (row.mono ? 'font-mono text-xs' : '') + '">' + escapeHtml(v) + '</span>' +
       '</div>';
   }).join('');
 }
