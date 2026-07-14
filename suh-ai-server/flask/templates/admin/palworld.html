@@ -36,12 +36,63 @@
           <div class="stat-figure text-primary"><i data-lucide="gauge" class="size-6"></i></div>
           <div class="stat-title">서버 FPS</div>
           <div id="stat-fps" class="stat-value text-2xl">-</div>
+          <div id="stat-fpsavg" class="stat-desc">평균 -</div>
+        </div>
+        <div class="stat">
+          <div class="stat-figure text-primary"><i data-lucide="timer" class="size-6"></i></div>
+          <div class="stat-title">프레임타임</div>
+          <div id="stat-frametime" class="stat-value text-2xl">-</div>
+          <div class="stat-desc">ms / frame</div>
         </div>
         <div class="stat">
           <div class="stat-figure text-primary"><i data-lucide="clock" class="size-6"></i></div>
           <div class="stat-title">업타임</div>
           <div id="stat-uptime" class="stat-value text-2xl">-</div>
         </div>
+      </div>
+
+      <!-- 보조 지표: 인게임 일수 / 거점 수 -->
+      <div class="stats stats-horizontal w-full bg-base-200/60 text-xs">
+        <div class="stat py-2">
+          <div class="stat-title">인게임 경과일</div>
+          <div id="stat-days" class="stat-value text-lg">-</div>
+        </div>
+        <div class="stat py-2">
+          <div class="stat-title">거점 수</div>
+          <div id="stat-basecamp" class="stat-value text-lg">-</div>
+        </div>
+        <div class="stat py-2">
+          <div class="stat-title">게임 버전</div>
+          <div id="stat-version" class="stat-value text-sm font-mono pt-1">-</div>
+        </div>
+      </div>
+
+      <!-- 추이 스파크라인 (FPS / 접속자) -->
+      <div class="grid gap-3 sm:grid-cols-2 mt-1">
+        <div class="bg-base-200 rounded-box p-3">
+          <div class="flex items-center justify-between text-xs opacity-70 mb-1">
+            <span>서버 FPS 추이</span><span id="spark-fps-label" class="font-mono"></span>
+          </div>
+          <div id="spark-fps" class="h-14"></div>
+        </div>
+        <div class="bg-base-200 rounded-box p-3">
+          <div class="flex items-center justify-between text-xs opacity-70 mb-1">
+            <span>접속자 추이</span><span id="spark-players-label" class="font-mono"></span>
+          </div>
+          <div id="spark-players" class="h-14"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 월드 / 서버 정보 -->
+  <div class="card bg-base-100 shadow">
+    <div class="card-body gap-3">
+      <h2 class="card-title text-base">
+        <i data-lucide="globe" class="size-5"></i>월드 · 서버 정보
+      </h2>
+      <div id="world-info" class="grid gap-x-6 gap-y-2 sm:grid-cols-2 text-sm">
+        <div class="opacity-60">불러오는 중…</div>
       </div>
     </div>
   </div>
@@ -126,10 +177,14 @@
     <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-6">
       <div class="overflow-x-auto">
         <table class="table table-sm">
-          <thead><tr><th>이름</th><th>레벨</th><th>Ping</th></tr></thead>
-          <tbody id="player-list"><tr><td colspan="3">-</td></tr></tbody>
+          <thead><tr>
+            <th>이름</th><th>계정(Steam)</th><th>레벨</th><th>Ping</th>
+            <th>SteamID</th><th>IP</th><th>월드 좌표</th>
+          </tr></thead>
+          <tbody id="player-list"><tr><td colspan="7">-</td></tr></tbody>
         </table>
       </div>
+      <p class="text-xs opacity-50 mt-2">SteamID·IP·좌표는 관리자만 볼 수 있는 정보입니다.</p>
     </div>
   </div>
 </div>

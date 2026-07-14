@@ -18,7 +18,15 @@ LOG_SOURCES = {
     "game":   os.path.join(PALSERVER_DIR, "Pal", "Saved", "Logs", "Pal.log"),
     "stdout": os.path.join(PALWORLD_BASE_DIR, "logs", "palserver-stdout.log"),
     "stderr": os.path.join(PALWORLD_BASE_DIR, "logs", "palserver-stderr.log"),
+    # Flask 앱(관리자 서버) 자체 로그 — NSSM 리다이렉트. 관리자 시스템 로그 조회용.
+    "flask":  os.path.join(r"C:\AI\suh-ai-server", "flask", "logs", "nssm-stderr.log"),
 }
+
+# 메트릭 시계열 히스토리 (FPS·접속자·프레임타임 추이 그래프용).
+# 서버 REST는 순간값만 주므로 폴러가 주기적으로 스냅샷을 이 파일에 적재한다.
+METRICS_HISTORY_FILE = os.path.join(PALWORLD_BASE_DIR, "logs", "palworld-metrics.jsonl")
+METRICS_HISTORY_MAXLEN = 720          # 링버퍼 길이 (10초 간격 × 720 = 약 2시간)
+METRICS_HISTORY_MAX_BYTES = 5 * 1024 * 1024
 
 # 게임 접속 가이드에 표시할 공개 주소
 PUBLIC_HOST = "suh-project.synology.me"

@@ -33,6 +33,20 @@ def test_diff_players_falls_back_to_name_key():
     assert left == []
 
 
+def test_diff_players_uses_userId_camelcase_for_identity():
+    # 닉네임(name)이 바뀌어도 userId가 같으면 동일 인물 → join/leave 없음
+    prev = [{'userId': 'steam_1', 'name': '재석'}]
+    curr = [{'userId': 'steam_1', 'name': '로리매킬로이'}]
+    joined, left = diff_players(prev, curr)
+    assert joined == [] and left == []
+
+
+def test_player_summary_includes_steam_id():
+    summary = PalworldEventPoller._player_summary(
+        {'name': 'A', 'level': 22, 'userId': 'steam_76561198111305145'})
+    assert summary == {'name': 'A', 'level': 22, 'steamId': 'steam_76561198111305145'}
+
+
 # --- 이벤트 기록 ---
 
 @pytest.fixture
@@ -104,3 +118,44 @@ def test_tick_skips_players_when_rest_down(event_file):
         poller._tick()
     assert not event_file.exists()          # REST 다운 → 이벤트 기록 없음
     assert poller._prev_players == [{'userid': 'a', 'name': 'A'}]  # 스냅샷 유지
+
+
+# --- 메트릭 히스토리 적재 ---
+
+def test_tick_records_metrics_history(event_file):
+    service = MagicMock()
+    service.get_service_state.return_value = 'running'
+    history = MagicMock()
+    poller = PalworldEventPoller(service, metrics_history=history)
+    poller._prev_state = 'running'
+    with patch.object(poller, '_record_metrics') as rec, \
+         patch.object(poller, '_fetch_players', return_value=[]):
+        poller._tick()
+    rec.assert_called_once()
+
+
+def test_record_metrics_pushes_snapshot(event_file):
+    service = MagicMock()
+    service._rest_auth.return_value = ('admin', 'pw')
+    history = MagicMock()
+    poller = PalworldEventPoller(service, metrics_history=history)
+    fake_resp = MagicMock()
+    fake_resp.json.return_value = {'serverfps': 60, 'currentplayernum': 1}
+    fake_resp.raise_for_status.return_value = None
+    with patch('service.palworld_event_poller.requests.get', return_value=fake_resp):
+        poller._record_metrics()
+    history.add_from_metrics.assert_called_once_with({'serverfps': 60, 'currentplayernum': 1})
+
+
+def test_record_metrics_swallows_errors(event_file):
+    service = MagicMock()
+    history = MagicMock()
+    poller = PalworldEventPoller(service, metrics_history=history)
+    with patch('service.palworld_event_poller.requests.get', side_effect=Exception('down')):
+        poller._record_metrics()  # 예외 안 나야 함
+    history.add_from_metrics.assert_not_called()
+
+
+def test_record_metrics_noop_without_history(event_file):
+    poller = PalworldEventPoller(MagicMock())  # metrics_history=None
+    poller._record_metrics()  # 아무 일도 없어야 함 (예외 없이 통과)

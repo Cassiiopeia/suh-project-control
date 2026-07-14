@@ -62,6 +62,19 @@ PALWORLD_SWAGGER_PATHS = {
             "responses": {"200": {"description": "조회 성공 (ini 없으면 address 외 null)"}}
         }
     },
+    "/palworld/history": {
+        "get": {
+            "tags": ["Palworld"], "summary": "메트릭 시계열 히스토리 (FPS·접속자·프레임타임 추이)",
+            "security": [{"ApiKeyAuth": []}],
+            "parameters": [
+                {"name": "limit", "in": "query", "required": False,
+                 "schema": {"type": "integer", "default": 120, "maximum": 720},
+                 "description": "최근 N개 스냅샷 (10초 간격 적재)"}
+            ],
+            "responses": {"200": {"description": "points 배열 반환"},
+                          "400": {"description": "limit 정수 아님"}}
+        }
+    },
     "/palworld/logs": {
         "get": {
             "tags": ["Palworld"], "summary": "서버 로그 tail (source 선택)",
