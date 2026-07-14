@@ -1,76 +1,82 @@
-<!DOCTYPE html>
-<html lang="ko" data-theme="dark">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SUH AI Server Admin</title>
-  <link rel="stylesheet" href="./static/css/app.css">
-</head>
-<body class="min-h-screen bg-base-200">
-  <div class="navbar bg-base-100 shadow">
-    <div class="flex-1"><span class="text-xl font-bold px-4">🖥 SUH AI Server Admin</span></div>
-    <div class="flex-none px-4">
-      <button class="btn btn-ghost btn-sm" onclick="resetApiKey()">🔑 API Key</button>
+{% extends "admin/base.html" %}
+{% block title %}SUH AI Server Admin{% endblock %}
+{% block page_title %}대시보드{% endblock %}
+{% block content %}
+<div class="space-y-6 max-w-5xl mx-auto">
+
+  <div class="stats stats-vertical sm:stats-horizontal shadow w-full bg-base-100">
+    <div class="stat">
+      <div class="stat-figure text-primary"><i data-lucide="server" class="size-6"></i></div>
+      <div class="stat-title">Flask 서버</div>
+      <div id="stat-flask" class="stat-value text-2xl">확인중</div>
+      <div class="stat-desc">OCR · Vision · 관리 API</div>
+    </div>
+    <div class="stat">
+      <div class="stat-figure text-primary"><i data-lucide="gamepad-2" class="size-6"></i></div>
+      <div class="stat-title">팰월드 서버</div>
+      <div id="stat-palworld" class="stat-value text-2xl">확인중</div>
+      <div id="stat-palworld-desc" class="stat-desc">-</div>
+    </div>
+    <div class="stat">
+      <div class="stat-figure text-primary"><i data-lucide="users" class="size-6"></i></div>
+      <div class="stat-title">팰월드 접속자</div>
+      <div id="stat-players" class="stat-value text-2xl">-</div>
+      <div id="stat-players-desc" class="stat-desc">/ - 명</div>
     </div>
   </div>
 
-  <main class="container mx-auto p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
     <a href="./admin/palworld" class="card bg-base-100 shadow-md hover:shadow-xl transition-shadow">
       <div class="card-body">
-        <h2 class="card-title">🎮 팰월드 서버 관리
-          <span id="pal-badge" class="badge badge-ghost">확인중…</span>
+        <h2 class="card-title text-base">
+          <i data-lucide="gamepad-2" class="size-5 text-primary"></i>팰월드 서버 관리
+          <span id="pal-badge" class="badge badge-ghost badge-sm">확인중</span>
         </h2>
-        <p>서버 시작/중지, 설정, 로그, 백업 관리</p>
+        <p class="text-sm opacity-70">서버 제어 · 접속 가이드 · 설정 · 로그 · 백업</p>
       </div>
     </a>
     <a href="./docs/swagger" class="card bg-base-100 shadow-md hover:shadow-xl transition-shadow">
       <div class="card-body">
-        <h2 class="card-title">📄 OCR API</h2>
-        <p>Swagger 문서로 이동</p>
+        <h2 class="card-title text-base">
+          <i data-lucide="file-code" class="size-5 text-primary"></i>API 문서
+        </h2>
+        <p class="text-sm opacity-70">OCR · Vision API Swagger 문서</p>
       </div>
     </a>
-    <a href="./docs/swagger" class="card bg-base-100 shadow-md hover:shadow-xl transition-shadow">
+    <a href="./admin/logs" class="card bg-base-100 shadow-md hover:shadow-xl transition-shadow">
       <div class="card-body">
-        <h2 class="card-title">👁 Vision API</h2>
-        <p>Swagger 문서로 이동</p>
+        <h2 class="card-title text-base">
+          <i data-lucide="scroll-text" class="size-5 text-primary"></i>Flask 로그
+        </h2>
+        <p class="text-sm opacity-70">Flask 서버 로그 조회 (레벨 필터 · 검색)</p>
       </div>
     </a>
-    <div class="card bg-base-100 shadow-md">
-      <div class="card-body">
-        <h2 class="card-title">📋 Flask 서버 로그</h2>
-        <pre id="flask-logs" class="mockup-code text-xs overflow-x-auto max-h-48 p-4">불러오는 중…</pre>
-      </div>
-    </div>
-  </main>
-
-  <dialog id="api-key-modal" class="modal">
-    <div class="modal-box">
-      <h3 class="font-bold text-lg">🔑 API Key 입력</h3>
-      <p class="py-2 text-sm">nginx 인증용 X-API-Key를 입력하세요. 브라우저에 저장됩니다.</p>
-      <input id="api-key-input" type="password" class="input input-bordered w-full" placeholder="API Key">
-      <div class="modal-action">
-        <button class="btn btn-primary" onclick="saveApiKey()">저장</button>
-      </div>
-    </div>
-  </dialog>
-  <div id="toast-container" class="toast toast-end"></div>
-
-  <script src="./static/js/admin-common.js"></script>
-  <script>
-    document.addEventListener('DOMContentLoaded', async function () {
-      try {
-        const resp = await apiFetch('./palworld/status');
-        const data = await resp.json();
-        const badge = document.getElementById('pal-badge');
-        badge.textContent = data.state === 'running' ? 'RUNNING' : data.state.toUpperCase();
-        badge.className = 'badge ' + (data.state === 'running' ? 'badge-success' : 'badge-error');
-      } catch (e) { /* 401 modal은 apiFetch가 처리 */ }
-      try {
-        const resp = await apiFetch('./logs?lines=30');
-        const data = await resp.json();
-        document.getElementById('flask-logs').textContent = (data.logs || []).join('\n') || '(로그 없음)';
-      } catch (e) { /* ignore */ }
-    });
-  </script>
-</body>
-</html>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+  document.addEventListener('DOMContentLoaded', async function () {
+    try {
+      const resp = await apiFetch('./health');
+      document.getElementById('stat-flask').textContent = resp.ok ? '온라인' : '오류';
+    } catch (e) {
+      document.getElementById('stat-flask').textContent = '오류';
+    }
+    try {
+      const resp = await apiFetch('./palworld/status');
+      const data = await resp.json();
+      const running = data.state === 'running';
+      document.getElementById('stat-palworld').textContent = running ? '온라인' : '중지됨';
+      document.getElementById('stat-palworld-desc').textContent = data.state.toUpperCase();
+      const badge = document.getElementById('pal-badge');
+      badge.textContent = data.state.toUpperCase();
+      badge.className = 'badge badge-sm ' + (running ? 'badge-success' : 'badge-error');
+      if (data.rest_available && data.metrics) {
+        document.getElementById('stat-players').textContent = data.metrics.currentplayernum;
+        document.getElementById('stat-players-desc').textContent = '/ ' + data.metrics.maxplayernum + ' 명';
+      }
+    } catch (e) { /* 401 modal은 apiFetch가 처리 */ }
+  });
+</script>
+{% endblock %}
