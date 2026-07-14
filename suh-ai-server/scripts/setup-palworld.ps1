@@ -91,12 +91,15 @@ if (-not $nssmPath) {
     exit 1
 }
 $existing = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+# -log: 언리얼 엔진이 Pal\Saved\Logs\Pal.log 파일을 디스크에 기록하도록 강제한다.
+# 이 플래그가 없으면 엔진 로그는 콘솔(GLog)로만 흘러 Pal.log가 아예 생성되지 않는다.
+$palServerArgs = "-port=8211 -players=32 -log -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS"
 if (-not $existing) {
-    & nssm install $serviceName $palServerShippingExe "-port=8211 -players=32 -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS"
+    & nssm install $serviceName $palServerShippingExe $palServerArgs
     Write-Host "[SUCCESS] NSSM service '$serviceName' created"
 } else {
     & nssm set $serviceName Application $palServerShippingExe
-    & nssm set $serviceName AppParameters "-port=8211 -players=32 -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS"
+    & nssm set $serviceName AppParameters $palServerArgs
     Write-Host "[INFO] Service '$serviceName' already exists - reapplying configuration"
 }
 

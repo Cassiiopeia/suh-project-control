@@ -27,6 +27,15 @@ PUBLIC_PORT = 8211
 SERVICE_NAME = "PalServer"
 REST_BASE_URL = "http://127.0.0.1:8212"
 
+# NSSM 서비스가 PalServer-Win64-Shipping-Cmd.exe에 넘겨야 하는 실행 인자(정본).
+# -log: 언리얼 엔진이 Pal\Saved\Logs\Pal.log를 디스크에 기록하도록 강제한다.
+#       이 플래그가 없으면 게임 로그 파일이 아예 생성되지 않는다.
+# setup-palworld.ps1과 이 값이 일치해야 하며, Flask(SYSTEM 권한)가 서버 시작/재시작 시
+# NSSM AppParameters에 -log가 빠져 있으면 이 값으로 자가 치유한다.
+PALSERVER_ARGS = "-port=8211 -players=32 -log -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS"
+REQUIRED_ARG_FLAG = "-log"
+NSSM_PATH = r"C:\ProgramData\chocolatey\bin\nssm.exe"
+
 # OptionSettings에서 문자열로 취급해 따옴표를 붙여야 하는 키
 STRING_KEYS = {
     "ServerName", "ServerDescription", "AdminPassword", "ServerPassword",
