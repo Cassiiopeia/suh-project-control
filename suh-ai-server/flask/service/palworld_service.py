@@ -11,8 +11,9 @@ from datetime import datetime
 import requests
 
 from config.palworld_config import (
-    INI_PATH, SAVE_DIR, BACKUP_DIR, LOG_FILE,
+    INI_PATH, SAVE_DIR, BACKUP_DIR, LOG_SOURCES,
     SERVICE_NAME, REST_BASE_URL, EDITABLE_KEYS,
+    PUBLIC_HOST, PUBLIC_PORT,
 )
 from service.palworld_ini import parse_option_settings, update_option_settings
 
@@ -120,13 +121,27 @@ class PalworldService:
 
     # --- 로그 ---
 
-    def tail_logs(self, lines: int = 200) -> list:
+    TAIL_READ_BYTES = 256 * 1024  # 파일 끝에서 이만큼만 읽는다 (Pal.log는 수십 MB까지 자람)
+
+    def tail_logs(self, source: str = 'game', lines: int = 200) -> dict:
+        if source not in LOG_SOURCES:
+            raise ValueError(f'Unknown log source: {source}')
         lines = min(int(lines), 500)
-        if not os.path.exists(LOG_FILE):
-            return []
-        with open(LOG_FILE, 'r', encoding='utf-8', errors='replace') as f:
-            all_lines = f.readlines()
-        return [l.rstrip('\n\r') for l in all_lines[-lines:]]
+        path = LOG_SOURCES[source]
+        result = {'source': source, 'log_file': path, 'exists': False, 'size_bytes': 0, 'logs': []}
+        if not os.path.exists(path):
+            return result
+        size = os.path.getsize(path)
+        result['exists'] = True
+        result['size_bytes'] = size
+        with open(path, 'rb') as f:
+            f.seek(max(0, size - self.TAIL_READ_BYTES))
+            data = f.read()
+        all_lines = data.decode('utf-8', errors='replace').splitlines()
+        if size > self.TAIL_READ_BYTES and all_lines:
+            all_lines = all_lines[1:]  # seek 지점의 첫 줄은 중간에서 잘렸을 수 있다
+        result['logs'] = all_lines[-lines:]
+        return result
 
     # --- 백업 ---
 

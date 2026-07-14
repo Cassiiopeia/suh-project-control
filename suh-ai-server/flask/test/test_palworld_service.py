@@ -87,3 +87,42 @@ def test_start_calls_powershell(service):
         service.start()
     args = mock_run.call_args[0][0]
     assert 'Start-Service' in ' '.join(args)
+
+
+# --- tail_logs (source 선택 + seek tail) ---
+
+def test_tail_logs_unknown_source_raises(service):
+    with pytest.raises(ValueError):
+        service.tail_logs('nope', 100)
+
+
+def test_tail_logs_missing_file_reports_path(service, tmp_path):
+    missing = str(tmp_path / 'Pal.log')
+    with patch.dict('service.palworld_service.LOG_SOURCES', {'game': missing}):
+        result = service.tail_logs('game', 100)
+    assert result['exists'] is False
+    assert result['log_file'] == missing
+    assert result['logs'] == []
+    assert result['source'] == 'game'
+
+
+def test_tail_logs_returns_last_lines(service, tmp_path):
+    log = tmp_path / 'Pal.log'
+    log.write_text('\n'.join(f'line{i}' for i in range(300)) + '\n', encoding='utf-8')
+    with patch.dict('service.palworld_service.LOG_SOURCES', {'game': str(log)}):
+        result = service.tail_logs('game', 100)
+    assert result['exists'] is True
+    assert len(result['logs']) == 100
+    assert result['logs'][-1] == 'line299'
+    assert result['size_bytes'] == log.stat().st_size
+
+
+def test_tail_logs_reads_only_tail_of_large_file(service, tmp_path):
+    # 60000줄 x 11바이트 ≈ 660KB > TAIL_READ_BYTES(256KB) — seek 경로 검증
+    log = tmp_path / 'Pal.log'
+    log.write_text('\n'.join(f'row{i:07d}' for i in range(60000)) + '\n', encoding='utf-8')
+    with patch.dict('service.palworld_service.LOG_SOURCES', {'game': str(log)}):
+        result = service.tail_logs('game', 50)
+    assert len(result['logs']) == 50
+    assert result['logs'][-1] == 'row0059999'
+    assert result['logs'][0] == 'row0059950'
