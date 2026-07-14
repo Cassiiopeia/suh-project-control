@@ -1,14 +1,34 @@
 {
   "metadata": {
-    "lastUpdated": "2026-07-14T10:26:42Z",
-    "currentVersion": "2.0.28",
+    "lastUpdated": "2026-07-14T10:31:39Z",
+    "currentVersion": "2.0.29",
     "projectType": "python",
-    "totalReleases": 24,
+    "totalReleases": 25,
     "projectTypes": [
       "python"
     ]
   },
   "releases": [
+    {
+      "version": "2.0.29",
+      "project_type": "python",
+      "project_types": [
+        "python"
+      ],
+      "date": "2026-07-14",
+      "pr_number": 69,
+      "raw_summary": "## Summary by CodeRabbit\n\n## 릴리스 노트\n\n* **개선**\n  * 월드·서버 정보 표시를 더 읽기 쉽게 정리했습니다\n  * 게임 로그에서 빈 줄과 반복 기록을 걸러 실제 접속·이벤트가 잘 보입니다",
+      "parsed_changes": {
+        "개선": {
+          "title": "개선",
+          "items": [
+            "월드·서버 정보 표시를 더 읽기 쉽게 정리했습니다",
+            "게임 로그에서 빈 줄과 반복 기록을 걸러 실제 접속·이벤트가 잘 보입니다"
+          ]
+        }
+      },
+      "parse_method": "markdown"
+    },
     {
       "version": "2.0.28",
       "project_type": "python",
