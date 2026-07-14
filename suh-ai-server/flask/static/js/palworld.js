@@ -366,8 +366,8 @@ function initLogViewer() {
     sources: [
       { id: 'events', label: '이벤트' },
       { id: 'game', label: '게임 로그' },
-      { id: 'stdout', label: 'stdout' },
-      { id: 'stderr', label: 'stderr' },
+      { id: 'stderr', label: '오류(stderr)' },
+      { id: 'flask', label: '시스템(Flask)' },
     ],
     fetchLogs: async function (source, lines) {
       const resp = await apiFetch(API + '/logs?source=' + source + '&lines=' + lines);
