@@ -107,6 +107,10 @@ if (-not $existing) {
 & nssm set $serviceName AppStdout "$logsDir\palserver-stdout.log"
 & nssm set $serviceName AppStderr "$logsDir\palserver-stderr.log"
 & nssm set $serviceName AppStopMethodConsole 15000
+# 로그 로테이션: stdout/stderr가 10MB 넘으면 회전 (무한 성장 방지)
+& nssm set $serviceName AppRotateFiles 1
+& nssm set $serviceName AppRotateOnline 1
+& nssm set $serviceName AppRotateBytes 10485760
 
 # 6. 방화벽 개방 (UDP 8211 게임, UDP 27015 스팀 서버목록)
 foreach ($rule in @(
