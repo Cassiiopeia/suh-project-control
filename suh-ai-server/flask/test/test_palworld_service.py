@@ -83,10 +83,74 @@ def test_get_status_degrades_when_rest_down(service):
 
 
 def test_start_calls_powershell(service):
-    with patch('service.palworld_service.subprocess.run', return_value=_sc_result("", 0)) as mock_run:
+    # start()는 ensure_log_enabled() 후 Start-Service를 호출한다.
+    with patch.object(service, 'ensure_log_enabled', return_value=False), \
+         patch('service.palworld_service.subprocess.run', return_value=_sc_result("", 0)) as mock_run:
         service.start()
     args = mock_run.call_args[0][0]
     assert 'Start-Service' in ' '.join(args)
+
+
+# --- NSSM -log 자가 치유 ---
+
+def test_needs_log_flag_true_when_absent(service):
+    assert service._needs_log_flag("-port=8211 -players=32 -useperfthreads") is True
+
+
+def test_needs_log_flag_false_when_present(service):
+    assert service._needs_log_flag("-port=8211 -log -players=32") is False
+
+
+def test_needs_log_flag_not_fooled_by_substring(service):
+    # -logcmds 같은 다른 플래그가 -log로 오인되면 안 된다 (토큰 경계 판정)
+    assert service._needs_log_flag("-port=8211 -logcmds=x -players=32") is True
+
+
+def test_needs_log_flag_handles_empty(service):
+    assert service._needs_log_flag("") is True
+    assert service._needs_log_flag(None) is True
+
+
+def test_ensure_log_enabled_adds_flag_when_missing(service):
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+        if cmd[1] == 'get':
+            return _sc_result("-port=8211 -players=32 -useperfthreads", 0)
+        return _sc_result("", 0)  # set
+
+    with patch('service.palworld_service.subprocess.run', side_effect=fake_run):
+        added = service.ensure_log_enabled()
+    assert added is True
+    set_calls = [c for c in calls if c[1] == 'set']
+    assert set_calls, 'nssm set이 호출되어야 한다'
+    assert '-log' in set_calls[0][-1]
+
+
+def test_ensure_log_enabled_noop_when_present(service):
+    def fake_run(cmd, **kwargs):
+        assert cmd[1] != 'set', 'already has -log → set 호출 금지'
+        return _sc_result("-port=8211 -log -players=32", 0)
+
+    with patch('service.palworld_service.subprocess.run', side_effect=fake_run):
+        added = service.ensure_log_enabled()
+    assert added is False
+
+
+def test_ensure_log_enabled_swallows_errors(service):
+    # 권한 부족 등으로 실패해도 예외를 던지지 않고 False를 반환해 서버 제어를 막지 않는다
+    with patch('service.palworld_service.subprocess.run', side_effect=Exception("access denied")):
+        assert service.ensure_log_enabled() is False
+
+
+def test_restart_heals_before_restarting(service):
+    with patch.object(service, 'ensure_log_enabled', return_value=True) as heal, \
+         patch('service.palworld_service.subprocess.run', return_value=_sc_result("", 0)) as mock_run:
+        result = service.restart()
+    heal.assert_called_once()
+    assert result == {'log_flag_added': True}
+    assert 'Restart-Service' in ' '.join(mock_run.call_args[0][0])
 
 
 # --- tail_logs (source 선택 + seek tail) ---

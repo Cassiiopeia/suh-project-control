@@ -14,6 +14,7 @@ from config.palworld_config import (
     INI_PATH, SAVE_DIR, BACKUP_DIR, LOG_SOURCES,
     SERVICE_NAME, REST_BASE_URL, EDITABLE_KEYS,
     PUBLIC_HOST, PUBLIC_PORT,
+    PALSERVER_ARGS, REQUIRED_ARG_FLAG, NSSM_PATH,
 )
 from service.palworld_ini import parse_option_settings, update_option_settings
 
@@ -47,14 +48,61 @@ class PalworldService:
         if result.returncode != 0:
             raise RuntimeError(f'{verb}-Service failed: {result.stderr.strip()}')
 
+    # --- NSSM 실행 인자 자가 치유 ---
+
+    @staticmethod
+    def _needs_log_flag(current_args: str) -> bool:
+        """현재 NSSM AppParameters 문자열에 -log 플래그가 빠졌는지 (공백 경계로 판정)."""
+        tokens = (current_args or '').split()
+        return REQUIRED_ARG_FLAG not in tokens
+
+    def _get_nssm_parameters(self) -> str:
+        result = subprocess.run(
+            [NSSM_PATH, 'get', SERVICE_NAME, 'AppParameters'],
+            capture_output=True, text=True, timeout=15
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f'nssm get AppParameters failed: {result.stderr.strip()}')
+        # nssm은 UTF-16LE로 출력하는 경우가 있어 text=True로도 NUL이 섞일 수 있다 → 정리
+        return result.stdout.replace('\x00', '').strip()
+
+    def ensure_log_enabled(self) -> bool:
+        """서버 시작/재시작 전에 NSSM 실행 인자에 -log가 있는지 보장한다.
+
+        Flask는 LocalSystem 권한으로 돌기 때문에 nssm set이 가능하다.
+        이미 -log가 있으면 아무것도 하지 않고 False, 새로 넣었으면 True를 반환한다.
+        치유에 실패해도 서버 제어 자체를 막지 않도록 예외는 삼키고 경고만 남긴다.
+        """
+        try:
+            current = self._get_nssm_parameters()
+            if not self._needs_log_flag(current):
+                return False
+            result = subprocess.run(
+                [NSSM_PATH, 'set', SERVICE_NAME, 'AppParameters', PALSERVER_ARGS],
+                capture_output=True, text=True, timeout=15
+            )
+            if result.returncode != 0:
+                logger.warning(f'nssm set AppParameters failed (권한 부족 가능): {result.stderr.strip()}')
+                return False
+            logger.info(f'NSSM AppParameters 자가 치유: -log 추가됨 → {PALSERVER_ARGS}')
+            return True
+        except Exception as e:
+            logger.warning(f'ensure_log_enabled 실패: {e}')
+            return False
+
     def start(self):
+        self.ensure_log_enabled()
         self._service_command('Start')
 
     def stop(self):
         self._service_command('Stop')
 
     def restart(self):
+        healed = self.ensure_log_enabled()
+        # -log를 새로 넣었다면 반드시 프로세스를 완전히 재기동해야 인자가 적용된다.
+        # Restart-Service는 stop→start라 새 AppParameters로 뜬다.
         self._service_command('Restart')
+        return {'log_flag_added': healed}
 
     # --- 상태 (공식 REST API 중계) ---
 
