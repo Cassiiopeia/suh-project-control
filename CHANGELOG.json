@@ -1,14 +1,40 @@
 {
   "metadata": {
-    "lastUpdated": "2026-07-14T10:06:35Z",
-    "currentVersion": "2.0.27",
+    "lastUpdated": "2026-07-14T10:26:42Z",
+    "currentVersion": "2.0.28",
     "projectType": "python",
-    "totalReleases": 23,
+    "totalReleases": 24,
     "projectTypes": [
       "python"
     ]
   },
   "releases": [
+    {
+      "version": "2.0.28",
+      "project_type": "python",
+      "project_types": [
+        "python"
+      ],
+      "date": "2026-07-14",
+      "pr_number": 67,
+      "raw_summary": "## Summary by CodeRabbit\n\n## 릴리스 노트\n\n* **버그 수정**\n  * 관리자 화면이 업데이트 후 새로고침 없이 바로 반영되도록 고쳤습니다\n  * 월드·서버 정보가 서로 겹쳐 보이던 문제를 해결했습니다\n\n* **개선**\n  * 게임 로그에서 반복되는 시스템 접근 기록을 숨기고 실제 접속·이벤트만 보여줍니다",
+      "parsed_changes": {
+        "버그_수정": {
+          "title": "버그 수정",
+          "items": [
+            "관리자 화면이 업데이트 후 새로고침 없이 바로 반영되도록 고쳤습니다",
+            "월드·서버 정보가 서로 겹쳐 보이던 문제를 해결했습니다"
+          ]
+        },
+        "개선": {
+          "title": "개선",
+          "items": [
+            "게임 로그에서 반복되는 시스템 접근 기록을 숨기고 실제 접속·이벤트만 보여줍니다"
+          ]
+        }
+      },
+      "parse_method": "markdown"
+    },
     {
       "version": "2.0.27",
       "project_type": "python",
