@@ -91,8 +91,8 @@
       <h2 class="card-title text-base">
         <i data-lucide="globe" class="size-5"></i>월드 · 서버 정보
       </h2>
-      <div id="world-info" class="grid gap-x-6 gap-y-2 sm:grid-cols-2 text-sm">
-        <div class="opacity-60">불러오는 중…</div>
+      <div id="world-info" class="grid gap-2 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 text-sm">
+        <div class="opacity-60 col-span-full">불러오는 중…</div>
       </div>
     </div>
   </div>
@@ -206,6 +206,6 @@
 </dialog>
 {% endblock %}
 {% block extra_js %}
-<script src="{{ root }}/static/js/log-viewer.js"></script>
-<script src="{{ root }}/static/js/palworld.js"></script>
+<script src="{{ root }}/static/js/log-viewer.js?v={{ asset('js/log-viewer.js') }}"></script>
+<script src="{{ root }}/static/js/palworld.js?v={{ asset('js/palworld.js') }}"></script>
 {% endblock %}

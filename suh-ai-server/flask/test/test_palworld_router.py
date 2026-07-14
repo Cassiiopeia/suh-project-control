@@ -71,7 +71,7 @@ def test_logs_passes_source_and_lines(client):
         resp = client.get('/palworld/logs?source=events&lines=100')
     assert resp.status_code == 200
     assert resp.get_json()['logs'] == ['a']
-    mock_tail.assert_called_once_with('events', 100)
+    mock_tail.assert_called_once_with('events', 100, False)
 
 
 def test_logs_defaults_to_game_source(client):
@@ -79,7 +79,14 @@ def test_logs_defaults_to_game_source(client):
     with patch('router.palworld_router.palworld_service.tail_logs', return_value=fake) as mock_tail:
         resp = client.get('/palworld/logs')
     assert resp.status_code == 200
-    mock_tail.assert_called_once_with('game', 200)
+    mock_tail.assert_called_once_with('game', 200, False)
+
+
+def test_logs_passes_hide_noise_flag(client):
+    fake = {'source': 'game', 'log_file': 'x', 'exists': True, 'size_bytes': 1, 'logs': []}
+    with patch('router.palworld_router.palworld_service.tail_logs', return_value=fake) as mock_tail:
+        client.get('/palworld/logs?source=game&lines=200&hide_noise=true')
+    mock_tail.assert_called_once_with('game', 200, True)
 
 
 def test_guide_returns_info(client):

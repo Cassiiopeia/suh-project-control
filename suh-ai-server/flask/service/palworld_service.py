@@ -200,9 +200,13 @@ class PalworldService:
 
     # --- 로그 ---
 
-    TAIL_READ_BYTES = 256 * 1024  # 파일 끝에서 이만큼만 읽는다 (Pal.log는 수십 MB까지 자람)
+    TAIL_READ_BYTES = 256 * 1024        # 일반 tail: 파일 끝에서 이만큼만 읽는다
+    # 잡음 숨김 tail: 실제 이벤트가 REST 잡음에 파묻혀 있어 훨씬 넓게 훑어야 한다.
+    NOISE_TAIL_READ_BYTES = 8 * 1024 * 1024
+    # 우리 폴러가 REST API를 주기 호출하며 남기는 잡음 (게임 로그의 99% 이상 차지)
+    NOISE_MARKER = 'REST accessed endpoint'
 
-    def tail_logs(self, source: str = 'game', lines: int = 200) -> dict:
+    def tail_logs(self, source: str = 'game', lines: int = 200, hide_noise: bool = False) -> dict:
         if source not in LOG_SOURCES:
             raise ValueError(f'Unknown log source: {source}')
         lines = min(int(lines), 500)
@@ -213,12 +217,15 @@ class PalworldService:
         size = os.path.getsize(path)
         result['exists'] = True
         result['size_bytes'] = size
+        read_bytes = self.NOISE_TAIL_READ_BYTES if hide_noise else self.TAIL_READ_BYTES
         with open(path, 'rb') as f:
-            f.seek(max(0, size - self.TAIL_READ_BYTES))
+            f.seek(max(0, size - read_bytes))
             data = f.read()
         all_lines = data.decode('utf-8', errors='replace').splitlines()
-        if size > self.TAIL_READ_BYTES and all_lines:
+        if size > read_bytes and all_lines:
             all_lines = all_lines[1:]  # seek 지점의 첫 줄은 중간에서 잘렸을 수 있다
+        if hide_noise:
+            all_lines = [ln for ln in all_lines if self.NOISE_MARKER not in ln]
         result['logs'] = all_lines[-lines:]
         return result
 

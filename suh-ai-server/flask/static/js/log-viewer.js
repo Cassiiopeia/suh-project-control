@@ -7,8 +7,11 @@ function createLogViewer(rootEl, config) {
   var lines = 200;
   var query = '';
   var levelFilter = 'all';   // all | error | warn
+  var hideNoise = true;      // REST 폴링 잡음 등 반복 라인 숨기기 (기본 ON)
   var lastLogs = [];         // 마지막으로 받은 원본 로그 (필터 변경 시 재요청 없이 재렌더)
   var lastMeta = null;
+  // 잡음 패턴: 우리 폴러가 만드는 REST 접근 로그 등. config로 덮어쓸 수 있다.
+  var noiseRe = config.noisePattern || /REST accessed endpoint/i;
 
   rootEl.innerHTML =
     '<div class="flex flex-wrap items-center gap-2 mb-3">' +
@@ -23,6 +26,9 @@ function createLogViewer(rootEl, config) {
     '<select class="select select-sm w-28" data-role="lines">' +
     '<option value="100">100줄</option><option value="200" selected>200줄</option><option value="500">500줄</option>' +
     '</select>' +
+    '<label class="label cursor-pointer gap-2 text-sm" data-role="noise-wrap">' +
+    '<input type="checkbox" class="toggle toggle-sm toggle-primary" data-role="noise" checked><span>잡음 숨기기</span>' +
+    '</label>' +
     '<label class="label cursor-pointer gap-2 text-sm">' +
     '<input type="checkbox" class="toggle toggle-sm toggle-primary" data-role="auto" checked><span>자동 새로고침</span>' +
     '</label>' +
@@ -67,6 +73,9 @@ function createLogViewer(rootEl, config) {
   });
   rootEl.querySelector('[data-role="level"]').addEventListener('change', function (e) {
     levelFilter = e.target.value; render();
+  });
+  rootEl.querySelector('[data-role="noise"]').addEventListener('change', function (e) {
+    hideNoise = e.target.checked; refresh();  // 서버측 필터 창이 달라져 재요청 필요
   });
 
   function levelClass(line) {
@@ -121,6 +130,7 @@ function createLogViewer(rootEl, config) {
     var shown = 0;
     lastLogs.forEach(function (line) {
       var text = config.formatLine ? config.formatLine(line, currentSource) : line;
+      if (hideNoise && noiseRe.test(text)) return;
       if (!matchesLevel(text)) return;
       if (q && text.toLowerCase().indexOf(q) === -1) return;
       appendLine(text, levelClass(text));
@@ -136,7 +146,7 @@ function createLogViewer(rootEl, config) {
   async function refresh() {
     var data;
     try {
-      data = await config.fetchLogs(currentSource, lines);
+      data = await config.fetchLogs(currentSource, lines, hideNoise);
     } catch (e) { return; /* 401은 apiFetch가 modal 처리 */ }
     if (data.exists === false) {
       lastMeta = false;
