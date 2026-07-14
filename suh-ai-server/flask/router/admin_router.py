@@ -2,9 +2,27 @@
 Admin pages router - DaisyUI 관리자 페이지 렌더링
 root: 페이지 깊이에 따른 상대경로 프리픽스 (nginx 프리픽스 뒤에서도 동작)
 """
+import os
+
 from flask import Blueprint, render_template
 
 admin_bp = Blueprint('admin', __name__)
+
+# 정적 자산 캐시 버스팅: 템플릿에서 {{ asset('js/palworld.js') }} → 파일 수정시각 토큰.
+# <script src="...palworld.js?v={{ asset('js/palworld.js') }}"> 처럼 써서, 배포로 파일이
+# 바뀌면 URL이 달라져 브라우저가 새 파일을 받는다(하드리로드 불필요).
+# 블루프린트에 붙여 이 페이지들을 서빙하는 어떤 앱에서도 asset()이 정의되게 한다.
+_STATIC_ROOT = os.path.join(os.path.dirname(__file__), '..', 'static')
+
+
+@admin_bp.app_context_processor
+def _inject_asset_helper():
+    def asset(rel_path):
+        try:
+            return str(int(os.path.getmtime(os.path.join(_STATIC_ROOT, rel_path))))
+        except OSError:
+            return '0'
+    return {'asset': asset}
 
 
 @admin_bp.route('/admin', methods=['GET'])

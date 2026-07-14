@@ -112,7 +112,8 @@ def logs():
         return jsonify({'error': 'lines must be an integer'}), 400
     try:
         source = request.args.get('source', 'game')
-        return jsonify(palworld_service.tail_logs(source, lines)), 200
+        hide_noise = request.args.get('hide_noise', 'false').lower() in ('1', 'true', 'yes')
+        return jsonify(palworld_service.tail_logs(source, lines, hide_noise)), 200
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
     except Exception as e:

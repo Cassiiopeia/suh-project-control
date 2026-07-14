@@ -189,6 +189,29 @@ def test_tail_logs_returns_last_lines(service, tmp_path):
     assert result['size_bytes'] == log.stat().st_size
 
 
+def test_tail_logs_hide_noise_filters_rest_lines(service, tmp_path):
+    log = tmp_path / 'stdout.log'
+    body = []
+    for i in range(50):
+        body.append(f'[LOG] REST accessed endpoint /v1/api/players OK {i}')
+    body.insert(10, '[LOG] 재석 connected the server. (User id: steam_1)')
+    body.insert(30, '[LOG] 로리매킬로이 left the server.')
+    log.write_text('\n'.join(body) + '\n', encoding='utf-8')
+    with patch.dict('service.palworld_service.LOG_SOURCES', {'game': str(log)}):
+        result = service.tail_logs('game', 200, hide_noise=True)
+    assert all('REST accessed endpoint' not in ln for ln in result['logs'])
+    assert any('connected the server' in ln for ln in result['logs'])
+    assert any('left the server' in ln for ln in result['logs'])
+
+
+def test_tail_logs_without_hide_noise_keeps_all(service, tmp_path):
+    log = tmp_path / 'stdout.log'
+    log.write_text('[LOG] REST accessed endpoint OK\n[LOG] real event\n', encoding='utf-8')
+    with patch.dict('service.palworld_service.LOG_SOURCES', {'game': str(log)}):
+        result = service.tail_logs('game', 200, hide_noise=False)
+    assert len(result['logs']) == 2
+
+
 def test_tail_logs_reads_only_tail_of_large_file(service, tmp_path):
     # 60000줄 x 11바이트 ≈ 660KB > TAIL_READ_BYTES(256KB) — seek 경로 검증
     log = tmp_path / 'Pal.log'

@@ -21,7 +21,7 @@
 </div>
 {% endblock %}
 {% block extra_js %}
-<script src="{{ root }}/static/js/log-viewer.js"></script>
+<script src="{{ root }}/static/js/log-viewer.js?v={{ asset('js/log-viewer.js') }}"></script>
 <script>
   document.addEventListener('DOMContentLoaded', function () {
     const viewer = createLogViewer(document.getElementById('flask-log-viewer'), {
