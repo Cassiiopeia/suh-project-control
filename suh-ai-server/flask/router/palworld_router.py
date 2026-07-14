@@ -77,15 +77,28 @@ def put_settings():
         return jsonify({'error': str(e)}), 500
 
 
+@palworld_bp.route('/palworld/guide', methods=['GET'])
+def guide():
+    """게임 접속 가이드 정보 (공개 주소 + ini 실제 설정값)"""
+    try:
+        return jsonify(palworld_service.get_guide_info()), 200
+    except Exception as e:
+        logger.error(f"Guide error: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
 @palworld_bp.route('/palworld/logs', methods=['GET'])
 def logs():
-    """서버 로그 tail"""
+    """서버 로그 tail (source: events|game|stdout|stderr)"""
     try:
         lines = int(request.args.get('lines', 200))
     except ValueError:
         return jsonify({'error': 'lines must be an integer'}), 400
     try:
-        return jsonify({'logs': palworld_service.tail_logs(lines)}), 200
+        source = request.args.get('source', 'game')
+        return jsonify(palworld_service.tail_logs(source, lines)), 200
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
     except Exception as e:
         logger.error(f"Log read error: {str(e)}")
         return jsonify({'error': str(e)}), 500

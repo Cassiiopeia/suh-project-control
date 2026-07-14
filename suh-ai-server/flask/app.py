@@ -38,6 +38,12 @@ app.register_blueprint(palworld_bp)
 app.register_blueprint(admin_bp)
 
 
+@app.route('/health', methods=['GET'])
+def health():
+    """헬스체크 (deploy 스크립트·대시보드가 사용)"""
+    return jsonify({'status': 'ok'}), 200
+
+
 @app.errorhandler(404)
 def not_found(error):
     """Handle 404 errors"""

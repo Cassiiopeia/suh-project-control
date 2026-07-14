@@ -75,12 +75,13 @@ function formatUptime(seconds) {
 }
 
 async function controlServer(action) {
-  if (!confirm('서버를 ' + action + ' 하시겠습니까?')) return;
+  const labels = { start: '시작', stop: '중지', restart: '재시작' };
+  if (!(await confirmAction('서버를 ' + labels[action] + ' 하시겠습니까?'))) return;
   try {
     const resp = await apiFetch(API + '/' + action, { method: 'POST' });
     const data = await resp.json();
-    if (data.success) showToast(action + ' 완료', 'success');
-    else showToast(data.error || action + ' 실패', 'error');
+    if (data.success) showToast(labels[action] + ' 완료', 'success');
+    else showToast(data.error || labels[action] + ' 실패', 'error');
   } catch (e) {
     showToast(String(e), 'error');
   }
@@ -195,7 +196,7 @@ async function saveSettings() {
 }
 
 async function stopSaveRestart() {
-  if (!confirm('서버를 중지하고 설정 저장 후 재시작합니다. 진행할까요?')) return;
+  if (!(await confirmAction('서버를 중지하고 설정 저장 후 재시작합니다. 진행할까요?'))) return;
   try {
     await apiFetch(API + '/stop', { method: 'POST' });
     showToast('서버 중지 완료, 설정 저장 중…', 'info');
@@ -212,14 +213,66 @@ async function stopSaveRestart() {
   setTimeout(refreshStatus, 2000);
 }
 
-async function refreshLogs() {
+/* 브라우저 confirm() 대체 — daisyUI modal, ok 버튼 value="ok" */
+function confirmAction(message) {
+  return new Promise(function (resolve) {
+    var modal = document.getElementById('confirm-modal');
+    document.getElementById('confirm-message').textContent = message;
+    modal.returnValue = '';
+    function onClose() {
+      modal.removeEventListener('close', onClose);
+      resolve(modal.returnValue === 'ok');
+    }
+    modal.addEventListener('close', onClose);
+    modal.showModal();
+  });
+}
+
+async function loadGuide() {
   try {
-    const resp = await apiFetch(API + '/logs?lines=200');
+    const resp = await apiFetch(API + '/guide');
     const data = await resp.json();
-    const view = document.getElementById('log-view');
-    view.textContent = (data.logs || []).join('\n') || '(로그 없음)';
-    view.scrollTop = view.scrollHeight;
-  } catch (e) { /* ignore */ }
+    document.getElementById('guide-address').textContent = data.address;
+    const passwordEl = document.getElementById('guide-password');
+    if (data.has_password) {
+      passwordEl.textContent = data.password;
+    } else {
+      passwordEl.textContent = '없음 (공개 서버)';
+      document.getElementById('guide-password-copy').classList.add('hidden');
+    }
+    const parts = [];
+    if (data.server_name) parts.push('서버 이름: ' + data.server_name);
+    if (data.max_players) parts.push('최대 ' + data.max_players + '명');
+    document.getElementById('guide-server-info').textContent = parts.join(' · ');
+  } catch (e) { /* 401은 modal 처리 */ }
+}
+
+async function copyGuide(elementId, label) {
+  const text = document.getElementById(elementId).textContent;
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast(label + ' 복사됨: ' + escapeHtml(text), 'success');
+  } catch (e) {
+    showToast('복사 실패 - 직접 선택해서 복사해주세요', 'error');
+  }
+}
+
+function initLogViewer() {
+  createLogViewer(document.getElementById('palworld-log-viewer'), {
+    sources: [
+      { id: 'events', label: '이벤트' },
+      { id: 'game', label: '게임 로그' },
+      { id: 'stdout', label: 'stdout' },
+      { id: 'stderr', label: 'stderr' },
+    ],
+    fetchLogs: async function (source, lines) {
+      const resp = await apiFetch(API + '/logs?source=' + source + '&lines=' + lines);
+      return resp.json();
+    },
+    formatLine: function (line, source) {
+      return source === 'events' ? formatPalworldEvent(line) : line;
+    },
+  });
 }
 
 async function loadBackups() {
@@ -247,8 +300,8 @@ async function createBackup() {
 document.addEventListener('DOMContentLoaded', function () {
   refreshStatus();
   loadSettings();
-  refreshLogs();
+  loadGuide();
   loadBackups();
+  initLogViewer();
   setInterval(refreshStatus, 5000);
-  setInterval(refreshLogs, 10000);
 });
