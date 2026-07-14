@@ -22,6 +22,9 @@ def test_palworld_page_returns_200(client):
 
 
 def test_logs_page_returns_500_until_task_8(client):
-    """admin/logs.html이 아직 없어 500 - Task 8에서 해소되는 의도된 중간 상태"""
+    """admin/logs.html이 아직 없어 500 - 의도된 중간 상태.
+
+    Task 8에서 logs.html 추가 시 이 테스트를 렌더 테스트(200 확인)로 교체한다.
+    """
     resp = client.get('/admin/logs')
     assert resp.status_code == 500
