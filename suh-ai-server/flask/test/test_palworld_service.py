@@ -189,17 +189,20 @@ def test_tail_logs_returns_last_lines(service, tmp_path):
     assert result['size_bytes'] == log.stat().st_size
 
 
-def test_tail_logs_hide_noise_filters_rest_lines(service, tmp_path):
+def test_tail_logs_hide_noise_filters_rest_and_blank_lines(service, tmp_path):
     log = tmp_path / 'stdout.log'
     body = []
     for i in range(50):
+        # 실제 stdout처럼 각 REST 줄 사이에 빈 줄이 낀 형태
         body.append(f'[LOG] REST accessed endpoint /v1/api/players OK {i}')
+        body.append('')
     body.insert(10, '[LOG] 재석 connected the server. (User id: steam_1)')
     body.insert(30, '[LOG] 로리매킬로이 left the server.')
     log.write_text('\n'.join(body) + '\n', encoding='utf-8')
     with patch.dict('service.palworld_service.LOG_SOURCES', {'game': str(log)}):
         result = service.tail_logs('game', 200, hide_noise=True)
     assert all('REST accessed endpoint' not in ln for ln in result['logs'])
+    assert all(ln.strip() for ln in result['logs'])  # 빈 줄도 제거
     assert any('connected the server' in ln for ln in result['logs'])
     assert any('left the server' in ln for ln in result['logs'])
 
