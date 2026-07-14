@@ -119,6 +119,35 @@ class PalworldService:
         logger.info(f'PalWorldSettings.ini updated: {list(filtered.keys())}')
         return {'settings': parse_option_settings(updated), 'editable_keys': EDITABLE_KEYS}
 
+    # --- 접속 가이드 ---
+
+    @staticmethod
+    def _unquote(value) -> str:
+        value = str(value)
+        return value[1:-1] if value.startswith('"') and value.endswith('"') else value
+
+    def get_guide_info(self) -> dict:
+        """게임 접속 가이드용 정보. ini를 못 읽어도 공개 주소는 항상 내려준다."""
+        info = {
+            'address': f'{PUBLIC_HOST}:{PUBLIC_PORT}',
+            'server_name': None,
+            'password': None,
+            'max_players': None,
+            'has_password': False,
+        }
+        try:
+            with open(INI_PATH, 'r', encoding='utf-8', errors='replace') as f:
+                settings = parse_option_settings(f.read())
+        except (OSError, ValueError) as e:
+            logger.warning(f'guide: ini unavailable: {e}')
+            return info
+        info['server_name'] = self._unquote(settings.get('ServerName', '""')) or None
+        password = self._unquote(settings.get('ServerPassword', '""'))
+        info['password'] = password or None
+        info['has_password'] = bool(password)
+        info['max_players'] = settings.get('ServerPlayerMaxNum')
+        return info
+
     # --- 로그 ---
 
     TAIL_READ_BYTES = 256 * 1024  # 파일 끝에서 이만큼만 읽는다 (Pal.log는 수십 MB까지 자람)

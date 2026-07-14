@@ -55,6 +55,13 @@ PALWORLD_SWAGGER_PATHS = {
             }
         }
     },
+    "/palworld/guide": {
+        "get": {
+            "tags": ["Palworld"], "summary": "게임 접속 가이드 정보 (공개 주소 + ini 실제 설정값)",
+            "security": [{"ApiKeyAuth": []}],
+            "responses": {"200": {"description": "조회 성공 (ini 없으면 address 외 null)"}}
+        }
+    },
     "/palworld/logs": {
         "get": {
             "tags": ["Palworld"], "summary": "서버 로그 tail (source 선택)",

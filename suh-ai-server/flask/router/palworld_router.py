@@ -77,6 +77,16 @@ def put_settings():
         return jsonify({'error': str(e)}), 500
 
 
+@palworld_bp.route('/palworld/guide', methods=['GET'])
+def guide():
+    """게임 접속 가이드 정보 (공개 주소 + ini 실제 설정값)"""
+    try:
+        return jsonify(palworld_service.get_guide_info()), 200
+    except Exception as e:
+        logger.error(f"Guide error: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
 @palworld_bp.route('/palworld/logs', methods=['GET'])
 def logs():
     """서버 로그 tail (source: events|game|stdout|stderr)"""

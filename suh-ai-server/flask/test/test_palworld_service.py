@@ -126,3 +126,41 @@ def test_tail_logs_reads_only_tail_of_large_file(service, tmp_path):
     assert len(result['logs']) == 50
     assert result['logs'][-1] == 'row0059999'
     assert result['logs'][0] == 'row0059950'
+
+
+# --- 접속 가이드 ---
+
+GUIDE_INI = '''[/Script/Pal.PalGameWorldSettings]
+OptionSettings=(ServerName="팰 사냥터",ServerPassword="1234",AdminPassword="secret",ServerPlayerMaxNum=32)
+'''
+
+
+def test_get_guide_info_reads_ini(service, tmp_path):
+    ini = tmp_path / 'PalWorldSettings.ini'
+    ini.write_text(GUIDE_INI, encoding='utf-8')
+    with patch('service.palworld_service.INI_PATH', str(ini)):
+        info = service.get_guide_info()
+    assert info == {
+        'address': 'suh-project.synology.me:8211',
+        'server_name': '팰 사냥터',
+        'password': '1234',
+        'max_players': '32',
+        'has_password': True,
+    }
+
+
+def test_get_guide_info_without_password_is_public(service, tmp_path):
+    ini = tmp_path / 'PalWorldSettings.ini'
+    ini.write_text(GUIDE_INI.replace('ServerPassword="1234"', 'ServerPassword=""'), encoding='utf-8')
+    with patch('service.palworld_service.INI_PATH', str(ini)):
+        info = service.get_guide_info()
+    assert info['password'] is None
+    assert info['has_password'] is False
+
+
+def test_get_guide_info_without_ini_returns_address_only(service, tmp_path):
+    with patch('service.palworld_service.INI_PATH', str(tmp_path / 'none.ini')):
+        info = service.get_guide_info()
+    assert info['address'] == 'suh-project.synology.me:8211'
+    assert info['server_name'] is None
+    assert info['has_password'] is False

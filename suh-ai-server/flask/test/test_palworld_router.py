@@ -80,3 +80,12 @@ def test_logs_defaults_to_game_source(client):
         resp = client.get('/palworld/logs')
     assert resp.status_code == 200
     mock_tail.assert_called_once_with('game', 200)
+
+
+def test_guide_returns_info(client):
+    fake = {'address': 'suh-project.synology.me:8211', 'server_name': '팰 사냥터',
+            'password': '1234', 'max_players': '32', 'has_password': True}
+    with patch('router.palworld_router.palworld_service.get_guide_info', return_value=fake):
+        resp = client.get('/palworld/guide')
+    assert resp.status_code == 200
+    assert resp.get_json()['address'] == 'suh-project.synology.me:8211'
