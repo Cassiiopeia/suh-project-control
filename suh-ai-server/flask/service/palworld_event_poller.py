@@ -21,7 +21,9 @@ POLL_INTERVAL_SECONDS = 10
 
 
 def _player_key(player: dict):
-    return player.get('userid') or player.get('name')
+    # REST /players는 SteamID를 camelCase 'userId'로 준다. 과거 'userid'(소문자)로 읽어
+    # 항상 None이 되어 name 폴백에 의존했다 → 닉네임 변경 시 오탐. userId 우선으로 정정.
+    return player.get('userId') or player.get('userid') or player.get('name')
 
 
 def diff_players(prev: list, curr: list) -> tuple:
@@ -35,12 +37,13 @@ def diff_players(prev: list, curr: list) -> tuple:
 
 class PalworldEventPoller:
 
-    def __init__(self, service, interval: int = POLL_INTERVAL_SECONDS):
+    def __init__(self, service, interval: int = POLL_INTERVAL_SECONDS, metrics_history=None):
         self._service = service
         self._interval = interval
         self._prev_state = None
         self._prev_players = []
         self._stop = threading.Event()
+        self._metrics_history = metrics_history
 
     def start(self) -> threading.Thread:
         thread = threading.Thread(target=self._run, daemon=True, name='palworld-event-poller')
@@ -67,6 +70,8 @@ class PalworldEventPoller:
         self._prev_state = state
         if state != 'running':
             return
+        # 메트릭 히스토리 적재 (그래프용). 이벤트 처리와 독립 — 실패해도 이벤트는 계속.
+        self._record_metrics()
         players = self._fetch_players()
         if players is None:
             return  # REST 다운 — 스냅샷 유지, 다음 틱 재시도
@@ -77,9 +82,24 @@ class PalworldEventPoller:
             self._write_event({'type': 'leave', 'player': self._player_summary(player), 'count': len(players)})
         self._prev_players = players
 
+    def _record_metrics(self):
+        if self._metrics_history is None:
+            return
+        try:
+            resp = requests.get(f'{REST_BASE_URL}/v1/api/metrics',
+                                auth=self._service._rest_auth(), timeout=3)
+            resp.raise_for_status()
+            self._metrics_history.add_from_metrics(resp.json())
+        except Exception:
+            pass  # 메트릭 한 틱 놓쳐도 무방 — 그래프에 구멍만 생긴다
+
     @staticmethod
     def _player_summary(player: dict) -> dict:
-        return {'name': player.get('name'), 'level': player.get('level')}
+        return {
+            'name': player.get('name'),
+            'level': player.get('level'),
+            'steamId': player.get('userId') or player.get('userid'),
+        }
 
     def _fetch_players(self):
         try:

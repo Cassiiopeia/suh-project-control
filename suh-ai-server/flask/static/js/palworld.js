@@ -39,6 +39,11 @@ const SETTINGS_FIELDS = [
     min: '0.1', step: '0.1', description: '거점 작업 속도에 적용되는 배율' },
 ];
 
+function setText(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = value;
+}
+
 async function refreshStatus() {
   try {
     const resp = await apiFetch(API + '/status');
@@ -48,30 +53,129 @@ async function refreshStatus() {
     badge.textContent = data.state.toUpperCase();
     badge.className = 'badge ' + (data.state === 'running' ? 'badge-success' : 'badge-error');
 
-    if (data.rest_available && data.metrics) {
-      document.getElementById('stat-players').textContent = data.metrics.currentplayernum;
-      document.getElementById('stat-maxplayers').textContent = '/ ' + data.metrics.maxplayernum + ' 명';
-      document.getElementById('stat-fps').textContent = data.metrics.serverfps;
-      document.getElementById('stat-uptime').textContent = formatUptime(data.metrics.uptime);
+    const m = data.metrics;
+    if (data.rest_available && m) {
+      setText('stat-players', m.currentplayernum);
+      setText('stat-maxplayers', '/ ' + m.maxplayernum + ' 명');
+      setText('stat-fps', m.serverfps);
+      setText('stat-fpsavg', m.serverfpsaverage != null ? '평균 ' + Number(m.serverfpsaverage).toFixed(1) : '평균 -');
+      setText('stat-frametime', m.serverframetime != null ? Number(m.serverframetime).toFixed(1) : '-');
+      setText('stat-uptime', formatUptime(m.uptime));
+      setText('stat-days', m.days != null ? m.days + '일' : '-');
+      setText('stat-basecamp', m.basecampnum != null ? m.basecampnum : '-');
     } else {
-      ['stat-players', 'stat-fps', 'stat-uptime'].forEach(id =>
-        document.getElementById(id).textContent = '-');
+      ['stat-players', 'stat-fps', 'stat-frametime', 'stat-uptime', 'stat-days', 'stat-basecamp'].forEach(id => setText(id, '-'));
+      setText('stat-fpsavg', '평균 -');
     }
+    if (data.info) setText('stat-version', data.info.version || '-');
 
-    const tbody = document.getElementById('player-list');
-    if (data.players && data.players.length) {
-      tbody.innerHTML = data.players.map(p =>
-        '<tr><td>' + escapeHtml(p.name) + '</td><td>' + escapeHtml(p.level) + '</td><td>' + Math.round(p.ping) + 'ms</td></tr>'
-      ).join('');
-    } else {
-      tbody.innerHTML = '<tr><td colspan="3">접속자 없음</td></tr>';
-    }
+    renderPlayers(data.players);
+    renderWorldInfo(data);
   } catch (e) { /* 401은 modal 처리 */ }
+}
+
+function renderPlayers(players) {
+  const tbody = document.getElementById('player-list');
+  if (!tbody) return;
+  if (players && players.length) {
+    tbody.innerHTML = players.map(p => {
+      const coord = (p.location_x != null && p.location_y != null)
+        ? Math.round(p.location_x / 1000) + ', ' + Math.round(p.location_y / 1000) : '-';
+      return '<tr>' +
+        '<td>' + escapeHtml(p.name) + '</td>' +
+        '<td>' + escapeHtml(p.accountName || '-') + '</td>' +
+        '<td>' + escapeHtml(p.level) + '</td>' +
+        '<td>' + (p.ping != null ? Math.round(p.ping) + 'ms' : '-') + '</td>' +
+        '<td class="font-mono text-xs">' + escapeHtml(p.userId || '-') + '</td>' +
+        '<td class="font-mono text-xs">' + escapeHtml(p.iP || p.ip || '-') + '</td>' +
+        '<td class="font-mono text-xs">' + coord + '</td>' +
+        '</tr>';
+    }).join('');
+  } else {
+    tbody.innerHTML = '<tr><td colspan="7">접속자 없음</td></tr>';
+  }
+}
+
+/* 월드/서버 정보 카드 — info + settings 요약 */
+const WORLD_INFO_ROWS = [
+  { label: '서버 이름', get: d => d.info && d.info.servername },
+  { label: '서버 설명', get: d => d.info && d.info.description },
+  { label: '게임 버전', get: d => d.info && d.info.version },
+  { label: '월드 GUID', get: d => d.info && d.info.worldguid, mono: true },
+  { label: '난이도', get: d => d.settings && d.settings.Difficulty },
+  { label: '경험치 배율', get: d => d.settings && d.settings.ExpRate, suffix: '배' },
+  { label: '팰 포획 배율', get: d => d.settings && d.settings.PalCaptureRate, suffix: '배' },
+  { label: '자동 저장 주기', get: d => d.settings && d.settings.autoSaveSpan, suffix: '초' },
+  { label: 'PvP', get: d => d.settings && (d.settings.bIsPvP ? '켜짐' : '꺼짐') },
+  { label: '사망 페널티', get: d => d.settings && d.settings.DeathPenalty },
+  { label: '크로스플레이', get: d => d.settings && Array.isArray(d.settings.CrossplayPlatforms) ? d.settings.CrossplayPlatforms.join(' · ') : null },
+  { label: '최대 인원', get: d => d.settings && d.settings.ServerPlayerMaxNum, suffix: '명' },
+];
+
+function renderWorldInfo(data) {
+  const box = document.getElementById('world-info');
+  if (!box) return;
+  if (!data.rest_available) {
+    box.innerHTML = '<div class="opacity-60">서버 정지 중 — 정보를 불러올 수 없습니다.</div>';
+    return;
+  }
+  box.innerHTML = WORLD_INFO_ROWS.map(row => {
+    let v = row.get(data);
+    if (v == null || v === '') v = '-';
+    else if (row.suffix) v = v + row.suffix;
+    return '<div class="flex justify-between gap-3 border-b border-base-200 py-1">' +
+      '<span class="opacity-60 shrink-0">' + escapeHtml(row.label) + '</span>' +
+      '<span class="text-right ' + (row.mono ? 'font-mono text-xs break-all' : '') + '">' + escapeHtml(v) + '</span></div>';
+  }).join('');
 }
 
 function formatUptime(seconds) {
   const h = Math.floor(seconds / 3600), m = Math.floor((seconds % 3600) / 60);
   return h + 'h ' + m + 'm';
+}
+
+/* ── 메트릭 히스토리 스파크라인 (외부 라이브러리 없이 인라인 SVG) ── */
+function sparkline(container, values, opts) {
+  opts = opts || {};
+  const el = typeof container === 'string' ? document.getElementById(container) : container;
+  if (!el) return;
+  const nums = values.filter(v => typeof v === 'number' && !isNaN(v));
+  if (nums.length < 2) { el.innerHTML = '<div class="text-xs opacity-40 pt-4">데이터 수집 중…</div>'; return; }
+  const W = 300, H = 48, pad = 2;
+  const min = opts.min != null ? opts.min : Math.min.apply(null, nums);
+  const max = opts.max != null ? opts.max : Math.max.apply(null, nums);
+  const span = (max - min) || 1;
+  const stepX = (W - pad * 2) / (values.length - 1);
+  const pts = values.map((v, i) => {
+    const y = (typeof v === 'number' && !isNaN(v))
+      ? H - pad - ((v - min) / span) * (H - pad * 2) : null;
+    return { x: pad + i * stepX, y: y };
+  }).filter(p => p.y != null);
+  const line = pts.map((p, i) => (i ? 'L' : 'M') + p.x.toFixed(1) + ' ' + p.y.toFixed(1)).join(' ');
+  const area = line + ' L' + pts[pts.length - 1].x.toFixed(1) + ' ' + H + ' L' + pts[0].x.toFixed(1) + ' ' + H + ' Z';
+  const color = opts.color || 'currentColor';
+  el.innerHTML =
+    '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" class="w-full h-full ' + (opts.klass || 'text-primary') + '">' +
+    '<path d="' + area + '" fill="' + color + '" opacity="0.12"/>' +
+    '<path d="' + line + '" fill="none" stroke="' + color + '" stroke-width="1.5" vector-effect="non-scaling-stroke"/>' +
+    '</svg>';
+}
+
+async function loadHistory() {
+  try {
+    const resp = await apiFetch(API + '/history?limit=120');
+    const data = await resp.json();
+    const points = data.points || [];
+    if (!points.length) return;
+    const fps = points.map(p => (typeof p.serverfps === 'number' ? p.serverfps : NaN));
+    const players = points.map(p => (typeof p.currentplayernum === 'number' ? p.currentplayernum : NaN));
+    sparkline('spark-fps', fps, { min: 0, max: 60, klass: 'text-success' });
+    sparkline('spark-players', players, { min: 0, klass: 'text-primary' });
+    const lastFps = [...fps].reverse().find(v => !isNaN(v));
+    const lastP = [...players].reverse().find(v => !isNaN(v));
+    setText('spark-fps-label', lastFps != null ? lastFps + ' fps' : '');
+    setText('spark-players-label', lastP != null ? lastP + ' 명' : '');
+  } catch (e) { /* ignore */ }
 }
 
 async function controlServer(action) {
@@ -299,9 +403,11 @@ async function createBackup() {
 
 document.addEventListener('DOMContentLoaded', function () {
   refreshStatus();
+  loadHistory();
   loadSettings();
   loadGuide();
   loadBackups();
   initLogViewer();
   setInterval(refreshStatus, 5000);
+  setInterval(loadHistory, 10000);
 });

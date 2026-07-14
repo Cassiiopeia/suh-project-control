@@ -3,6 +3,7 @@ Palworld server management router
 """
 from flask import Blueprint, request, jsonify
 from service.palworld_service import PalworldService, ServerRunningError
+from service.palworld_metrics_history import metrics_history
 import logging
 
 logger = logging.getLogger(__name__)
@@ -84,6 +85,21 @@ def guide():
         return jsonify(palworld_service.get_guide_info()), 200
     except Exception as e:
         logger.error(f"Guide error: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@palworld_bp.route('/palworld/history', methods=['GET'])
+def history():
+    """메트릭 시계열 히스토리 (FPS·접속자·프레임타임 추이 그래프용)"""
+    try:
+        limit = int(request.args.get('limit', 120))
+    except ValueError:
+        return jsonify({'error': 'limit must be an integer'}), 400
+    limit = max(1, min(limit, 720))
+    try:
+        return jsonify({'points': metrics_history.history(limit)}), 200
+    except Exception as e:
+        logger.error(f"History read error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 

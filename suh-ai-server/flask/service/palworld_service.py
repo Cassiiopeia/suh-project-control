@@ -123,16 +123,18 @@ class PalworldService:
             'info': None,
             'players': [],
             'metrics': None,
+            'settings': None,
         }
         if status['state'] != 'running':
             return status
         auth = self._rest_auth()
-        # info/players/metrics를 독립적으로 조회한다. 한 엔드포인트가 실패해도
+        # info/players/metrics/settings를 독립적으로 조회한다. 한 엔드포인트가 실패해도
         # 성공한 나머지 데이터는 버리지 않는다. 하나라도 응답하면 rest_available=True.
         endpoints = {
             'info': f'{REST_BASE_URL}/v1/api/info',
             'players': f'{REST_BASE_URL}/v1/api/players',
             'metrics': f'{REST_BASE_URL}/v1/api/metrics',
+            'settings': f'{REST_BASE_URL}/v1/api/settings',
         }
         for name, url in endpoints.items():
             try:
