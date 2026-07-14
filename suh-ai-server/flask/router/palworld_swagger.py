@@ -81,8 +81,8 @@ PALWORLD_SWAGGER_PATHS = {
             "security": [{"ApiKeyAuth": []}],
             "parameters": [
                 {"name": "source", "in": "query", "required": False,
-                 "schema": {"type": "string", "enum": ["events", "game", "stdout", "stderr"], "default": "game"},
-                 "description": "events=접속/퇴장 이벤트, game=Pal.log, stdout/stderr=NSSM 리다이렉트"},
+                 "schema": {"type": "string", "enum": ["events", "game", "stdout", "stderr", "flask"], "default": "game"},
+                 "description": "events=접속/퇴장 이벤트, game=엔진 로그(stdout 캡처), stderr=NSSM 표준에러, flask=관리자 서버 로그"},
                 {"name": "lines", "in": "query", "required": False,
                  "schema": {"type": "integer", "default": 200, "maximum": 500}}
             ],
