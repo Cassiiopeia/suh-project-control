@@ -35,10 +35,28 @@ def test_start_failure_returns_500(client):
 
 
 def test_put_settings_while_running_returns_409(client):
+    # ServerRunningError 분기는 방어적으로 유지 — 더 이상 서비스가 던지지 않지만
+    # 만약 발생하면 여전히 409로 처리되어야 한다.
     with patch('router.palworld_router.palworld_service.update_settings',
                side_effect=ServerRunningError('running')):
         resp = client.put('/palworld/settings', json={'ServerName': 'X'})
     assert resp.status_code == 409
+
+
+def test_put_settings_while_running_saves_pending_returns_200(client):
+    before = {'settings': {'ServerName': '"Old"'}, 'editable_keys': [], 'pending': {}}
+    after = {'settings': {'ServerName': '"Old"'}, 'pending': {'ServerName': 'New'}, 'applied': False}
+    with patch('router.palworld_router.palworld_service.get_settings', return_value=before), \
+         patch('router.palworld_router.palworld_service.update_settings', return_value=after), \
+         patch('router.palworld_router.audit_service.record') as mock_record:
+        resp = client.put('/palworld/settings', json={'ServerName': 'New'})
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data['applied'] is False
+    assert data['pending'] == {'ServerName': 'New'}
+    detail = mock_record.call_args[0][3]
+    assert detail['applied'] is False
+    assert detail['changed'] == {'ServerName': {'from': '"Old"', 'to': 'New'}}
 
 
 def test_put_settings_requires_json(client):
@@ -120,18 +138,18 @@ def test_control_failure_does_not_record_audit(client):
 
 def test_put_settings_records_changed_diff_only(client):
     before = {'settings': {'ServerName': '"Old"', 'ExpRate': '2.0'}, 'editable_keys': []}
-    after = {'settings': {'ServerName': '"Old"', 'ExpRate': '3.0'}, 'editable_keys': []}
+    after = {'settings': {'ServerName': '"Old"', 'ExpRate': '3.0'}, 'editable_keys': [], 'applied': True}
     with patch('router.palworld_router.palworld_service.get_settings', return_value=before), \
          patch('router.palworld_router.palworld_service.update_settings', return_value=after), \
          patch('router.palworld_router.audit_service.record') as mock_record:
         resp = client.put('/palworld/settings', json={'ExpRate': '3.0', 'ServerName': 'Old'})
     assert resp.status_code == 200
     detail = mock_record.call_args[0][3]
-    assert detail == {'changed': {'ExpRate': {'from': '2.0', 'to': '3.0'}}}
+    assert detail == {'changed': {'ExpRate': {'from': '2.0', 'to': '3.0'}}, 'applied': True}
 
 
 def test_put_settings_no_change_skips_audit(client):
-    same = {'settings': {'ExpRate': '2.0'}, 'editable_keys': []}
+    same = {'settings': {'ExpRate': '2.0'}, 'editable_keys': [], 'applied': True}
     with patch('router.palworld_router.palworld_service.get_settings', return_value=same), \
          patch('router.palworld_router.palworld_service.update_settings', return_value=same), \
          patch('router.palworld_router.audit_service.record') as mock_record:
@@ -162,14 +180,26 @@ def test_logs_source_audit_uses_audit_service(client):
 
 def test_put_settings_masks_sensitive_values(client):
     before = {'settings': {'ServerPassword': '"1234"'}, 'editable_keys': []}
-    after = {'settings': {'ServerPassword': '"5678"'}, 'editable_keys': []}
+    after = {'settings': {'ServerPassword': '"5678"'}, 'editable_keys': [], 'applied': True}
     with patch('router.palworld_router.palworld_service.get_settings', return_value=before), \
          patch('router.palworld_router.palworld_service.update_settings', return_value=after), \
          patch('router.palworld_router.audit_service.record') as mock_record:
         resp = client.put('/palworld/settings', json={'ServerPassword': '5678'})
     assert resp.status_code == 200
     detail = mock_record.call_args[0][3]
-    assert detail == {'changed': {'ServerPassword': {'from': '***', 'to': '***'}}}
+    assert detail == {'changed': {'ServerPassword': {'from': '***', 'to': '***'}}, 'applied': True}
+
+
+def test_put_settings_while_running_masks_sensitive_pending(client):
+    before = {'settings': {'ServerPassword': '"1234"'}, 'editable_keys': [], 'pending': {}}
+    after = {'settings': {'ServerPassword': '"1234"'}, 'pending': {'ServerPassword': '5678'}, 'applied': False}
+    with patch('router.palworld_router.palworld_service.get_settings', return_value=before), \
+         patch('router.palworld_router.palworld_service.update_settings', return_value=after), \
+         patch('router.palworld_router.audit_service.record') as mock_record:
+        resp = client.put('/palworld/settings', json={'ServerPassword': '5678'})
+    assert resp.status_code == 200
+    detail = mock_record.call_args[0][3]
+    assert detail == {'changed': {'ServerPassword': {'from': '***', 'to': '***'}}, 'applied': False}
 
 
 def test_control_unmapped_action_skips_audit_and_succeeds(client):

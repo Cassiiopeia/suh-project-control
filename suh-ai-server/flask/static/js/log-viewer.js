@@ -18,7 +18,7 @@ function createLogViewer(rootEl, config) {
     '<div role="tablist" class="tabs tabs-box tabs-sm" data-role="sources"></div>' +
     '<label class="input input-sm flex items-center gap-1 w-44">' +
     '<i data-lucide="search" class="size-4 opacity-60"></i>' +
-    '<input type="text" class="grow" placeholder="검색" data-role="search">' +
+    '<input type="text" class="grow" placeholder="검색" data-role="search" autocomplete="off" spellcheck="false">' +
     '</label>' +
     '<select class="select select-sm w-24" data-role="level">' +
     '<option value="all">전체</option><option value="error">에러</option><option value="warn">경고</option>' +
@@ -137,13 +137,24 @@ function createLogViewer(rootEl, config) {
       shown++;
     });
     if (!shown) {
-      viewEl.textContent = (query || levelFilter !== 'all') ? '(필터에 맞는 로그 없음)' : '(로그 없음)';
+      if (query || levelFilter !== 'all') {
+        // 어떤 필터가 걸려 있는지 명시 — 자동완성 등으로 검색어가 들어가도 원인을 바로 알 수 있게
+        var reasons = [];
+        if (query) reasons.push('검색어 "' + query + '"');
+        if (levelFilter !== 'all') reasons.push('레벨 필터(' + (levelFilter === 'error' ? '에러' : '경고') + ')');
+        viewEl.textContent = reasons.join(' · ') + '에 맞는 로그가 없습니다. 필터를 지우면 전체 로그가 표시됩니다.';
+      } else {
+        viewEl.textContent = '(로그 없음)';
+      }
     }
     countEl.textContent = lastLogs.length ? (shown + ' / ' + lastLogs.length + ' 줄') : '';
     if (atBottom) viewEl.scrollTop = viewEl.scrollHeight;
   }
 
   async function refresh() {
+    // 브라우저 자동완성이 input 이벤트 없이 값을 채우는 경우 대비 — 표시값과 활성 필터 동기화
+    var searchEl = rootEl.querySelector('[data-role="search"]');
+    if (searchEl && searchEl.value !== query) query = searchEl.value;
     var data;
     try {
       data = await config.fetchLogs(currentSource, lines, hideNoise);
