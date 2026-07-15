@@ -4,12 +4,27 @@ Palworld server management router
 from flask import Blueprint, request, jsonify
 from service.palworld_service import PalworldService, ServerRunningError
 from service.palworld_metrics_history import metrics_history
+from service import audit_service
+from service.audit_service import AuditCategory, AuditAction
 import logging
 
 logger = logging.getLogger(__name__)
 
 palworld_bp = Blueprint('palworld', __name__)
 palworld_service = PalworldService()
+
+_CONTROL_AUDIT_ACTIONS = {
+    'start': AuditAction.SERVER_START,
+    'stop': AuditAction.SERVER_STOP,
+    'restart': AuditAction.SERVER_RESTART,
+}
+
+
+def _client_ip() -> str:
+    forwarded = request.headers.get('X-Forwarded-For', '')
+    if forwarded:
+        return forwarded.split(',')[0].strip()
+    return request.remote_addr or 'unknown'
 
 
 @palworld_bp.route('/palworld/status', methods=['GET'])
@@ -25,10 +40,11 @@ def status():
 def _control(action_name):
     try:
         getattr(palworld_service, action_name)()
-        return jsonify({'success': True, 'action': action_name}), 200
     except Exception as e:
         logger.error(f"{action_name} error: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
+    audit_service.record(AuditCategory.PALWORLD, _CONTROL_AUDIT_ACTIONS[action_name], _client_ip())
+    return jsonify({'success': True, 'action': action_name}), 200
 
 
 @palworld_bp.route('/palworld/start', methods=['POST'])
@@ -68,7 +84,22 @@ def put_settings():
     if not data:
         return jsonify({'error': 'JSON body required'}), 400
     try:
-        return jsonify(palworld_service.update_settings(data)), 200
+        before = {}
+        try:
+            before = palworld_service.get_settings()['settings']
+        except Exception:
+            pass  # 이전 값 조회 실패는 감사 diff만 비게 할 뿐 수정은 진행
+        result = palworld_service.update_settings(data)
+        after = result['settings']
+        changed = {
+            key: {'from': before.get(key), 'to': after.get(key)}
+            for key in data
+            if key in after and before.get(key) != after.get(key)
+        }
+        if changed:
+            audit_service.record(AuditCategory.PALWORLD, AuditAction.SETTINGS_UPDATE,
+                                 _client_ip(), {'changed': changed})
+        return jsonify(result), 200
     except ServerRunningError as e:
         return jsonify({'error': str(e)}), 409
     except ValueError as e:
@@ -105,13 +136,15 @@ def history():
 
 @palworld_bp.route('/palworld/logs', methods=['GET'])
 def logs():
-    """서버 로그 tail (source: events|game|stdout|stderr)"""
+    """서버 로그 tail (source: audit|events|game|stdout|stderr|flask)"""
     try:
         lines = int(request.args.get('lines', 200))
     except ValueError:
         return jsonify({'error': 'lines must be an integer'}), 400
     try:
         source = request.args.get('source', 'game')
+        if source == 'audit':
+            return jsonify(audit_service.list_logs(lines)), 200
         hide_noise = request.args.get('hide_noise', 'false').lower() in ('1', 'true', 'yes')
         return jsonify(palworld_service.tail_logs(source, lines, hide_noise)), 200
     except ValueError as e:
@@ -135,7 +168,10 @@ def list_backups():
 def create_backup():
     """즉시 백업 실행"""
     try:
-        return jsonify(palworld_service.create_backup()), 200
+        result = palworld_service.create_backup()
+        audit_service.record(AuditCategory.PALWORLD, AuditAction.BACKUP_CREATE,
+                             _client_ip(), {'name': result.get('name')})
+        return jsonify(result), 200
     except FileNotFoundError as e:
         return jsonify({'error': str(e)}), 404
     except Exception as e:
