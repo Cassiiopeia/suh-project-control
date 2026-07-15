@@ -5,6 +5,7 @@ from flask import Blueprint, request, jsonify
 from service.palworld_service import PalworldService, ServerRunningError
 from service.palworld_metrics_history import metrics_history
 from service import audit_service
+from service import palworld_updater
 from service.audit_service import AuditCategory, AuditAction
 import logging
 
@@ -182,4 +183,28 @@ def create_backup():
         return jsonify({'error': str(e)}), 404
     except Exception as e:
         logger.error(f"Backup create error: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@palworld_bp.route('/palworld/update', methods=['POST'])
+def update_server():
+    """서버 바이너리 업데이트 시작 (백업→중지→steamcmd→시작, 백그라운드 실행)"""
+    if not palworld_updater.start_update('manual', _client_ip()):
+        return jsonify({'error': '이미 업데이트가 진행 중입니다'}), 409
+    return jsonify({'started': True}), 202
+
+
+@palworld_bp.route('/palworld/update/status', methods=['GET'])
+def update_status():
+    """업데이트 진행 상태 + 버전 정보 + 출력 로그 (UI 폴링용)"""
+    return jsonify(palworld_updater.get_state()), 200
+
+
+@palworld_bp.route('/palworld/update/check', methods=['POST'])
+def update_check():
+    """최신 빌드 즉시 확인 (동기 — steamcmd 조회로 수십 초 걸릴 수 있음)"""
+    try:
+        return jsonify(palworld_updater.check_for_update()), 200
+    except Exception as e:
+        logger.error(f"Update check error: {str(e)}")
         return jsonify({'error': str(e)}), 500

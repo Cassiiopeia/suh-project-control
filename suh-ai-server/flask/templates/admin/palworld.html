@@ -67,6 +67,27 @@
         </div>
       </div>
 
+      <!-- 서버 빌드 업데이트 -->
+      <div class="flex flex-wrap items-center gap-2">
+        <span id="update-badge" class="badge badge-ghost">빌드 확인 전</span>
+        <span id="update-builds" class="text-xs opacity-60 font-mono"></span>
+        <div class="ml-auto flex gap-2">
+          <button id="btn-update-check" class="btn btn-ghost btn-sm" onclick="checkServerUpdate()">
+            <i data-lucide="refresh-cw" class="size-4"></i>업데이트 확인
+          </button>
+          <button id="btn-update" class="btn btn-info btn-sm" onclick="startServerUpdate()">
+            <i data-lucide="download" class="size-4"></i>서버 업데이트
+          </button>
+        </div>
+      </div>
+      <div id="update-progress" class="hidden bg-base-200 rounded-box p-3 space-y-2">
+        <div class="flex items-center gap-2 text-sm">
+          <span id="update-spinner" class="loading loading-spinner loading-sm"></span>
+          <span id="update-step" class="font-medium"></span>
+        </div>
+        <pre id="update-log" class="bg-base-300 rounded-box text-xs leading-5 overflow-auto max-h-48 p-3"></pre>
+      </div>
+
       <!-- 추이 스파크라인 (FPS / 접속자) -->
       <div class="grid gap-3 sm:grid-cols-2 mt-1">
         <div class="bg-base-200 rounded-box p-3">

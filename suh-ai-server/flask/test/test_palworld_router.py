@@ -180,3 +180,34 @@ def test_control_unmapped_action_skips_audit_and_succeeds(client):
     assert resp.status_code == 200
     assert resp.get_json()['success'] is True
     mock_record.assert_not_called()
+
+
+# --- 서버 바이너리 업데이트 ---
+
+def test_update_starts_and_returns_202(client):
+    with patch('router.palworld_router.palworld_updater.start_update', return_value=True) as mock_start:
+        resp = client.post('/palworld/update')
+    assert resp.status_code == 202
+    assert mock_start.call_args[0][0] == 'manual'
+
+
+def test_update_conflict_when_already_running(client):
+    with patch('router.palworld_router.palworld_updater.start_update', return_value=False):
+        resp = client.post('/palworld/update')
+    assert resp.status_code == 409
+
+
+def test_update_status_returns_state(client):
+    fake = {'status': 'running', 'step': 'download', 'log': ['x'], 'update_available': True}
+    with patch('router.palworld_router.palworld_updater.get_state', return_value=fake):
+        resp = client.get('/palworld/update/status')
+    assert resp.status_code == 200
+    assert resp.get_json()['step'] == 'download'
+
+
+def test_update_check_returns_version_info(client):
+    fake = {'local_build': '1', 'remote_build': '2', 'update_available': True}
+    with patch('router.palworld_router.palworld_updater.check_for_update', return_value=fake):
+        resp = client.post('/palworld/update/check')
+    assert resp.status_code == 200
+    assert resp.get_json()['update_available'] is True

@@ -101,5 +101,26 @@ PALWORLD_SWAGGER_PATHS = {
             "security": [{"ApiKeyAuth": []}],
             "responses": {"200": {"description": "백업 성공"}, "404": {"description": "SaveGames 폴더 없음"}}
         }
+    },
+    "/palworld/update": {
+        "post": {
+            "tags": ["Palworld"], "summary": "서버 바이너리 업데이트 시작 (백업→중지→SteamCMD→시작, 백그라운드 실행)",
+            "security": [{"ApiKeyAuth": []}],
+            "responses": {"202": {"description": "업데이트 시작됨"}, "409": {"description": "이미 업데이트 진행 중"}}
+        }
+    },
+    "/palworld/update/status": {
+        "get": {
+            "tags": ["Palworld"], "summary": "업데이트 진행 상태 + 버전 정보 + 출력 로그 (UI 폴링용)",
+            "security": [{"ApiKeyAuth": []}],
+            "responses": {"200": {"description": "상태 조회 성공"}}
+        }
+    },
+    "/palworld/update/check": {
+        "post": {
+            "tags": ["Palworld"], "summary": "최신 빌드 즉시 확인 (동기 — SteamCMD 조회로 수십 초 걸릴 수 있음)",
+            "security": [{"ApiKeyAuth": []}],
+            "responses": {"200": {"description": "조회 성공"}, "500": {"description": "조회 실패"}}
+        }
     }
 }

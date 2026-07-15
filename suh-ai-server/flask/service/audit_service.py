@@ -28,6 +28,7 @@ class AuditAction(str, Enum):
     SERVER_RESTART = "SERVER_RESTART"
     SETTINGS_UPDATE = "SETTINGS_UPDATE"
     BACKUP_CREATE = "BACKUP_CREATE"
+    SERVER_UPDATE = "SERVER_UPDATE"
 
 
 def record(category: AuditCategory, action: AuditAction, actor_ip: str, detail: dict = None) -> bool:
