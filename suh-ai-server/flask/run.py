@@ -6,6 +6,7 @@ from waitress import serve
 from app import app
 import logging
 import os
+import threading
 
 # Create logs directory if not exists
 logs_dir = os.path.join(os.path.dirname(__file__), 'logs')
@@ -44,6 +45,12 @@ if __name__ == '__main__':
     from service.palworld_metrics_history import metrics_history
     PalworldEventPoller(PalworldService(), metrics_history=metrics_history).start()
     logger.info("Palworld event poller started (10s interval, metrics history on)")
+
+    # 팰월드 서버 바이너리 새 빌드 자동 감지 (daemon thread)
+    from service import palworld_updater
+    threading.Thread(target=palworld_updater.auto_check_loop, daemon=True,
+                     name='palworld-update-checker').start()
+    logger.info("Palworld auto-update checker started")
 
     # Start production server
     serve(
