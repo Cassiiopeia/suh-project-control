@@ -1,14 +1,48 @@
 {
   "metadata": {
-    "lastUpdated": "2026-07-15T02:11:26Z",
-    "currentVersion": "2.0.30",
+    "lastUpdated": "2026-07-15T06:50:41Z",
+    "currentVersion": "2.0.31",
     "projectType": "python",
-    "totalReleases": 26,
+    "totalReleases": 27,
     "projectTypes": [
       "python"
     ]
   },
   "releases": [
+    {
+      "version": "2.0.31",
+      "project_type": "python",
+      "project_types": [
+        "python"
+      ],
+      "date": "2026-07-15",
+      "pr_number": 75,
+      "raw_summary": "## Summary by CodeRabbit\n\n## 릴리스 노트\n\n* **새 기능**\n  * 팰월드 서버를 최신 버전으로 업데이트하는 버튼이 추가됐습니다\n  * 새 게임 버전이 나오면 자동으로 감지해 접속자가 없을 때 스스로 업데이트합니다\n  * 업데이트 진행 상황과 다운로드 로그를 화면에서 실시간으로 볼 수 있습니다\n\n* **버그 수정**\n  * 게임 업데이트 후 버전 불일치로 서버에 접속할 수 없던 문제를 해결했습니다\n\n* **개선**\n  * 업데이트 전에 세이브 데이터를 자동으로 백업합니다\n  * 업데이트가 실패해도 서버가 자동으로 다시 켜집니다",
+      "parsed_changes": {
+        "새_기능": {
+          "title": "새 기능",
+          "items": [
+            "팰월드 서버를 최신 버전으로 업데이트하는 버튼이 추가됐습니다",
+            "새 게임 버전이 나오면 자동으로 감지해 접속자가 없을 때 스스로 업데이트합니다",
+            "업데이트 진행 상황과 다운로드 로그를 화면에서 실시간으로 볼 수 있습니다"
+          ]
+        },
+        "버그_수정": {
+          "title": "버그 수정",
+          "items": [
+            "게임 업데이트 후 버전 불일치로 서버에 접속할 수 없던 문제를 해결했습니다"
+          ]
+        },
+        "개선": {
+          "title": "개선",
+          "items": [
+            "업데이트 전에 세이브 데이터를 자동으로 백업합니다",
+            "업데이트가 실패해도 서버가 자동으로 다시 켜집니다"
+          ]
+        }
+      },
+      "parse_method": "markdown"
+    },
     {
       "version": "2.0.30",
       "project_type": "python",
