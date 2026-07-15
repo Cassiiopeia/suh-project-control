@@ -368,6 +368,7 @@ function initLogViewer() {
   createLogViewer(document.getElementById('palworld-log-viewer'), {
     sources: [
       { id: 'events', label: '이벤트' },
+      { id: 'audit', label: '감사' },
       { id: 'game', label: '게임 로그' },
       { id: 'stderr', label: '오류(stderr)' },
       { id: 'flask', label: '시스템(Flask)' },

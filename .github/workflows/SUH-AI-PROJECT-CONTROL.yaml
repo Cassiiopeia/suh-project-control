@@ -77,6 +77,17 @@ jobs:
           echo "[INFO] Configuration preview:"
           grep -A 5 "map \$http_x_api_key" suh-ai-server/config/nginx.conf | sed 's/"[^"]*"/"****"/g' || echo "[WARN] Preview failed (may be normal)"
 
+      - name: Flask .env 생성 (GitHub Secret)
+        run: |
+          if [ -n "${{ secrets.FLASK_ENV_FILE }}" ]; then
+            cat > suh-ai-server/flask/.env << 'ENV_EOF'
+          ${{ secrets.FLASK_ENV_FILE }}
+          ENV_EOF
+            echo "[SUCCESS] flask/.env created for upload"
+          else
+            echo "[INFO] FLASK_ENV_FILE secret not set - skip (.env unchanged on server)"
+          fi
+
       - name: suh-ai-server 폴더 업로드
         uses: appleboy/scp-action@v0.1.7
         with:
