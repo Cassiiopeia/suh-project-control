@@ -61,3 +61,12 @@ EDITABLE_KEYS = [
     "bEnablePlayerToPlayerDamage", "DayTimeSpeedRate", "NightTimeSpeedRate",
     "PalSpawnNumRate", "CollectionDropRate", "WorkSpeedRate",
 ]
+
+# 서버 바이너리 업데이트 (SteamCMD)
+STEAMCMD_EXE = os.path.join(PALWORLD_BASE_DIR, "steamcmd", "steamcmd.exe")
+PALWORLD_APP_ID = "2394010"
+APP_MANIFEST_PATH = os.path.join(PALWORLD_BASE_DIR, "steamcmd", "steamapps",
+                                 f"appmanifest_{PALWORLD_APP_ID}.acf")
+UPDATE_CHECK_INTERVAL_SEC = 1800   # 새 빌드 자동 감지 주기 (30분)
+UPDATE_LOG_MAXLEN = 300            # 업데이트 진행 로그 링버퍼
+UPDATE_TIMEOUT_SEC = 3600          # steamcmd 무응답 워치독 — 초과 시 강제 종료
