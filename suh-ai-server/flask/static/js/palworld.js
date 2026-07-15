@@ -200,12 +200,19 @@ async function loadSettings() {
   try {
     const resp = await apiFetch(API + '/settings');
     const data = await resp.json();
+    const pending = data.pending || {};
+    // 적용 대기 중인 값이 있으면 폼에는 그 값을 우선 보여준다 — 사용자가 방금 저장한
+    // 값이 "사라진 것처럼" 보이지 않도록.
+    const effectiveSettings = { ...data.settings, ...pending };
     const form = document.getElementById('settings-form');
-    form.innerHTML = SETTINGS_FIELDS.map(field => renderSettingRow(field, data.settings)).join('');
+    form.innerHTML = SETTINGS_FIELDS.map(field => renderSettingRow(field, effectiveSettings)).join('');
     form.querySelectorAll('input[type="checkbox"]').forEach(toggle => {
       toggle.addEventListener('change', updateToggleLabel);
       updateToggleLabel({ target: toggle });
     });
+    const pendingCount = Object.keys(pending).length;
+    document.getElementById('pending-count').textContent = pendingCount;
+    document.getElementById('pending-alert').classList.toggle('hidden', pendingCount === 0);
   } catch (e) {
     showToast('설정을 불러오지 못했습니다: ' + String(e), 'error');
   }
@@ -294,12 +301,17 @@ async function saveSettings() {
     const resp = await apiFetch(API + '/settings', {
       method: 'PUT', body: JSON.stringify(collectChanges()),
     });
-    if (resp.status === 409) {
-      showToast('서버 가동 중에는 저장할 수 없습니다. 먼저 중지하세요.', 'warning');
-      return;
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data.applied === false) {
+        showToast('저장 완료 — 서버 재시작 시 적용됩니다', 'info');
+      } else {
+        showToast('설정 저장 완료', 'success');
+      }
+      loadSettings();
+    } else {
+      showToast((await resp.json()).error || '저장 실패', 'error');
     }
-    if (resp.ok) showToast('설정 저장 완료', 'success');
-    else showToast((await resp.json()).error || '저장 실패', 'error');
   } catch (e) { showToast(String(e), 'error'); }
 }
 

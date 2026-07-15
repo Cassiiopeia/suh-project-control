@@ -132,7 +132,11 @@
     <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-6">
       <div class="alert alert-warning mb-4 text-sm">
         <i data-lucide="triangle-alert" class="size-5"></i>
-        <span>설정은 서버를 <b>완전히 중지한 뒤</b> 저장해야 합니다. 실행 중 수정하면 종료 시 기존 값으로 덮어써집니다.</span>
+        <span>서버 실행 중에도 저장할 수 있습니다. 실행 중 저장한 변경은 서버를 재시작(또는 중지)할 때 적용됩니다.</span>
+      </div>
+      <div id="pending-alert" class="alert alert-info mb-4 text-sm hidden">
+        <i data-lucide="clock" class="size-5"></i>
+        <span>적용 대기 중인 변경 <span id="pending-count"></span>건 — 서버 재시작 시 적용됩니다</span>
       </div>
       <div class="settings-toolbar">
         <div>

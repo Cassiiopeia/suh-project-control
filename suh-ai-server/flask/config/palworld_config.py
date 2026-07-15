@@ -8,6 +8,10 @@ PALSERVER_DIR = os.path.join(PALWORLD_BASE_DIR, "steamcmd", "steamapps", "common
 INI_PATH = os.path.join(PALSERVER_DIR, "Pal", "Saved", "Config", "WindowsServer", "PalWorldSettings.ini")
 SAVE_DIR = os.path.join(PALSERVER_DIR, "Pal", "Saved", "SaveGames")
 BACKUP_DIR = os.path.join(PALWORLD_BASE_DIR, "backups")
+# 서버 실행 중 저장한 설정 변경분의 임시 보관소. 서버가 중지되는 순간(수동 중지/재시작/
+# 업데이트) 직후 ini에 적용되고 삭제된다. PalServer가 종료 시 메모리 값으로 ini를
+# 덮어쓰기 때문에 실행 중에는 ini에 직접 쓸 수 없다.
+PENDING_SETTINGS_PATH = os.path.join(PALWORLD_BASE_DIR, "pending_settings.json")
 
 # 로그 소스: 팰월드 로그 탭에서 선택 조회하는 파일들
 # events  = Flask 폴러가 자체 생성하는 접속/퇴장 이벤트 (JSON Lines)

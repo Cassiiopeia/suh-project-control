@@ -3,8 +3,10 @@ Palworld server management service
 NSSM 서비스 제어, 공식 REST API 중계, ini 관리, 로그, 백업
 """
 import os
+import json
 import shutil
 import subprocess
+import time
 import logging
 from datetime import datetime
 
@@ -15,6 +17,7 @@ from config.palworld_config import (
     SERVICE_NAME, REST_BASE_URL, EDITABLE_KEYS,
     PUBLIC_HOST, PUBLIC_PORT,
     PALSERVER_ARGS, REQUIRED_ARG_FLAG, NSSM_PATH,
+    PENDING_SETTINGS_PATH,
 )
 from service.palworld_ini import parse_option_settings, update_option_settings
 
@@ -96,13 +99,72 @@ class PalworldService:
 
     def stop(self):
         self._service_command('Stop')
+        self._apply_pending_settings()
 
     def restart(self):
         healed = self.ensure_log_enabled()
-        # -log를 새로 넣었다면 반드시 프로세스를 완전히 재기동해야 인자가 적용된다.
-        # Restart-Service는 stop→start라 새 AppParameters로 뜬다.
-        self._service_command('Restart')
+        if self._load_pending():
+            # 대기 중인 설정 변경이 있으면 stop()이 중지 완료 직후 pending을 적용하므로
+            # Restart-Service(내부적으로도 stop→start지만 우리 쪽 훅을 안 탐) 대신
+            # stop()+start()로 대체해 pending 적용 경로를 반드시 거치게 한다.
+            self.stop()
+            self.start()
+        else:
+            # -log를 새로 넣었다면 반드시 프로세스를 완전히 재기동해야 인자가 적용된다.
+            # Restart-Service는 stop→start라 새 AppParameters로 뜬다.
+            self._service_command('Restart')
         return {'log_flag_added': healed}
+
+    # --- pending 설정 (실행 중 저장분 임시 보관) ---
+
+    def _load_pending(self) -> dict:
+        if not os.path.exists(PENDING_SETTINGS_PATH):
+            return {}
+        try:
+            with open(PENDING_SETTINGS_PATH, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            return data if isinstance(data, dict) else {}
+        except (OSError, ValueError) as e:
+            logger.warning(f'pending settings 읽기 실패: {e}')
+            return {}
+
+    def _save_pending(self, data: dict):
+        try:
+            os.makedirs(os.path.dirname(PENDING_SETTINGS_PATH), exist_ok=True)
+            with open(PENDING_SETTINGS_PATH, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False)
+        except OSError as e:
+            logger.warning(f'pending settings 저장 실패: {e}')
+
+    def _clear_pending(self):
+        try:
+            if os.path.exists(PENDING_SETTINGS_PATH):
+                os.remove(PENDING_SETTINGS_PATH)
+        except OSError as e:
+            logger.warning(f'pending settings 삭제 실패: {e}')
+
+    def _apply_pending_settings(self, wait: bool = True):
+        """대기 중인 설정 변경을 ini에 반영한다. 서비스가 이미 중지된 상태에서 호출된다는
+        전제 — PalServer는 종료 시 메모리 값으로 ini를 덮어쓰므로, 그 덮어쓰기가 끝난
+        뒤에 적용해야 유실되지 않는다. 종료 시 ini 플러시가 늦게 끝날 수 있어 기본적으로
+        잠깐 대기한다(서버가 이미 정지 중이던 경로에서는 대기가 필요 없어 생략 가능).
+        예외는 삼키고 경고만 남겨 중지 흐름을 막지 않는다.
+        """
+        pending = self._load_pending()
+        if not pending:
+            return
+        try:
+            if wait:
+                time.sleep(2)
+            with open(INI_PATH, 'r', encoding='utf-8', errors='replace') as f:
+                text = f.read()
+            updated = update_option_settings(text, pending)
+            with open(INI_PATH, 'w', encoding='utf-8') as f:
+                f.write(updated)
+            self._clear_pending()
+            logger.info(f'대기 중이던 설정 변경을 ini에 적용: {list(pending.keys())}')
+        except Exception as e:
+            logger.warning(f'pending settings 적용 실패 (다음 중지 시 재시도): {e}')
 
     # --- 상태 (공식 REST API 중계) ---
 
@@ -152,22 +214,32 @@ class PalworldService:
     def get_settings(self) -> dict:
         with open(INI_PATH, 'r', encoding='utf-8', errors='replace') as f:
             settings = parse_option_settings(f.read())
-        return {'settings': settings, 'editable_keys': EDITABLE_KEYS}
+        return {'settings': settings, 'editable_keys': EDITABLE_KEYS, 'pending': self._load_pending()}
 
     def update_settings(self, changes: dict) -> dict:
-        if self.get_service_state() == 'running':
-            raise ServerRunningError(
-                'Server is running - stop the server before saving settings '
-                '(changes would be overwritten on shutdown)'
-            )
         filtered = {k: v for k, v in changes.items() if k in EDITABLE_KEYS}
+        if self.get_service_state() == 'running':
+            # 실행 중에는 ini에 직접 쓰지 않는다 — PalServer가 종료 시 메모리 값으로
+            # 덮어써 유실되기 때문. 대신 pending에 병합 저장하고 재시작/중지 시 적용한다.
+            merged = {**self._load_pending(), **filtered}
+            self._save_pending(merged)
+            logger.info(f'서버 실행 중 — 설정 변경을 pending에 저장: {list(filtered.keys())}')
+            with open(INI_PATH, 'r', encoding='utf-8', errors='replace') as f:
+                current_settings = parse_option_settings(f.read())
+            return {'settings': current_settings, 'editable_keys': EDITABLE_KEYS,
+                     'pending': merged, 'applied': False}
+
+        # 정지 중: 기존에 쌓인 pending이 있으면 먼저 적용한 뒤(서버가 안 돌고 있으므로
+        # 종료 시 ini 플러시 대기가 필요 없다) 요청받은 값을 이어서 저장한다.
+        self._apply_pending_settings(wait=False)
         with open(INI_PATH, 'r', encoding='utf-8', errors='replace') as f:
             text = f.read()
         updated = update_option_settings(text, filtered)
         with open(INI_PATH, 'w', encoding='utf-8') as f:
             f.write(updated)
         logger.info(f'PalWorldSettings.ini updated: {list(filtered.keys())}')
-        return {'settings': parse_option_settings(updated), 'editable_keys': EDITABLE_KEYS}
+        return {'settings': parse_option_settings(updated), 'editable_keys': EDITABLE_KEYS,
+                 'pending': {}, 'applied': True}
 
     # --- 접속 가이드 ---
 
