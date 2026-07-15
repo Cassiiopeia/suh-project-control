@@ -3,3 +3,6 @@ ollama==0.6.1
 requests==2.31.0
 waitress==2.1.2
 flask-swagger-ui==4.11.1
+psycopg2-binary==2.9.10
+yoyo-migrations==9.0.0
+python-dotenv==1.0.1

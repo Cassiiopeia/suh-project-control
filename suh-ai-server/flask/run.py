@@ -34,6 +34,10 @@ if __name__ == '__main__':
     logger.info(f"Log file: {log_file}")
     logger.info("=" * 50)
 
+    # 감사로그 DB 마이그레이션 (yoyo — 실패해도 기동 계속)
+    from config.db_config import apply_migrations
+    apply_migrations()
+
     # 팰월드 접속/퇴장 이벤트 폴러 + 메트릭 히스토리 적재 (daemon thread)
     from service.palworld_service import PalworldService
     from service.palworld_event_poller import PalworldEventPoller

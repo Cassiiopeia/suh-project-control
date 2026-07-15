@@ -89,3 +89,6 @@ build/
 # SUH-DEVOPS-TEMPLATE: Auto-added entries
 # ====================================================================
 /.report
+
+### suh-ai-server ###
+suh-ai-server/flask/.env
