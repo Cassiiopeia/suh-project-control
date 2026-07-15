@@ -364,6 +364,95 @@ async function copyGuide(elementId, label) {
   }
 }
 
+/* ── 서버 바이너리 업데이트 ── */
+const UPDATE_STEP_LABELS = {
+  backup: '세이브 백업 중…', stop: '서버 중지 중…',
+  download: '새 버전 다운로드 중…', start: '서버 시작 중…',
+};
+let updatePollTimer = null;
+let updateWasRunning = false;
+
+function renderUpdateState(s) {
+  const badge = document.getElementById('update-badge');
+  const builds = document.getElementById('update-builds');
+  if (!badge) return;
+  if (s.status === 'running') {
+    badge.className = 'badge badge-info';
+    badge.textContent = '업데이트 진행 중';
+  } else if (s.update_available === true) {
+    badge.className = 'badge badge-warning';
+    badge.textContent = '업데이트 필요';
+  } else if (s.update_available === false) {
+    badge.className = 'badge badge-success';
+    badge.textContent = '최신 상태';
+  } else {
+    badge.className = 'badge badge-ghost';
+    badge.textContent = s.checked_at ? '버전 판단 불가' : '빌드 확인 전';
+  }
+  builds.textContent = (s.local_build ? '빌드 ' + s.local_build : '') +
+    (s.update_available === true && s.remote_build ? ' → ' + s.remote_build : '');
+
+  const running = s.status === 'running';
+  const showPanel = running || ((s.status === 'done' || s.status === 'failed') && s.log && s.log.length);
+  const panel = document.getElementById('update-progress');
+  panel.classList.toggle('hidden', !showPanel);
+  document.getElementById('update-spinner').classList.toggle('hidden', !running);
+  document.getElementById('update-step').textContent =
+    running ? (UPDATE_STEP_LABELS[s.step] || '진행 중…')
+      : s.status === 'done' ? '업데이트 완료'
+      : s.status === 'failed' ? '업데이트 실패: ' + (s.error || '') : '';
+  if (showPanel) {
+    const pre = document.getElementById('update-log');
+    const atBottom = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 8;
+    pre.textContent = (s.log || []).join('\n');
+    if (atBottom) pre.scrollTop = pre.scrollHeight;
+  }
+
+  if (updateWasRunning && s.status === 'done') {
+    showToast('서버 업데이트 완료', 'success');
+    refreshStatus();
+  }
+  if (updateWasRunning && s.status === 'failed') {
+    showToast('서버 업데이트 실패: ' + (s.error || ''), 'error');
+  }
+  updateWasRunning = running;
+
+  if (running && !updatePollTimer) updatePollTimer = setInterval(pollUpdateStatus, 3000);
+  if (!running && updatePollTimer) { clearInterval(updatePollTimer); updatePollTimer = null; }
+}
+
+async function pollUpdateStatus() {
+  try {
+    const resp = await apiFetch(API + '/update/status');
+    renderUpdateState(await resp.json());
+  } catch (e) { /* 401은 modal 처리 */ }
+}
+
+async function checkServerUpdate() {
+  const btn = document.getElementById('btn-update-check');
+  btn.disabled = true;
+  showToast('최신 빌드 확인 중… (최대 1~2분)', 'info');
+  try {
+    const resp = await apiFetch(API + '/update/check', { method: 'POST' });
+    const data = await resp.json();
+    if (data.update_available === true) showToast('새 버전이 있습니다 — 서버 업데이트를 실행하세요', 'warning');
+    else if (data.update_available === false) showToast('이미 최신 버전입니다', 'success');
+    else showToast('버전을 판단할 수 없습니다 (스팀 조회 실패)', 'error');
+    await pollUpdateStatus();
+  } catch (e) { showToast(String(e), 'error'); }
+  btn.disabled = false;
+}
+
+async function startServerUpdate() {
+  if (!(await confirmAction('서버를 중지하고 새 버전을 다운로드합니다. 수 분이 걸리고 접속 중인 플레이어는 끊깁니다. 진행할까요?'))) return;
+  try {
+    const resp = await apiFetch(API + '/update', { method: 'POST' });
+    if (resp.status === 409) { showToast('이미 업데이트가 진행 중입니다', 'warning'); return; }
+    showToast('서버 업데이트 시작', 'info');
+    await pollUpdateStatus();
+  } catch (e) { showToast(String(e), 'error'); }
+}
+
 function initLogViewer() {
   createLogViewer(document.getElementById('palworld-log-viewer'), {
     sources: [
@@ -413,6 +502,7 @@ document.addEventListener('DOMContentLoaded', function () {
   loadGuide();
   loadBackups();
   initLogViewer();
+  pollUpdateStatus();
   setInterval(refreshStatus, 5000);
   setInterval(loadHistory, 10000);
 });
