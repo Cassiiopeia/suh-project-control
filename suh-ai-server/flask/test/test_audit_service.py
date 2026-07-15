@@ -91,3 +91,9 @@ def test_format_line_settings_update_shows_diff():
 def test_masked_location_strips_credentials():
     masked = _masked_location(URL)
     assert masked == 'postgresql://suh-project.synology.me:5430/suh_ai_server'
+
+
+def test_format_line_survives_malformed_changed_value():
+    line = _format_line(datetime(2026, 7, 15, 10, 0, 0), '1.2.3.4', 'SETTINGS_UPDATE',
+                        {'changed': {'ExpRate': 'not-a-dict'}})
+    assert 'ExpRate: not-a-dict' in line  # 예외 없이 원값 표시

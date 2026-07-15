@@ -88,10 +88,14 @@ def _format_line(occurred_at, actor_ip, action, detail) -> str:
     line = f'[{occurred_at.isoformat()}] {actor_ip} · {action}'
     if detail and isinstance(detail, dict):
         changed = detail.get('changed')
-        if changed:
-            diff = ', '.join(f'{key}: {value.get("from")} → {value.get("to")}'
-                             for key, value in changed.items())
-            return f'{line} ({diff})'
+        if changed and isinstance(changed, dict):
+            parts = []
+            for key, value in changed.items():
+                if isinstance(value, dict):
+                    parts.append(f'{key}: {value.get("from")} → {value.get("to")}')
+                else:
+                    parts.append(f'{key}: {value}')
+            return f'{line} ({", ".join(parts)})'
         name = detail.get('name')
         if name:
             return f'{line} ({name})'

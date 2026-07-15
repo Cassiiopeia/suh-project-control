@@ -158,3 +158,25 @@ def test_logs_source_audit_uses_audit_service(client):
     assert resp.get_json()['logs'] == ['x']
     mock_list.assert_called_once_with(100)
     mock_tail.assert_not_called()
+
+
+def test_put_settings_masks_sensitive_values(client):
+    before = {'settings': {'ServerPassword': '"1234"'}, 'editable_keys': []}
+    after = {'settings': {'ServerPassword': '"5678"'}, 'editable_keys': []}
+    with patch('router.palworld_router.palworld_service.get_settings', return_value=before), \
+         patch('router.palworld_router.palworld_service.update_settings', return_value=after), \
+         patch('router.palworld_router.audit_service.record') as mock_record:
+        resp = client.put('/palworld/settings', json={'ServerPassword': '5678'})
+    assert resp.status_code == 200
+    detail = mock_record.call_args[0][3]
+    assert detail == {'changed': {'ServerPassword': {'from': '***', 'to': '***'}}}
+
+
+def test_control_unmapped_action_skips_audit_and_succeeds(client):
+    with patch('router.palworld_router.palworld_service.start'), \
+         patch('router.palworld_router.audit_service.record') as mock_record, \
+         patch.dict('router.palworld_router._CONTROL_AUDIT_ACTIONS', {}, clear=True):
+        resp = client.post('/palworld/start')
+    assert resp.status_code == 200
+    assert resp.get_json()['success'] is True
+    mock_record.assert_not_called()
