@@ -8,6 +8,10 @@ PALSERVER_DIR = os.path.join(PALWORLD_BASE_DIR, "steamcmd", "steamapps", "common
 INI_PATH = os.path.join(PALSERVER_DIR, "Pal", "Saved", "Config", "WindowsServer", "PalWorldSettings.ini")
 SAVE_DIR = os.path.join(PALSERVER_DIR, "Pal", "Saved", "SaveGames")
 BACKUP_DIR = os.path.join(PALWORLD_BASE_DIR, "backups")
+# 서버 실행 중 저장한 설정 변경분의 임시 보관소. 서버가 중지되는 순간(수동 중지/재시작/
+# 업데이트) 직후 ini에 적용되고 삭제된다. PalServer가 종료 시 메모리 값으로 ini를
+# 덮어쓰기 때문에 실행 중에는 ini에 직접 쓸 수 없다.
+PENDING_SETTINGS_PATH = os.path.join(PALWORLD_BASE_DIR, "pending_settings.json")
 
 # 로그 소스: 팰월드 로그 탭에서 선택 조회하는 파일들
 # events  = Flask 폴러가 자체 생성하는 접속/퇴장 이벤트 (JSON Lines)
@@ -18,12 +22,17 @@ BACKUP_DIR = os.path.join(PALWORLD_BASE_DIR, "backups")
 # stderr  = NSSM 표준에러 리다이렉트 (크래시·프로세스 단서)
 # flask   = Flask 앱(관리자 서버) 자체 로그 — 관리자 시스템 로그 조회용
 _PAL_STDOUT = os.path.join(PALWORLD_BASE_DIR, "logs", "palserver-stdout.log")
+# 서버 바이너리 업데이트(steamcmd) 출력 로그 파일 + 마지막 업데이트 결과 영속화 파일.
+# Flask 재시작 후에도 이력을 조회/표시할 수 있도록 메모리 링버퍼와 별도로 디스크에 남긴다.
+UPDATE_LOG_FILE = os.path.join(PALWORLD_BASE_DIR, "logs", "palworld-update.log")
+UPDATE_LAST_FILE = os.path.join(PALWORLD_BASE_DIR, "logs", "palworld-update-last.json")
 LOG_SOURCES = {
     "events": os.path.join(PALWORLD_BASE_DIR, "logs", "palworld-events.jsonl"),
     "game":   _PAL_STDOUT,
     "stdout": _PAL_STDOUT,
     "stderr": os.path.join(PALWORLD_BASE_DIR, "logs", "palserver-stderr.log"),
     "flask":  os.path.join(r"C:\AI\suh-ai-server", "flask", "logs", "nssm-stderr.log"),
+    "update": UPDATE_LOG_FILE,
 }
 
 # 메트릭 시계열 히스토리 (FPS·접속자·프레임타임 추이 그래프용).

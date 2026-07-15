@@ -1,4 +1,5 @@
 """test_palworld_service.py"""
+import json
 import pytest
 from unittest.mock import patch, MagicMock
 from service.palworld_service import PalworldService, ServerRunningError
@@ -38,10 +39,61 @@ def test_get_service_state_not_installed(service):
         assert service.get_service_state() == 'not_installed'
 
 
-def test_update_settings_blocked_while_running(service):
-    with patch.object(service, 'get_service_state', return_value='running'):
-        with pytest.raises(ServerRunningError):
-            service.update_settings({"ServerName": "New"})
+def test_update_settings_while_running_saves_pending_not_ini(service, tmp_path):
+    ini = tmp_path / "PalWorldSettings.ini"
+    ini.write_text(SAMPLE_INI, encoding='utf-8')
+    pending = tmp_path / "pending_settings.json"
+    with patch.object(service, 'get_service_state', return_value='running'), \
+         patch('service.palworld_service.INI_PATH', str(ini)), \
+         patch('service.palworld_service.PENDING_SETTINGS_PATH', str(pending)):
+        result = service.update_settings({"ServerName": "New"})
+    assert result['applied'] is False
+    assert result['pending'] == {"ServerName": "New"}
+    # ini는 건드리지 않는다 — PalServer가 종료 시 덮어써 유실되므로
+    assert 'ServerName="Test"' in ini.read_text(encoding='utf-8')
+    assert 'ServerName="New"' not in ini.read_text(encoding='utf-8')
+    assert json.loads(pending.read_text(encoding='utf-8')) == {"ServerName": "New"}
+
+
+def test_update_settings_while_running_merges_with_existing_pending(service, tmp_path):
+    ini = tmp_path / "PalWorldSettings.ini"
+    ini.write_text(SAMPLE_INI, encoding='utf-8')
+    pending = tmp_path / "pending_settings.json"
+    pending.write_text(json.dumps({"ExpRate": "2.0"}), encoding='utf-8')
+    with patch.object(service, 'get_service_state', return_value='running'), \
+         patch('service.palworld_service.INI_PATH', str(ini)), \
+         patch('service.palworld_service.PENDING_SETTINGS_PATH', str(pending)):
+        result = service.update_settings({"ServerName": "New"})
+    assert result['pending'] == {"ExpRate": "2.0", "ServerName": "New"}
+
+
+def test_update_settings_while_running_ignores_non_editable_keys(service, tmp_path):
+    ini = tmp_path / "PalWorldSettings.ini"
+    ini.write_text(SAMPLE_INI, encoding='utf-8')
+    pending = tmp_path / "pending_settings.json"
+    with patch.object(service, 'get_service_state', return_value='running'), \
+         patch('service.palworld_service.INI_PATH', str(ini)), \
+         patch('service.palworld_service.PENDING_SETTINGS_PATH', str(pending)):
+        result = service.update_settings({"AdminPassword": "hacked", "ServerName": "OK"})
+    assert 'AdminPassword' not in result['pending']
+    assert result['pending'] == {"ServerName": "OK"}
+
+
+def test_update_settings_while_stopped_applies_existing_pending_first(service, tmp_path):
+    ini = tmp_path / "PalWorldSettings.ini"
+    ini.write_text(SAMPLE_INI, encoding='utf-8')
+    pending = tmp_path / "pending_settings.json"
+    pending.write_text(json.dumps({"ExpRate": "2.0"}), encoding='utf-8')
+    with patch.object(service, 'get_service_state', return_value='stopped'), \
+         patch('service.palworld_service.INI_PATH', str(ini)), \
+         patch('service.palworld_service.PENDING_SETTINGS_PATH', str(pending)):
+        result = service.update_settings({"ServerName": "New"})
+    text = ini.read_text(encoding='utf-8')
+    assert 'ExpRate=2.0' in text  # 기존 pending 먼저 적용됨
+    assert 'ServerName="New"' in text  # 그 다음 요청값 적용
+    assert result['applied'] is True
+    assert result['pending'] == {}
+    assert not pending.exists()
 
 
 def test_update_settings_writes_when_stopped(service, tmp_path):
@@ -146,11 +198,110 @@ def test_ensure_log_enabled_swallows_errors(service):
 
 def test_restart_heals_before_restarting(service):
     with patch.object(service, 'ensure_log_enabled', return_value=True) as heal, \
+         patch.object(service, '_load_pending', return_value={}), \
          patch('service.palworld_service.subprocess.run', return_value=_sc_result("", 0)) as mock_run:
         result = service.restart()
     heal.assert_called_once()
     assert result == {'log_flag_added': True}
     assert 'Restart-Service' in ' '.join(mock_run.call_args[0][0])
+
+
+# --- pending 설정 저장/적용 ---
+
+def test_stop_applies_pending_settings_after_service_stops(service, tmp_path):
+    ini = tmp_path / "PalWorldSettings.ini"
+    ini.write_text(SAMPLE_INI, encoding='utf-8')
+    pending = tmp_path / "pending_settings.json"
+    pending.write_text(json.dumps({"ServerName": "Pending"}), encoding='utf-8')
+    with patch('service.palworld_service.subprocess.run', return_value=_sc_result("", 0)), \
+         patch('service.palworld_service.INI_PATH', str(ini)), \
+         patch('service.palworld_service.PENDING_SETTINGS_PATH', str(pending)), \
+         patch('service.palworld_service.time.sleep') as mock_sleep:
+        service.stop()
+    mock_sleep.assert_called_once_with(2)
+    assert 'ServerName="Pending"' in ini.read_text(encoding='utf-8')
+    assert not pending.exists()
+
+
+def test_stop_noop_when_no_pending(service, tmp_path):
+    ini = tmp_path / "PalWorldSettings.ini"
+    ini.write_text(SAMPLE_INI, encoding='utf-8')
+    pending = tmp_path / "pending_settings.json"  # 존재하지 않음
+    with patch('service.palworld_service.subprocess.run', return_value=_sc_result("", 0)), \
+         patch('service.palworld_service.INI_PATH', str(ini)), \
+         patch('service.palworld_service.PENDING_SETTINGS_PATH', str(pending)), \
+         patch('service.palworld_service.time.sleep') as mock_sleep:
+        service.stop()
+    mock_sleep.assert_not_called()
+    assert 'ServerName="Test"' in ini.read_text(encoding='utf-8')  # 변경 없음
+
+
+def test_apply_pending_settings_swallows_errors(service, tmp_path):
+    # ini 경로가 잘못돼도 stop 흐름 자체는 막지 않는다 (예외를 삼킨다)
+    pending = tmp_path / "pending_settings.json"
+    pending.write_text(json.dumps({"ServerName": "Pending"}), encoding='utf-8')
+    with patch('service.palworld_service.INI_PATH', str(tmp_path / 'missing' / 'no.ini')), \
+         patch('service.palworld_service.PENDING_SETTINGS_PATH', str(pending)), \
+         patch('service.palworld_service.time.sleep'):
+        service._apply_pending_settings()  # 예외 없이 반환되어야 함
+    assert pending.exists()  # 적용 실패 시 pending은 보존
+
+
+def test_restart_uses_stop_start_when_pending_exists(service, tmp_path):
+    pending = tmp_path / "pending_settings.json"
+    pending.write_text(json.dumps({"ServerName": "Pending"}), encoding='utf-8')
+    with patch.object(service, 'ensure_log_enabled', return_value=False), \
+         patch('service.palworld_service.PENDING_SETTINGS_PATH', str(pending)), \
+         patch.object(service, 'stop') as mock_stop, \
+         patch.object(service, 'start') as mock_start, \
+         patch('service.palworld_service.subprocess.run') as mock_run:
+        result = service.restart()
+    mock_stop.assert_called_once()
+    mock_start.assert_called_once()
+    mock_run.assert_not_called()  # Restart-Service 경로를 타지 않음
+    assert result == {'log_flag_added': False}
+
+
+def test_restart_uses_restart_service_when_no_pending(service, tmp_path):
+    pending = tmp_path / "pending_settings.json"  # 존재하지 않음
+    with patch.object(service, 'ensure_log_enabled', return_value=False), \
+         patch('service.palworld_service.PENDING_SETTINGS_PATH', str(pending)), \
+         patch.object(service, 'stop') as mock_stop, \
+         patch.object(service, 'start') as mock_start, \
+         patch('service.palworld_service.subprocess.run', return_value=_sc_result("", 0)) as mock_run:
+        result = service.restart()
+    mock_stop.assert_not_called()
+    mock_start.assert_not_called()
+    assert 'Restart-Service' in ' '.join(mock_run.call_args[0][0])
+    assert result == {'log_flag_added': False}
+
+
+def test_get_settings_includes_pending(service, tmp_path):
+    ini = tmp_path / "PalWorldSettings.ini"
+    ini.write_text(SAMPLE_INI, encoding='utf-8')
+    pending = tmp_path / "pending_settings.json"
+    pending.write_text(json.dumps({"ServerName": "Pending"}), encoding='utf-8')
+    with patch('service.palworld_service.INI_PATH', str(ini)), \
+         patch('service.palworld_service.PENDING_SETTINGS_PATH', str(pending)):
+        result = service.get_settings()
+    assert result['pending'] == {"ServerName": "Pending"}
+
+
+def test_get_settings_pending_empty_when_no_file(service, tmp_path):
+    ini = tmp_path / "PalWorldSettings.ini"
+    ini.write_text(SAMPLE_INI, encoding='utf-8')
+    pending = tmp_path / "pending_settings.json"  # 존재하지 않음
+    with patch('service.palworld_service.INI_PATH', str(ini)), \
+         patch('service.palworld_service.PENDING_SETTINGS_PATH', str(pending)):
+        result = service.get_settings()
+    assert result['pending'] == {}
+
+
+def test_load_pending_returns_empty_on_corrupt_json(service, tmp_path):
+    pending = tmp_path / "pending_settings.json"
+    pending.write_text('{not valid json', encoding='utf-8')
+    with patch('service.palworld_service.PENDING_SETTINGS_PATH', str(pending)):
+        assert service._load_pending() == {}
 
 
 # --- tail_logs (source 선택 + seek tail) ---

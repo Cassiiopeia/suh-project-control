@@ -3,7 +3,9 @@ Palworld 서버 바이너리 업데이트
 SteamCMD로 새 빌드 감지(appmanifest vs app_info_print) 및 업데이트 실행.
 백업 → 서비스 중지 → app_update → 서비스 시작. 진행 상태/출력은 전역 링버퍼로 관리.
 """
+import os
 import re
+import json
 import time
 import logging
 import threading
@@ -14,6 +16,7 @@ from datetime import datetime
 from config.palworld_config import (
     STEAMCMD_EXE, PALWORLD_APP_ID, APP_MANIFEST_PATH,
     UPDATE_CHECK_INTERVAL_SEC, UPDATE_LOG_MAXLEN, UPDATE_TIMEOUT_SEC,
+    UPDATE_LOG_FILE, UPDATE_LAST_FILE,
 )
 from service import audit_service
 from service.audit_service import AuditCategory, AuditAction
@@ -36,6 +39,39 @@ _version = {
     'update_available': None,   # True | False | None(판단 불가)
     'checked_at': None,
 }
+
+
+def _append_log(text):
+    """진행 로그 한 줄을 메모리 링버퍼 + 디스크 파일(UPDATE_LOG_FILE)에 함께 기록한다.
+    파일 기록 실패는 진행 자체를 막지 않도록 warning만 남긴다."""
+    _log.append(text)
+    try:
+        os.makedirs(os.path.dirname(UPDATE_LOG_FILE), exist_ok=True)
+        with open(UPDATE_LOG_FILE, 'a', encoding='utf-8') as f:
+            f.write(text + '\n')
+    except OSError as e:
+        logger.warning(f'업데이트 로그 파일 기록 실패: {e}')
+
+
+def _load_last_update():
+    if not os.path.exists(UPDATE_LAST_FILE):
+        return None
+    try:
+        with open(UPDATE_LAST_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else None
+    except (OSError, ValueError) as e:
+        logger.warning(f'마지막 업데이트 정보 읽기 실패: {e}')
+        return None
+
+
+def _save_last_update(data):
+    try:
+        os.makedirs(os.path.dirname(UPDATE_LAST_FILE), exist_ok=True)
+        with open(UPDATE_LAST_FILE, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False)
+    except OSError as e:
+        logger.warning(f'마지막 업데이트 정보 저장 실패: {e}')
 
 
 def get_local_buildid():
@@ -85,6 +121,7 @@ def get_state():
         state = dict(_state)
     state.update(_version)
     state['log'] = list(_log)
+    state['last_update'] = _load_last_update()
     return state
 
 
@@ -99,7 +136,9 @@ def start_update(trigger, actor_ip):
             'started_at': datetime.now().isoformat(timespec='seconds'),
         })
     _log.clear()
-    _log.append(f'[update] 서버 업데이트 시작 (trigger={trigger})')
+    started_at = _state['started_at']
+    _append_log(f'=== {started_at} 업데이트 시작 (trigger={trigger}) ===')
+    _append_log(f'[update] 서버 업데이트 시작 (trigger={trigger})')
     audit_service.record(
         AuditCategory.PALWORLD, AuditAction.SERVER_UPDATE, actor_ip,
         {'trigger': trigger, 'local_build': _version.get('local_build'),
@@ -136,7 +175,7 @@ def _run_steamcmd_update():
         for line in proc.stdout:
             line = line.strip()
             if line:
-                _log.append(line)
+                _append_log(line)
                 if 'Success!' in line:
                     success_seen = True
         code = proc.wait()
@@ -156,23 +195,23 @@ def _run_update():
         _set_step('backup')
         try:
             backup = service.create_backup()
-            _log.append(f"[backup] 완료: {backup.get('name')}")
+            _append_log(f"[backup] 완료: {backup.get('name')}")
         except Exception as e:
             logger.warning(f'업데이트 전 백업 실패(계속 진행): {e}')
-            _log.append(f'[backup] 실패 — 계속 진행: {e}')
+            _append_log(f'[backup] 실패 — 계속 진행: {e}')
 
         _set_step('stop')
         if service.get_service_state() == 'running':
             service.stop()
-        _log.append('[stop] 서비스 중지 완료')
+        _append_log('[stop] 서비스 중지 완료')
 
         _set_step('download')
         _run_steamcmd_update()
-        _log.append('[download] 새 빌드 설치 완료')
+        _append_log('[download] 새 빌드 설치 완료')
 
         _set_step('start')
         service.start()
-        _log.append('[start] 서비스 시작 완료')
+        _append_log('[start] 서비스 시작 완료')
 
         # 로컬 빌드 갱신 → 배지가 "최신 상태"로 돌아온다
         local = get_local_buildid()
@@ -181,20 +220,21 @@ def _run_update():
             'local_build': local,
             'update_available': (local != remote) if (local and remote) else None,
         })
+        finished_at = datetime.now().isoformat(timespec='seconds')
         with _lock:
-            _state.update({'status': 'done', 'step': None,
-                           'finished_at': datetime.now().isoformat(timespec='seconds')})
+            _state.update({'status': 'done', 'step': None, 'finished_at': finished_at})
+        _save_last_update({'finished_at': finished_at, 'build': local})
         logger.info('팰월드 서버 업데이트 완료')
     except Exception as e:
         logger.error(f'팰월드 서버 업데이트 실패: {e}')
-        _log.append(f'[error] {e}')
+        _append_log(f'[error] {e}')
         # 실패해도 서버를 방치하지 않는다 — 구버전으로라도 재기동 시도
         try:
             if service.get_service_state() != 'running':
                 service.start()
-                _log.append('[recover] 서비스 재시작(기존 버전) 완료')
+                _append_log('[recover] 서비스 재시작(기존 버전) 완료')
         except Exception as recover_error:
-            _log.append(f'[recover] 서비스 재시작 실패: {recover_error}')
+            _append_log(f'[recover] 서비스 재시작 실패: {recover_error}')
         with _lock:
             _state.update({'status': 'failed', 'step': None, 'error': str(e),
                            'finished_at': datetime.now().isoformat(timespec='seconds')})

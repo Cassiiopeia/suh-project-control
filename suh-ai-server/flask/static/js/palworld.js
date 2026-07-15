@@ -94,6 +94,7 @@ function renderPlayers(players) {
   } else {
     tbody.innerHTML = '<tr><td colspan="7">접속자 없음</td></tr>';
   }
+  document.getElementById('players-section')?.classList.toggle('hidden', !(players && players.length));
 }
 
 /* 월드/서버 정보 카드 — info + settings 요약 */
@@ -199,12 +200,19 @@ async function loadSettings() {
   try {
     const resp = await apiFetch(API + '/settings');
     const data = await resp.json();
+    const pending = data.pending || {};
+    // 적용 대기 중인 값이 있으면 폼에는 그 값을 우선 보여준다 — 사용자가 방금 저장한
+    // 값이 "사라진 것처럼" 보이지 않도록.
+    const effectiveSettings = { ...data.settings, ...pending };
     const form = document.getElementById('settings-form');
-    form.innerHTML = SETTINGS_FIELDS.map(field => renderSettingRow(field, data.settings)).join('');
+    form.innerHTML = SETTINGS_FIELDS.map(field => renderSettingRow(field, effectiveSettings)).join('');
     form.querySelectorAll('input[type="checkbox"]').forEach(toggle => {
       toggle.addEventListener('change', updateToggleLabel);
       updateToggleLabel({ target: toggle });
     });
+    const pendingCount = Object.keys(pending).length;
+    document.getElementById('pending-count').textContent = pendingCount;
+    document.getElementById('pending-alert').classList.toggle('hidden', pendingCount === 0);
   } catch (e) {
     showToast('설정을 불러오지 못했습니다: ' + String(e), 'error');
   }
@@ -293,12 +301,17 @@ async function saveSettings() {
     const resp = await apiFetch(API + '/settings', {
       method: 'PUT', body: JSON.stringify(collectChanges()),
     });
-    if (resp.status === 409) {
-      showToast('서버 가동 중에는 저장할 수 없습니다. 먼저 중지하세요.', 'warning');
-      return;
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data.applied === false) {
+        showToast('저장 완료 — 서버 재시작 시 적용됩니다', 'info');
+      } else {
+        showToast('설정 저장 완료', 'success');
+      }
+      loadSettings();
+    } else {
+      showToast((await resp.json()).error || '저장 실패', 'error');
     }
-    if (resp.ok) showToast('설정 저장 완료', 'success');
-    else showToast((await resp.json()).error || '저장 실패', 'error');
   } catch (e) { showToast(String(e), 'error'); }
 }
 
@@ -392,8 +405,17 @@ function renderUpdateState(s) {
   builds.textContent = (s.local_build ? '빌드 ' + s.local_build : '') +
     (s.update_available === true && s.remote_build ? ' → ' + s.remote_build : '');
 
+  const lastEl = document.getElementById('update-last');
+  if (lastEl) {
+    lastEl.textContent = s.last_update
+      ? '마지막 업데이트: ' + s.last_update.finished_at + ' · 빌드 ' + s.last_update.build
+      : '';
+  }
+
   const running = s.status === 'running';
-  const showPanel = running || ((s.status === 'done' || s.status === 'failed') && s.log && s.log.length);
+  // 완료(done) 상태는 토스트 + 배지로 충분히 안내되므로 패널을 숨긴다.
+  // 실패(failed)는 에러 확인용으로 로그가 있으면 계속 띄워둔다.
+  const showPanel = running || (s.status === 'failed' && s.log && s.log.length);
   const panel = document.getElementById('update-progress');
   panel.classList.toggle('hidden', !showPanel);
   document.getElementById('update-spinner').classList.toggle('hidden', !running);
@@ -456,9 +478,10 @@ async function startServerUpdate() {
 function initLogViewer() {
   createLogViewer(document.getElementById('palworld-log-viewer'), {
     sources: [
+      { id: 'game', label: '게임 로그' },
       { id: 'events', label: '이벤트' },
       { id: 'audit', label: '감사' },
-      { id: 'game', label: '게임 로그' },
+      { id: 'update', label: '업데이트' },
       { id: 'stderr', label: '오류(stderr)' },
       { id: 'flask', label: '시스템(Flask)' },
     ],

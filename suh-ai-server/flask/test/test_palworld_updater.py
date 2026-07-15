@@ -1,6 +1,7 @@
 """palworld_updater 단위 테스트 — subprocess/서비스는 전부 mock"""
 import sys
 import os
+import json
 import time
 import pytest
 from unittest.mock import patch, MagicMock, call
@@ -180,3 +181,90 @@ def test_steamcmd_update_success_output_overrides_exit_code():
     with patch.object(updater.subprocess, 'Popen', return_value=fake_proc):
         updater._run_steamcmd_update()   # 예외 없어야 함
     assert any('Success!' in l for l in updater._log)
+
+
+# --- 업데이트 로그 파일 기록 / 마지막 업데이트 영속화 ---
+
+def test_append_log_writes_to_ringbuffer_and_file(tmp_path):
+    log_file = tmp_path / 'palworld-update.log'
+    with patch.object(updater, 'UPDATE_LOG_FILE', str(log_file)):
+        updater._append_log('hello world')
+    assert 'hello world' in updater._log
+    assert log_file.read_text(encoding='utf-8') == 'hello world\n'
+
+
+def test_append_log_appends_multiple_lines(tmp_path):
+    log_file = tmp_path / 'palworld-update.log'
+    with patch.object(updater, 'UPDATE_LOG_FILE', str(log_file)):
+        updater._append_log('line1')
+        updater._append_log('line2')
+    assert log_file.read_text(encoding='utf-8') == 'line1\nline2\n'
+
+
+def test_append_log_swallows_write_errors():
+    # 상위 디렉터리가 존재할 수 없는 잘못된 경로 — 예외를 삼키고 링버퍼에는 남는다
+    with patch.object(updater, 'UPDATE_LOG_FILE', r'Z:\definitely\not\a\real\drive\update.log'):
+        updater._append_log('still recorded')
+    assert 'still recorded' in updater._log
+
+
+def test_start_update_writes_header_line(tmp_path):
+    log_file = tmp_path / 'palworld-update.log'
+    with patch.object(updater, 'UPDATE_LOG_FILE', str(log_file)), \
+         patch.object(updater.audit_service, 'record'), \
+         patch.object(updater.threading, 'Thread'):
+        updater.start_update('manual', '1.2.3.4')
+    text = log_file.read_text(encoding='utf-8')
+    assert '업데이트 시작 (trigger=manual)' in text
+    assert '===' in text
+
+
+def test_run_update_done_saves_last_update_file(tmp_path):
+    last_file = tmp_path / 'palworld-update-last.json'
+    service = _mock_service()
+    with patch('service.palworld_service.PalworldService', return_value=service), \
+         patch.object(updater, 'UPDATE_LAST_FILE', str(last_file)), \
+         patch.object(updater, '_run_steamcmd_update'), \
+         patch.object(updater, 'get_local_buildid', return_value='20250701'):
+        updater._run_update()
+    saved = json.loads(last_file.read_text(encoding='utf-8'))
+    assert saved['build'] == '20250701'
+    assert saved['finished_at'] == updater._state['finished_at']
+
+
+def test_run_update_failure_does_not_save_last_update(tmp_path):
+    last_file = tmp_path / 'palworld-update-last.json'
+    service = _mock_service()
+    with patch('service.palworld_service.PalworldService', return_value=service), \
+         patch.object(updater, 'UPDATE_LAST_FILE', str(last_file)), \
+         patch.object(updater, '_run_steamcmd_update', side_effect=RuntimeError('boom')):
+        updater._run_update()
+    assert not last_file.exists()
+
+
+def test_get_state_includes_last_update_from_file(tmp_path):
+    last_file = tmp_path / 'palworld-update-last.json'
+    last_file.write_text(json.dumps({'finished_at': '2026-07-15T10:00:00', 'build': '20250701'}),
+                          encoding='utf-8')
+    with patch.object(updater, 'UPDATE_LAST_FILE', str(last_file)):
+        state = updater.get_state()
+    assert state['last_update'] == {'finished_at': '2026-07-15T10:00:00', 'build': '20250701'}
+
+
+def test_get_state_last_update_none_when_no_file(tmp_path):
+    missing = tmp_path / 'no-such-file.json'
+    with patch.object(updater, 'UPDATE_LAST_FILE', str(missing)):
+        state = updater.get_state()
+    assert state['last_update'] is None
+
+
+def test_load_last_update_returns_none_on_corrupt_json(tmp_path):
+    last_file = tmp_path / 'palworld-update-last.json'
+    last_file.write_text('{not valid json', encoding='utf-8')
+    with patch.object(updater, 'UPDATE_LAST_FILE', str(last_file)):
+        assert updater._load_last_update() is None
+
+
+def test_log_sources_includes_update():
+    from config.palworld_config import LOG_SOURCES, UPDATE_LOG_FILE
+    assert LOG_SOURCES['update'] == UPDATE_LOG_FILE

@@ -84,28 +84,40 @@ def get_settings():
 
 @palworld_bp.route('/palworld/settings', methods=['PUT'])
 def put_settings():
-    """PalWorldSettings.ini 수정 (서버 가동 중이면 409)"""
+    """PalWorldSettings.ini 수정. 서버 가동 중이면 즉시 반영 대신 pending에 보관하고
+    재시작/중지 시 적용된다(응답의 applied=False)."""
     data = request.get_json(silent=True)
     if not data:
         return jsonify({'error': 'JSON body required'}), 400
     try:
+        # before = 현재 ini 값에 기존 pending을 오버레이한 "체감상 현재값".
+        # 실행 중 저장이 반복될 때도 감사 diff가 이전 pending과의 차이를 정확히 보여준다.
         before = {}
         try:
-            before = palworld_service.get_settings()['settings']
+            snapshot = palworld_service.get_settings()
+            before = {**snapshot.get('settings', {}), **snapshot.get('pending', {})}
         except Exception:
             pass  # 이전 값 조회 실패는 감사 diff만 비게 할 뿐 수정은 진행
         result = palworld_service.update_settings(data)
-        after = result['settings']
+        applied = result.get('applied', True)
+        # applied=True: ini에 즉시 반영됐으므로 result['settings'](ini 파싱값, quote 포함)와 비교.
+        # applied=False: pending에 보관됐으므로 result['pending'](요청 원본값)과 비교.
+        # 두 경우 모두 before/after를 같은 표현 형식끼리 맞춰야 quote 유무로 인한
+        # 오탐 diff(예: '"Old"' vs 'Old')를 피할 수 있다.
+        after = result['settings'] if applied else result.get('pending', {})
         changed = {}
         for key in data:
-            if key in after and before.get(key) != after.get(key):
+            if key not in after:
+                continue
+            after_value = after[key]
+            if before.get(key) != after_value:
                 if key in _SENSITIVE_SETTING_KEYS:
                     changed[key] = {'from': '***', 'to': '***'}
                 else:
-                    changed[key] = {'from': before.get(key), 'to': after.get(key)}
+                    changed[key] = {'from': before.get(key), 'to': after_value}
         if changed:
             audit_service.record(AuditCategory.PALWORLD, AuditAction.SETTINGS_UPDATE,
-                                 _client_ip(), {'changed': changed})
+                                 _client_ip(), {'changed': changed, 'applied': applied})
         return jsonify(result), 200
     except ServerRunningError as e:
         return jsonify({'error': str(e)}), 409
