@@ -149,3 +149,34 @@ def test_get_state_includes_version_and_log():
     updater._version['local_build'] = '100'
     s = updater.get_state()
     assert s['status'] == 'idle' and s['local_build'] == '100' and s['log'] == ['line1']
+
+
+def test_steamcmd_update_timeout_raises():
+    fake_proc = MagicMock()
+    fake_proc.stdout = iter([])          # 출력 없이 종료된 상황 재현
+    fake_proc.wait.return_value = -9
+    killed = {}
+    fake_proc.kill.side_effect = lambda: killed.setdefault('yes', True)
+
+    class FiringTimer:
+        def __init__(self, interval, func):
+            self.func = func
+        def start(self):
+            self.func()                  # 워치독이 즉시 발화한 상황
+        def cancel(self):
+            pass
+
+    with patch.object(updater.subprocess, 'Popen', return_value=fake_proc), \
+         patch.object(updater.threading, 'Timer', FiringTimer):
+        with pytest.raises(RuntimeError, match='시간 초과'):
+            updater._run_steamcmd_update()
+    assert killed.get('yes') is True
+
+
+def test_steamcmd_update_success_output_overrides_exit_code():
+    fake_proc = MagicMock()
+    fake_proc.stdout = iter(["Update state (0x61) downloading, progress: 50.0", "Success! App '2394010' fully installed."])
+    fake_proc.wait.return_value = 7      # steamcmd는 성공해도 0이 아닐 수 있다
+    with patch.object(updater.subprocess, 'Popen', return_value=fake_proc):
+        updater._run_steamcmd_update()   # 예외 없어야 함
+    assert any('Success!' in l for l in updater._log)

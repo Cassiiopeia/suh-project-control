@@ -13,7 +13,7 @@ from datetime import datetime
 
 from config.palworld_config import (
     STEAMCMD_EXE, PALWORLD_APP_ID, APP_MANIFEST_PATH,
-    UPDATE_CHECK_INTERVAL_SEC, UPDATE_LOG_MAXLEN,
+    UPDATE_CHECK_INTERVAL_SEC, UPDATE_LOG_MAXLEN, UPDATE_TIMEOUT_SEC,
 )
 from service import audit_service
 from service.audit_service import AuditCategory, AuditAction
@@ -121,14 +121,29 @@ def _run_steamcmd_update():
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         text=True, errors='replace', bufsize=1
     )
+    timed_out = threading.Event()
+
+    def _kill_stalled():
+        timed_out.set()
+        proc.kill()
+
+    # 읽기 루프 자체가 EOF까지 블록되므로, 벽시계 기준 워치독이 멈춘 프로세스를 강제 종료해
+    # except 경로(서비스 복구 재시작)가 반드시 실행되게 한다.
+    watchdog = threading.Timer(UPDATE_TIMEOUT_SEC, _kill_stalled)
+    watchdog.start()
     success_seen = False
-    for line in proc.stdout:
-        line = line.strip()
-        if line:
-            _log.append(line)
-            if 'Success!' in line:
-                success_seen = True
-    code = proc.wait(timeout=3600)
+    try:
+        for line in proc.stdout:
+            line = line.strip()
+            if line:
+                _log.append(line)
+                if 'Success!' in line:
+                    success_seen = True
+        code = proc.wait()
+    finally:
+        watchdog.cancel()
+    if timed_out.is_set():
+        raise RuntimeError(f'steamcmd 시간 초과({UPDATE_TIMEOUT_SEC}초) — 프로세스 강제 종료')
     # steamcmd는 성공해도 0이 아닌 코드를 내는 경우가 있어 출력의 Success!를 함께 본다
     if not success_seen and code != 0:
         raise RuntimeError(f'steamcmd 실패 (exit {code})')
