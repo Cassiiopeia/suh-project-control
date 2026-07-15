@@ -94,6 +94,7 @@ function renderPlayers(players) {
   } else {
     tbody.innerHTML = '<tr><td colspan="7">접속자 없음</td></tr>';
   }
+  document.getElementById('players-section')?.classList.toggle('hidden', !(players && players.length));
 }
 
 /* 월드/서버 정보 카드 — info + settings 요약 */
@@ -456,9 +457,9 @@ async function startServerUpdate() {
 function initLogViewer() {
   createLogViewer(document.getElementById('palworld-log-viewer'), {
     sources: [
+      { id: 'game', label: '게임 로그' },
       { id: 'events', label: '이벤트' },
       { id: 'audit', label: '감사' },
-      { id: 'game', label: '게임 로그' },
       { id: 'stderr', label: '오류(stderr)' },
       { id: 'flask', label: '시스템(Flask)' },
     ],

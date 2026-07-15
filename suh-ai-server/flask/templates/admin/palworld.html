@@ -103,6 +103,65 @@
           <div id="spark-players" class="h-14"></div>
         </div>
       </div>
+
+      <div id="players-section" class="hidden">
+        <h3 class="font-medium text-sm mb-2 flex items-center gap-2">
+          <i data-lucide="users" class="size-4"></i>접속 중인 플레이어
+        </h3>
+        <div class="overflow-x-auto">
+          <table class="table table-sm">
+            <thead><tr>
+              <th>이름</th><th>계정(Steam)</th><th>레벨</th><th>Ping</th>
+              <th>SteamID</th><th>IP</th><th>월드 좌표</th>
+            </tr></thead>
+            <tbody id="player-list"><tr><td colspan="7">-</td></tr></tbody>
+          </table>
+        </div>
+        <p class="text-xs opacity-50 mt-2">SteamID·IP·좌표는 관리자만 볼 수 있는 정보입니다.</p>
+      </div>
+    </div>
+  </div>
+
+  <div role="tablist" class="tabs tabs-lift">
+    <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="로그" checked>
+    <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-6">
+      <div id="palworld-log-viewer"></div>
+    </div>
+
+    <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="설정">
+    <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-6">
+      <div class="alert alert-warning mb-4 text-sm">
+        <i data-lucide="triangle-alert" class="size-5"></i>
+        <span>설정은 서버를 <b>완전히 중지한 뒤</b> 저장해야 합니다. 실행 중 수정하면 종료 시 기존 값으로 덮어써집니다.</span>
+      </div>
+      <div class="settings-toolbar">
+        <div>
+          <h2 class="settings-title">서버 기본 설정</h2>
+          <p class="settings-subtitle">현재 저장값을 보여줍니다. 추천값은 버튼으로 한 번에 적용할 수 있습니다.</p>
+        </div>
+        <button type="button" class="btn btn-outline btn-sm" onclick="applyRecommendedSettings()">추천값 적용</button>
+      </div>
+      <div class="settings-head" aria-hidden="true">
+        <span>항목</span><span>현재값</span><span>기본값 / 추천값</span><span>설명</span>
+      </div>
+      <div id="settings-form" class="settings-list"></div>
+      <div class="settings-actions">
+        <button class="btn btn-primary" onclick="saveSettings()">저장</button>
+        <button class="btn btn-secondary" onclick="stopSaveRestart()">중지 → 저장 → 재시작</button>
+      </div>
+    </div>
+
+    <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="백업">
+    <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-6">
+      <button class="btn btn-primary mb-4" onclick="createBackup()">
+        <i data-lucide="archive" class="size-4"></i>지금 백업
+      </button>
+      <div class="overflow-x-auto">
+        <table class="table table-zebra">
+          <thead><tr><th>이름</th><th>크기(MB)</th><th>생성 시각</th></tr></thead>
+          <tbody id="backup-list"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 
@@ -149,63 +208,6 @@
         </div>
       </div>
       <p id="guide-server-info" class="text-sm opacity-70 mt-1"></p>
-    </div>
-  </div>
-
-  <div role="tablist" class="tabs tabs-lift">
-    <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="설정" checked>
-    <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-6">
-      <div class="alert alert-warning mb-4 text-sm">
-        <i data-lucide="triangle-alert" class="size-5"></i>
-        <span>설정은 서버를 <b>완전히 중지한 뒤</b> 저장해야 합니다. 실행 중 수정하면 종료 시 기존 값으로 덮어써집니다.</span>
-      </div>
-      <div class="settings-toolbar">
-        <div>
-          <h2 class="settings-title">서버 기본 설정</h2>
-          <p class="settings-subtitle">현재 저장값을 보여줍니다. 추천값은 버튼으로 한 번에 적용할 수 있습니다.</p>
-        </div>
-        <button type="button" class="btn btn-outline btn-sm" onclick="applyRecommendedSettings()">추천값 적용</button>
-      </div>
-      <div class="settings-head" aria-hidden="true">
-        <span>항목</span><span>현재값</span><span>기본값 / 추천값</span><span>설명</span>
-      </div>
-      <div id="settings-form" class="settings-list"></div>
-      <div class="settings-actions">
-        <button class="btn btn-primary" onclick="saveSettings()">저장</button>
-        <button class="btn btn-secondary" onclick="stopSaveRestart()">중지 → 저장 → 재시작</button>
-      </div>
-    </div>
-
-    <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="로그">
-    <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-6">
-      <div id="palworld-log-viewer"></div>
-    </div>
-
-    <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="백업">
-    <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-6">
-      <button class="btn btn-primary mb-4" onclick="createBackup()">
-        <i data-lucide="archive" class="size-4"></i>지금 백업
-      </button>
-      <div class="overflow-x-auto">
-        <table class="table table-zebra">
-          <thead><tr><th>이름</th><th>크기(MB)</th><th>생성 시각</th></tr></thead>
-          <tbody id="backup-list"></tbody>
-        </table>
-      </div>
-    </div>
-
-    <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="플레이어">
-    <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-6">
-      <div class="overflow-x-auto">
-        <table class="table table-sm">
-          <thead><tr>
-            <th>이름</th><th>계정(Steam)</th><th>레벨</th><th>Ping</th>
-            <th>SteamID</th><th>IP</th><th>월드 좌표</th>
-          </tr></thead>
-          <tbody id="player-list"><tr><td colspan="7">-</td></tr></tbody>
-        </table>
-      </div>
-      <p class="text-xs opacity-50 mt-2">SteamID·IP·좌표는 관리자만 볼 수 있는 정보입니다.</p>
     </div>
   </div>
 </div>
