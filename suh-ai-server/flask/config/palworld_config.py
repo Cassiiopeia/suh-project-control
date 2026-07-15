@@ -22,12 +22,17 @@ PENDING_SETTINGS_PATH = os.path.join(PALWORLD_BASE_DIR, "pending_settings.json")
 # stderr  = NSSM 표준에러 리다이렉트 (크래시·프로세스 단서)
 # flask   = Flask 앱(관리자 서버) 자체 로그 — 관리자 시스템 로그 조회용
 _PAL_STDOUT = os.path.join(PALWORLD_BASE_DIR, "logs", "palserver-stdout.log")
+# 서버 바이너리 업데이트(steamcmd) 출력 로그 파일 + 마지막 업데이트 결과 영속화 파일.
+# Flask 재시작 후에도 이력을 조회/표시할 수 있도록 메모리 링버퍼와 별도로 디스크에 남긴다.
+UPDATE_LOG_FILE = os.path.join(PALWORLD_BASE_DIR, "logs", "palworld-update.log")
+UPDATE_LAST_FILE = os.path.join(PALWORLD_BASE_DIR, "logs", "palworld-update-last.json")
 LOG_SOURCES = {
     "events": os.path.join(PALWORLD_BASE_DIR, "logs", "palworld-events.jsonl"),
     "game":   _PAL_STDOUT,
     "stdout": _PAL_STDOUT,
     "stderr": os.path.join(PALWORLD_BASE_DIR, "logs", "palserver-stderr.log"),
     "flask":  os.path.join(r"C:\AI\suh-ai-server", "flask", "logs", "nssm-stderr.log"),
+    "update": UPDATE_LOG_FILE,
 }
 
 # 메트릭 시계열 히스토리 (FPS·접속자·프레임타임 추이 그래프용).

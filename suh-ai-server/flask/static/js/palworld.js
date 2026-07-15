@@ -405,8 +405,17 @@ function renderUpdateState(s) {
   builds.textContent = (s.local_build ? '빌드 ' + s.local_build : '') +
     (s.update_available === true && s.remote_build ? ' → ' + s.remote_build : '');
 
+  const lastEl = document.getElementById('update-last');
+  if (lastEl) {
+    lastEl.textContent = s.last_update
+      ? '마지막 업데이트: ' + s.last_update.finished_at + ' · 빌드 ' + s.last_update.build
+      : '';
+  }
+
   const running = s.status === 'running';
-  const showPanel = running || ((s.status === 'done' || s.status === 'failed') && s.log && s.log.length);
+  // 완료(done) 상태는 토스트 + 배지로 충분히 안내되므로 패널을 숨긴다.
+  // 실패(failed)는 에러 확인용으로 로그가 있으면 계속 띄워둔다.
+  const showPanel = running || (s.status === 'failed' && s.log && s.log.length);
   const panel = document.getElementById('update-progress');
   panel.classList.toggle('hidden', !showPanel);
   document.getElementById('update-spinner').classList.toggle('hidden', !running);
@@ -472,6 +481,7 @@ function initLogViewer() {
       { id: 'game', label: '게임 로그' },
       { id: 'events', label: '이벤트' },
       { id: 'audit', label: '감사' },
+      { id: 'update', label: '업데이트' },
       { id: 'stderr', label: '오류(stderr)' },
       { id: 'flask', label: '시스템(Flask)' },
     ],
