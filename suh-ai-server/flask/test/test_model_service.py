@@ -89,3 +89,90 @@ def test_list_hf_gguf_files_gated_repo_raises_permission_error(monkeypatch):
     monkeypatch.setattr('service.model_service.requests.get', fake_get)
     with pytest.raises(PermissionError):
         ModelService().list_hf_gguf_files('meta-llama/gated-repo')
+
+
+# ---------- Ollama 설치 목록 / 삭제 / pull ----------
+
+class FakeOllamaClient:
+    """ollama.Client 대역 — list/show/delete/pull"""
+
+    def __init__(self, models=None, capabilities=None, pull_events=None, pull_error=None):
+        self._models = models or []
+        self._capabilities = capabilities or {}
+        self._pull_events = pull_events or []
+        self._pull_error = pull_error
+        self.deleted = []
+
+    def list(self):
+        return SimpleNamespace(models=self._models)
+
+    def show(self, name):
+        return SimpleNamespace(capabilities=self._capabilities.get(name, []))
+
+    def delete(self, name):
+        self.deleted.append(name)
+
+    def pull(self, name, stream=True):
+        if self._pull_error:
+            raise self._pull_error
+        return iter(self._pull_events)
+
+
+def make_model(name, size=1000, family='gemma3', param='4.3B', quant='Q4_K_M'):
+    return SimpleNamespace(
+        model=name, size=size,
+        modified_at=datetime(2026, 7, 16, 12, 0, 0),
+        details=SimpleNamespace(parameter_size=param, quantization_level=quant, family=family),
+    )
+
+
+def test_list_installed_models_includes_vision_capability():
+    svc = ModelService()
+    svc.client = FakeOllamaClient(
+        models=[make_model('gemma3:4b'), make_model('qwen3:0.6b')],
+        capabilities={'gemma3:4b': ['completion', 'vision'], 'qwen3:0.6b': ['completion']},
+    )
+    models = svc.list_installed_models()
+    assert [m['name'] for m in models] == ['gemma3:4b', 'qwen3:0.6b']
+    assert models[0]['vision'] is True
+    assert models[1]['vision'] is False
+    assert models[0]['quantization'] == 'Q4_K_M'
+    assert models[0]['modified_at'] == '2026-07-16T12:00:00'
+
+
+def test_list_installed_models_show_failure_defaults_vision_false():
+    class BrokenShowClient(FakeOllamaClient):
+        def show(self, name):
+            raise Exception('model not found')
+
+    svc = ModelService()
+    svc.client = BrokenShowClient(models=[make_model('gemma3:4b')])
+    assert svc.list_installed_models()[0]['vision'] is False
+
+
+def test_delete_model_calls_client():
+    svc = ModelService()
+    svc.client = FakeOllamaClient()
+    svc.delete_model('gemma3:4b')
+    assert svc.client.deleted == ['gemma3:4b']
+
+
+def test_pull_model_stream_yields_ndjson_progress():
+    svc = ModelService()
+    svc.client = FakeOllamaClient(pull_events=[
+        SimpleNamespace(status='pulling manifest', total=None, completed=None),
+        SimpleNamespace(status='pulling abc123', total=100, completed=50),
+        SimpleNamespace(status='success', total=None, completed=None),
+    ])
+    lines = [json.loads(line) for line in svc.pull_model_stream('hf.co/unsloth/x:Q4_K_M')]
+    assert lines[0]['status'] == 'pulling manifest'
+    assert lines[1] == {'status': 'pulling abc123', 'total': 100, 'completed': 50}
+    assert lines[2]['status'] == 'success'
+
+
+def test_pull_model_stream_yields_error_line_on_failure():
+    svc = ModelService()
+    svc.client = FakeOllamaClient(pull_error=Exception('pull model manifest: file does not exist'))
+    lines = [json.loads(line) for line in svc.pull_model_stream('hf.co/bad/repo')]
+    assert len(lines) == 1
+    assert 'file does not exist' in lines[0]['error']

@@ -75,3 +75,55 @@ class ModelService:
                 'ollama_name': f'hf.co/{repo_id}:{quant}' if quant else f'hf.co/{repo_id}',
             })
         return files
+
+    # ---------- Ollama ----------
+
+    def list_installed_models(self) -> list:
+        """설치된 모델 목록 + vision capability (이름순)"""
+        response = self.client.list()
+        models = []
+        for m in response.models:
+            details = m.details
+            models.append({
+                'name': m.model,
+                'size': m.size,
+                'parameter_size': details.parameter_size if details else None,
+                'quantization': details.quantization_level if details else None,
+                'family': details.family if details else None,
+                'modified_at': m.modified_at.isoformat() if m.modified_at else None,
+                'vision': self._has_vision(m.model),
+            })
+        models.sort(key=lambda x: x['name'] or '')
+        return models
+
+    def _has_vision(self, name: str) -> bool:
+        """Ollama show의 capabilities에 vision 포함 여부 (조회 실패 시 False)"""
+        try:
+            info = self.client.show(name)
+            return 'vision' in (info.capabilities or [])
+        except Exception:
+            return False
+
+    def delete_model(self, name: str) -> None:
+        """설치된 모델 삭제"""
+        self.client.delete(name)
+
+    def pull_model_stream(self, name: str):
+        """Ollama pull 진행률 제너레이터 — NDJSON 라인 yield
+
+        클라이언트 연결이 끊기면 WSGI가 제너레이터를 close()하고(GeneratorExit)
+        ollama 클라이언트의 HTTP 스트림도 함께 닫혀 다운로드가 중단된다.
+        받다 만 레이어는 Ollama가 캐시하므로 재시도 시 이어받는다.
+        """
+        logger.info(f"Model pull start: {name}")
+        try:
+            for progress in self.client.pull(name, stream=True):
+                yield json.dumps({
+                    'status': progress.status,
+                    'total': progress.total,
+                    'completed': progress.completed,
+                }) + '\n'
+            logger.info(f"Model pull done: {name}")
+        except Exception as e:
+            logger.error(f"Model pull failed ({name}): {str(e)}")
+            yield json.dumps({'error': str(e)}) + '\n'
