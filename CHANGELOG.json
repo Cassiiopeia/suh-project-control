@@ -1,14 +1,43 @@
 {
   "metadata": {
-    "lastUpdated": "2026-07-16T06:25:11Z",
-    "currentVersion": "2.0.33",
+    "lastUpdated": "2026-07-16T07:27:52Z",
+    "currentVersion": "2.0.34",
     "projectType": "python",
-    "totalReleases": 29,
+    "totalReleases": 30,
     "projectTypes": [
       "python"
     ]
   },
   "releases": [
+    {
+      "version": "2.0.34",
+      "project_type": "python",
+      "project_types": [
+        "python"
+      ],
+      "date": "2026-07-16",
+      "pr_number": 85,
+      "raw_summary": "## Summary by CodeRabbit\n\n## 릴리스 노트\n\n* **새 기능**\n  * 관리자 페이지에 모델 관리 화면이 추가되었습니다\n  * Hugging Face에서 AI 모델을 검색해 바로 내려받을 수 있습니다\n  * 모델 다운로드 진행률 표시와 중간 취소를 지원합니다\n  * 설치된 모델 목록 확인과 삭제가 가능해졌습니다\n  * 여러 모델을 같은 입력으로 비교하는 벤치마크 기능이 추가되었습니다\n\n* **개선**\n  * 사용 가능 모델 목록이 실제 설치 상태를 반영하도록 개선되었습니다",
+      "parsed_changes": {
+        "새_기능": {
+          "title": "새 기능",
+          "items": [
+            "관리자 페이지에 모델 관리 화면이 추가되었습니다",
+            "Hugging Face에서 AI 모델을 검색해 바로 내려받을 수 있습니다",
+            "모델 다운로드 진행률 표시와 중간 취소를 지원합니다",
+            "설치된 모델 목록 확인과 삭제가 가능해졌습니다",
+            "여러 모델을 같은 입력으로 비교하는 벤치마크 기능이 추가되었습니다"
+          ]
+        },
+        "개선": {
+          "title": "개선",
+          "items": [
+            "사용 가능 모델 목록이 실제 설치 상태를 반영하도록 개선되었습니다"
+          ]
+        }
+      },
+      "parse_method": "markdown"
+    },
     {
       "version": "2.0.33",
       "project_type": "python",
