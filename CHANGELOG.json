@@ -1,14 +1,41 @@
 {
   "metadata": {
-    "lastUpdated": "2026-07-15T07:24:16Z",
-    "currentVersion": "2.0.32",
+    "lastUpdated": "2026-07-16T06:25:11Z",
+    "currentVersion": "2.0.33",
     "projectType": "python",
-    "totalReleases": 28,
+    "totalReleases": 29,
     "projectTypes": [
       "python"
     ]
   },
   "releases": [
+    {
+      "version": "2.0.33",
+      "project_type": "python",
+      "project_types": [
+        "python"
+      ],
+      "date": "2026-07-16",
+      "pr_number": 83,
+      "raw_summary": "## Summary by CodeRabbit\n\n## 릴리스 노트\n\n* **새 기능**\n  * 관리자 페이지에 AI 모델 JSON 응답 테스트 페이지 추가\n  * 모델별 응답 속도·JSON 형식 준수 여부를 한눈에 비교 가능\n  * 자주 쓰는 JSON 구조 프리셋 4종 제공\n\n* **문서**\n  * 이슈 초안과 구현 보고서 문서 정리",
+      "parsed_changes": {
+        "새_기능": {
+          "title": "새 기능",
+          "items": [
+            "관리자 페이지에 AI 모델 JSON 응답 테스트 페이지 추가",
+            "모델별 응답 속도·JSON 형식 준수 여부를 한눈에 비교 가능",
+            "자주 쓰는 JSON 구조 프리셋 4종 제공"
+          ]
+        },
+        "문서": {
+          "title": "문서",
+          "items": [
+            "이슈 초안과 구현 보고서 문서 정리"
+          ]
+        }
+      },
+      "parse_method": "markdown"
+    },
     {
       "version": "2.0.32",
       "project_type": "python",
