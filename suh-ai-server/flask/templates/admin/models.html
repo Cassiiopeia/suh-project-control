@@ -1,0 +1,162 @@
+{% extends "admin/base.html" %}
+{% block title %}모델 관리 | SUH AI Server{% endblock %}
+{% block page_title %}모델 관리{% endblock %}
+{% block content %}
+<div class="space-y-6 max-w-6xl mx-auto">
+
+  <!-- 설치된 모델 -->
+  <div class="card bg-base-100 shadow">
+    <div class="card-body">
+      <div class="flex items-center justify-between">
+        <h2 class="card-title text-base">
+          <i data-lucide="hard-drive" class="size-5 text-primary"></i>설치된 모델
+          <span id="installed-count" class="badge badge-ghost badge-sm">0</span>
+        </h2>
+        <button id="installed-refresh" class="btn btn-ghost btn-sm" title="새로고침">
+          <i data-lucide="refresh-cw" class="size-4"></i>
+        </button>
+      </div>
+      <div id="installed-error" class="alert alert-error hidden">
+        <span>Ollama 서버에 연결할 수 없습니다.</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="table table-sm">
+          <thead>
+            <tr><th>이름</th><th>크기</th><th>패밀리</th><th>파라미터</th><th>양자화</th><th>수정일</th><th></th></tr>
+          </thead>
+          <tbody id="installed-body">
+            <tr><td colspan="7" class="text-center opacity-60">불러오는 중...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- HF 검색·다운로드 -->
+  <div class="card bg-base-100 shadow">
+    <div class="card-body">
+      <h2 class="card-title text-base">
+        <i data-lucide="search" class="size-5 text-primary"></i>Hugging Face 모델 검색
+      </h2>
+      <div class="join w-full max-w-md">
+        <input id="search-input" class="input input-sm join-item flex-1"
+               placeholder="예: gemma, qwen vl, ocr">
+        <button id="search-btn" class="btn btn-primary btn-sm join-item">검색</button>
+      </div>
+      <p class="text-xs opacity-60">
+        GGUF 형식 공개 모델만 검색됩니다. gated 모델(승인 필요)은 지원하지 않습니다.
+        vision 모델은 레포 구조에 따라 가져오기가 실패할 수 있습니다.
+      </p>
+
+      <div id="search-results-wrap" class="overflow-x-auto hidden">
+        <table class="table table-sm">
+          <thead><tr><th>레포 (클릭해서 파일 보기)</th><th>다운로드</th><th>좋아요</th><th>업데이트</th></tr></thead>
+          <tbody id="search-body"></tbody>
+        </table>
+      </div>
+
+      <div id="files-wrap" class="hidden">
+        <h3 class="font-semibold text-sm mt-2">
+          <span id="files-repo" class="font-mono"></span> 의 GGUF 파일
+        </h3>
+        <div class="overflow-x-auto">
+          <table class="table table-sm">
+            <thead><tr><th>파일</th><th>양자화</th><th>크기</th><th></th></tr></thead>
+            <tbody id="files-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 다운로드 진행률 -->
+      <div id="pull-wrap" class="hidden border border-base-300 rounded-lg p-3 space-y-2">
+        <div class="flex items-center justify-between">
+          <span id="pull-name" class="text-sm font-mono"></span>
+          <button id="pull-cancel" class="btn btn-error btn-xs">취소</button>
+        </div>
+        <progress id="pull-progress" class="progress progress-primary w-full" value="0" max="100"></progress>
+        <div class="flex justify-between text-xs opacity-70">
+          <span id="pull-status">준비 중...</span>
+          <span id="pull-bytes"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 테스트·벤치마크 -->
+  <div class="card bg-base-100 shadow">
+    <div class="card-body">
+      <h2 class="card-title text-base">
+        <i data-lucide="flask-conical" class="size-5 text-primary"></i>테스트 · 벤치마크
+      </h2>
+      <p class="text-xs opacity-60">
+        같은 입력을 선택한 모델들에 순차 실행해 결과와 응답 시간을 비교합니다.
+        이미지를 첨부하면 vision 모델만 선택할 수 있습니다. 모델 1개만 선택하면 단일 테스트입니다.
+      </p>
+
+      <fieldset class="fieldset w-full">
+        <legend class="fieldset-legend">프롬프트 (필수)</legend>
+        <textarea id="bench-prompt" class="textarea textarea-sm w-full" rows="2"
+                  placeholder="예: Extract all text from this image / 한국의 수도는?"></textarea>
+      </fieldset>
+
+      <div class="flex flex-wrap gap-4">
+        <fieldset class="fieldset">
+          <legend class="fieldset-legend">이미지 파일 (선택)</legend>
+          <input id="bench-file" type="file" accept="image/*" class="file-input file-input-sm w-72">
+        </fieldset>
+        <fieldset class="fieldset">
+          <legend class="fieldset-legend">또는 이미지 URL (선택)</legend>
+          <input id="bench-url" class="input input-sm w-72" placeholder="https://...">
+        </fieldset>
+      </div>
+
+      <fieldset class="fieldset w-full">
+        <legend class="fieldset-legend">모델 선택</legend>
+        <div id="bench-models" class="flex flex-wrap gap-2">
+          <span class="text-sm opacity-60">설치된 모델을 불러오는 중...</span>
+        </div>
+      </fieldset>
+
+      <div class="card-actions items-center">
+        <button id="bench-run" class="btn btn-primary btn-sm">
+          <i data-lucide="play" class="size-4"></i>실행
+        </button>
+        <span id="bench-status" class="text-sm opacity-70 hidden">
+          <span class="loading loading-spinner loading-xs"></span>
+          <span id="bench-current"></span> 실행 중...
+        </span>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="table table-sm">
+          <thead><tr><th>모델</th><th>상태</th><th>시간</th><th>결과</th></tr></thead>
+          <tbody id="bench-body">
+            <tr id="bench-empty"><td colspan="4" class="text-center opacity-60">아직 실행한 벤치마크가 없습니다.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 삭제 확인 모달 -->
+<dialog id="delete-modal" class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg flex items-center gap-2">
+      <i data-lucide="trash-2" class="size-5 text-error"></i>모델 삭제
+    </h3>
+    <p class="py-3 text-sm">
+      <span id="delete-model-name" class="font-mono font-semibold"></span> 모델을 삭제할까요?
+      디스크에서 제거되며 다시 사용하려면 재다운로드해야 합니다.
+    </p>
+    <div class="modal-action">
+      <form method="dialog"><button class="btn btn-ghost btn-sm">취소</button></form>
+      <button id="delete-confirm" class="btn btn-error btn-sm">삭제</button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+{% endblock %}
+{% block extra_js %}
+<script src="{{ root }}/static/js/models.js?v={{ asset('js/models.js') }}"></script>
+{% endblock %}
