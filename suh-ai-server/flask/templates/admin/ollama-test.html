@@ -1,0 +1,95 @@
+{% extends "admin/base.html" %}
+{% block title %}Ollama 테스트 | SUH AI Server{% endblock %}
+{% block page_title %}Ollama Structured Output 테스트{% endblock %}
+{% block content %}
+<div class="space-y-6 max-w-5xl mx-auto">
+
+  <div class="card bg-base-100 shadow">
+    <div class="card-body">
+      <h2 class="card-title text-base">
+        <i data-lucide="braces" class="size-5 text-primary"></i>요청 구성
+      </h2>
+
+      <div class="flex flex-wrap gap-4 items-end">
+        <fieldset class="fieldset">
+          <legend class="fieldset-legend">모델</legend>
+          <div class="join">
+            <select id="model-select" class="select select-sm join-item w-52">
+              <option value="">불러오는 중...</option>
+            </select>
+            <button id="model-refresh" class="btn btn-sm join-item" title="모델 목록 새로고침">
+              <i data-lucide="refresh-cw" class="size-4"></i>
+            </button>
+          </div>
+        </fieldset>
+        <fieldset class="fieldset">
+          <legend class="fieldset-legend">temperature</legend>
+          <input id="temperature" type="number" class="input input-sm w-24" value="0" min="0" max="2" step="0.1">
+        </fieldset>
+        <fieldset class="fieldset">
+          <legend class="fieldset-legend">format</legend>
+          <div class="join" id="format-mode">
+            <button class="btn btn-sm join-item" data-mode="none">없음</button>
+            <button class="btn btn-sm join-item" data-mode="json">"json"</button>
+            <button class="btn btn-sm join-item btn-active" data-mode="schema">JSON Schema</button>
+          </div>
+        </fieldset>
+      </div>
+
+      <fieldset class="fieldset w-full">
+        <legend class="fieldset-legend">시스템 프롬프트 (선택)</legend>
+        <input id="system-prompt" class="input input-sm w-full"
+               placeholder="예: 제공된 JSON Schema에 맞는 값만 반환하세요.">
+      </fieldset>
+
+      <fieldset class="fieldset w-full">
+        <legend class="fieldset-legend">유저 프롬프트</legend>
+        <textarea id="user-prompt" class="textarea textarea-sm w-full font-mono" rows="3"
+                  placeholder="예: 내일 병원에 갈 준비 과정을 세 단계로 나눠줘"></textarea>
+      </fieldset>
+
+      <fieldset id="schema-section" class="fieldset w-full">
+        <legend class="fieldset-legend">JSON Schema</legend>
+        <select id="schema-preset" class="select select-sm w-44">
+          <option value="simple">단순 객체</option>
+          <option value="nested">중첩 객체</option>
+          <option value="array">배열 속 Object</option>
+          <option value="enum">enum 포함</option>
+        </select>
+        <textarea id="schema-input" class="textarea textarea-sm w-full font-mono" rows="12" spellcheck="false"></textarea>
+        <div id="schema-error" class="text-error text-xs mt-1 hidden"></div>
+      </fieldset>
+
+      <div class="card-actions items-center mt-2">
+        <button id="run-btn" class="btn btn-primary btn-sm">
+          <i data-lucide="play" class="size-4"></i>실행
+        </button>
+        <span id="run-status" class="text-sm opacity-70 hidden">
+          <span class="loading loading-spinner loading-xs"></span>
+          실행 중... <span id="run-elapsed">0.0</span>s
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card bg-base-100 shadow">
+    <div class="card-body">
+      <div class="flex items-center justify-between">
+        <h2 class="card-title text-base">
+          <i data-lucide="list-checks" class="size-5 text-primary"></i>결과
+          <span id="result-count" class="badge badge-ghost badge-sm">0</span>
+        </h2>
+        <button id="clear-results" class="btn btn-ghost btn-sm">
+          <i data-lucide="trash-2" class="size-4"></i>전체 지우기
+        </button>
+      </div>
+      <div id="result-list" class="space-y-3">
+        <p id="result-empty" class="text-sm opacity-60">아직 실행한 요청이 없습니다. 모델을 바꿔가며 실행하면 결과가 여기 쌓여 비교할 수 있습니다.</p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script src="{{ root }}/static/js/ollama-test.js?v={{ asset('js/ollama-test.js') }}"></script>
+{% endblock %}
