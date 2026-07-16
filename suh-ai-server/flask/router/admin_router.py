@@ -41,3 +41,9 @@ def palworld():
 def flask_logs():
     """Flask 서버 로그 페이지"""
     return render_template('admin/logs.html', root='..', active='flask-logs')
+
+
+@admin_bp.route('/admin/ollama-test', methods=['GET'])
+def ollama_test():
+    """Ollama Structured Output 테스트 페이지"""
+    return render_template('admin/ollama-test.html', root='..', active='ollama-test')
