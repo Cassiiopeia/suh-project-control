@@ -222,6 +222,7 @@ function hasImageInput() {
 
 function renderBenchModels() {
   const wrap = el('bench-models');
+  const checked = new Set(Array.from(wrap.querySelectorAll('input:checked')).map(function (c) { return c.value; }));
   if (!installedModels.length) {
     wrap.innerHTML = '<span class="text-sm opacity-60">설치된 모델이 없습니다</span>';
     return;
@@ -232,7 +233,7 @@ function renderBenchModels() {
     return '<label class="label cursor-pointer gap-2 border border-base-300 rounded-lg px-3 py-1'
       + (disabled ? ' opacity-40' : '') + '">'
       + '<input type="checkbox" class="checkbox checkbox-sm" value="' + escapeHtml(m.name) + '"'
-      + (disabled ? ' disabled' : '') + '>'
+      + (disabled ? ' disabled' : '') + (!disabled && checked.has(m.name) ? ' checked' : '') + '>'
       + '<span class="font-mono text-sm">' + escapeHtml(m.name) + '</span>'
       + (m.vision ? '<span class="badge badge-info badge-xs">vision</span>' : '')
       + '</label>';
