@@ -40,8 +40,18 @@ def test_flask_logs_page_renders(client):
     assert 'Flask 서버 로그' in resp.get_data(as_text=True)
 
 
+def test_models_page_renders(client):
+    resp = client.get('/admin/models')
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert '모델 관리' in body
+    assert 'installed-body' in body
+    assert 'bench-run' in body
+    assert 'delete-modal' in body
+
+
 def test_no_emoji_icons_on_any_admin_page(client):
-    for path in ('/admin', '/admin/palworld', '/admin/logs'):
+    for path in ('/admin', '/admin/palworld', '/admin/logs', '/admin/models'):
         body = client.get(path).get_data(as_text=True)
         match = EMOJI_RE.search(body)
         assert not match, f'{path} 에 이모지가 남아있음: {match.group() if match else ""}'

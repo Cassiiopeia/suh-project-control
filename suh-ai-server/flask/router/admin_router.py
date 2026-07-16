@@ -47,3 +47,9 @@ def flask_logs():
 def ollama_test():
     """Ollama Structured Output 테스트 페이지"""
     return render_template('admin/ollama-test.html', root='..', active='ollama-test')
+
+
+@admin_bp.route('/admin/models', methods=['GET'])
+def models():
+    """모델 관리 페이지 (HF 검색·다운로드·벤치마크)"""
+    return render_template('admin/models.html', root='..', active='models')
