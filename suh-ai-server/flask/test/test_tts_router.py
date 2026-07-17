@@ -84,3 +84,10 @@ def test_synthesize_engine_down_503(client, monkeypatch):
     monkeypatch.setattr(tts_router_module, 'get_adapter', lambda eid: DeadAdapter())
     resp = client.post('/tts', json={'text': 'hello', 'engine': 'kokoro'})
     assert resp.status_code == 503
+
+
+def test_swagger_includes_tts_paths():
+    from router.tts_swagger import TTS_SWAGGER_PATHS
+    assert '/tts' in TTS_SWAGGER_PATHS
+    assert '/tts/engines' in TTS_SWAGGER_PATHS
+    assert '/tts/engines/{engine_id}/{action}' in TTS_SWAGGER_PATHS
