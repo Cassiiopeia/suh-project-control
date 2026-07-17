@@ -64,7 +64,7 @@ def test_synthesize_no_running_engine_503(client, monkeypatch):
 
 def test_synthesize_returns_wav(client, monkeypatch):
     class FakeAdapter:
-        def synthesize(self, text, voice, speed):
+        def synthesize(self, text, voice, speed, ref_wav=None):
             return b'RIFF-fake-wav'
 
     monkeypatch.setattr(tts_router_module.tts_service, 'get_running_engine',
@@ -78,7 +78,7 @@ def test_synthesize_returns_wav(client, monkeypatch):
 
 def test_synthesize_engine_down_503(client, monkeypatch):
     class DeadAdapter:
-        def synthesize(self, text, voice, speed):
+        def synthesize(self, text, voice, speed, ref_wav=None):
             raise Exception('connection refused')
 
     monkeypatch.setattr(tts_router_module, 'get_adapter', lambda eid: DeadAdapter())
@@ -155,3 +155,24 @@ def test_delete_missing_voice_404(client, monkeypatch):
 
     monkeypatch.setattr(tts_router_module.voice_store, 'delete', missing)
     assert client.delete('/tts/voices/u_nope1234').status_code == 404
+
+
+def test_synthesize_multipart_oneshot_cloning(client, monkeypatch):
+    import io as _io
+    captured = {}
+
+    class CloneAdapter:
+        def synthesize(self, text, voice, speed, ref_wav=None):
+            captured['text'] = text
+            captured['ref_wav'] = ref_wav
+            return b'RIFF-cloned'
+
+    monkeypatch.setattr(tts_router_module, 'get_adapter', lambda eid: CloneAdapter())
+    resp = client.post('/tts',
+                       data={'text': '안녕하세요', 'engine': 'cosyvoice',
+                             'prompt_wav': (_io.BytesIO(b'RIFF-ref-bytes'), 'me.wav')},
+                       content_type='multipart/form-data')
+    assert resp.status_code == 200
+    assert resp.data == b'RIFF-cloned'
+    assert captured['text'] == '안녕하세요'
+    assert captured['ref_wav'] == b'RIFF-ref-bytes'

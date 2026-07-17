@@ -70,9 +70,19 @@
           <input id="voice-file" type="file" accept=".wav,audio/wav"
                  class="file-input file-input-bordered file-input-sm w-72" />
         </label>
+        <span class="text-xs opacity-60 pb-2">또는</span>
+        <button id="voice-record" class="btn btn-outline btn-sm">
+          <i data-lucide="mic" class="size-4"></i><span id="voice-record-label">녹음</span>
+        </button>
+        <span id="voice-record-status" class="text-xs opacity-70 pb-2 hidden"></span>
         <button id="voice-upload" class="btn btn-primary btn-sm">
           <i data-lucide="upload" class="size-4"></i>등록
         </button>
+      </div>
+      <div id="voice-record-preview" class="hidden items-center gap-2 flex">
+        <span class="text-xs opacity-70">녹음 미리듣기:</span>
+        <audio id="voice-record-audio" controls class="h-8"></audio>
+        <button id="voice-record-discard" class="btn btn-ghost btn-xs">녹음 지우기</button>
       </div>
       <div class="overflow-x-auto">
         <table class="table table-sm">
@@ -137,10 +147,18 @@ new Audio(URL.createObjectURL(await resp.blob())).play();</pre>
           <div>
             <h3 class="font-semibold mb-1">4. 보이스 클로닝 — <code>POST /tts/voices</code></h3>
             <p class="opacity-80 mb-1">조용한 곳에서 10초 내외로 녹음한 WAV를 등록하면, 반환된 <code class="bg-base-200 px-1 rounded">voice id</code>로 그 목소리 합성이 가능합니다.</p>
-            <pre class="bg-base-200 rounded p-3 text-xs overflow-x-auto">curl -X POST https://ai.suhsaechan.kr/api/flask/tts/voices \
+            <pre class="bg-base-200 rounded p-3 text-xs overflow-x-auto">« 방법 A: 보이스 등록 후 재사용 (학습 불필요 — 등록 즉시 사용 가능) »
+curl -X POST https://ai.suhsaechan.kr/api/flask/tts/voices \
   -H "X-API-Key: {API키}" \
-  -F "name=내 목소리" -F "file=@my_voice.wav"</pre>
-            <p class="text-warning text-xs mt-1">본인 또는 동의받은 사람의 목소리만 등록하세요. 타인 음성의 무단 클로닝은 금지됩니다.</p>
+  -F "name=내 목소리" -F "file=@my_voice.wav"
+# → {"voice": {"id": "u_xxxxxxxx"}} — 이후 POST /tts의 voice에 이 id 사용
+
+« 방법 B: 등록 없이 원샷 클로닝 (요청마다 다른 목소리 가능) »
+curl -X POST https://ai.suhsaechan.kr/api/flask/tts \
+  -H "X-API-Key: {API키}" \
+  -F "text=안녕하세요" -F "engine=cosyvoice" -F "prompt_wav=@my_voice.wav" \
+  --output result.wav</pre>
+            <p class="text-warning text-xs mt-1">본인 또는 동의받은 사람의 목소리만 사용하세요. 타인 음성의 무단 클로닝은 금지됩니다.</p>
           </div>
 
           <div>

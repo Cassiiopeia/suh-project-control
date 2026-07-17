@@ -114,8 +114,15 @@ def delete_voice(voice_id):
 
 @tts_bp.route('/tts', methods=['POST'])
 def synthesize():
-    """텍스트 → WAV. engine 생략 시 실행 중 엔진 사용"""
-    data = request.get_json(silent=True) or {}
+    """텍스트 → WAV. engine 생략 시 실행 중 엔진 사용.
+    JSON 또는 multipart 지원 — multipart에 prompt_wav를 첨부하면 등록 없이 원샷 클로닝"""
+    ref_wav = None
+    if request.content_type and 'multipart/form-data' in request.content_type:
+        data = request.form
+        prompt = request.files.get('prompt_wav')
+        ref_wav = prompt.read() if prompt else None
+    else:
+        data = request.get_json(silent=True) or {}
     text = (data.get('text') or '').strip()
     if not text:
         return jsonify({'error': 'text is required'}), 400
@@ -132,7 +139,7 @@ def synthesize():
     except (TypeError, ValueError):
         return jsonify({'error': 'speed must be a number'}), 400
     try:
-        wav = get_adapter(engine_id).synthesize(text, voice, speed)
+        wav = get_adapter(engine_id).synthesize(text, voice, speed, ref_wav=ref_wav)
     except Exception as e:
         logger.error(f"TTS synth failed ({engine_id}): {str(e)}")
         return jsonify({'error': f'합성 실패: {str(e)}'}), 503
