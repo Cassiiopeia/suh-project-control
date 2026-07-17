@@ -2,7 +2,8 @@
 Model management router — HF 검색·다운로드(pull)·설치 목록·삭제
 관리 페이지(/admin/models)가 사용. 텍스트 테스트는 /ollama/chat, 이미지 테스트는 /ocr/* 재사용.
 """
-from flask import Blueprint, Response, jsonify, request
+from flask import Blueprint, jsonify, request
+from service.download_queue_service import DownloadQueueService
 from service.model_service import ModelService
 import logging
 
@@ -10,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 model_bp = Blueprint('model', __name__)
 model_service = ModelService()
+queue_service = DownloadQueueService()
 
 
 @model_bp.route('/models/installed', methods=['GET'])
@@ -68,24 +70,33 @@ def hf_files():
         return jsonify({'error': f'HF file list failed: {str(e)}'}), 500
 
 
-@model_bp.route('/models/pull', methods=['POST'])
-def pull_model():
-    """모델 다운로드 — Ollama pull 진행률을 NDJSON 스트림으로 중계
-
-    클라이언트가 연결을 끊으면(취소 버튼) 제너레이터가 닫혀 다운로드도 중단된다.
-    """
-    data = request.get_json()
-    if not data:
-        return jsonify({'error': 'JSON body required'}), 400
+@model_bp.route('/models/queue', methods=['POST'])
+def enqueue_download():
+    """모델 다운로드 큐 추가 — 워커가 순차 실행하므로 브라우저를 닫아도 진행된다"""
+    data = request.get_json(silent=True) or {}
     name = data.get('name', '').strip() if isinstance(data.get('name'), str) else ''
     if not name:
         return jsonify({'error': 'name is required'}), 400
-    return Response(
-        model_service.pull_model_stream(name),
-        mimetype='application/x-ndjson',
-        headers={
-            # nginx 프록시 버퍼링 해제 — 진행률을 실시간 전달
-            'X-Accel-Buffering': 'no',
-            'Cache-Control': 'no-cache',
-        },
-    )
+    try:
+        queue_service.enqueue(name)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 409
+    logger.info(f"Model queued: {name}")
+    return jsonify({'success': True, 'queue': queue_service.get_state()}), 200
+
+
+@model_bp.route('/models/queue', methods=['GET'])
+def queue_state():
+    """다운로드 큐 상태 조회 (프론트 폴링용)"""
+    return jsonify({'success': True, 'queue': queue_service.get_state()}), 200
+
+
+@model_bp.route('/models/queue/<item_id>', methods=['DELETE'])
+def cancel_download(item_id):
+    """대기 항목 제거 또는 진행 중 다운로드 취소"""
+    try:
+        result = queue_service.cancel(item_id)
+    except KeyError:
+        return jsonify({'error': '해당 항목을 찾을 수 없습니다'}), 404
+    logger.info(f"Model queue cancel: {item_id} -> {result}")
+    return jsonify({'success': True, 'result': result}), 200

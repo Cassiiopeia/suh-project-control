@@ -1,8 +1,7 @@
 """
 Model Management Service
-HF 허브 검색·GGUF 파일 조회 + Ollama pull/삭제/설치 목록(vision capability 포함)
+HF 허브 검색·GGUF 파일 조회 + Ollama 삭제/설치 목록(vision capability 포함)
 """
-import json
 import logging
 import re
 
@@ -18,7 +17,7 @@ _QUANT_RE = re.compile(r'[-.]((?:i?q\d[a-z0-9_]*)|f16|f32|bf16)\.gguf$', re.IGNO
 
 
 class ModelService:
-    """HF 허브 검색과 Ollama 모델 관리(pull/delete/list)를 담당"""
+    """HF 허브 검색과 Ollama 모델 관리(delete/list)를 담당"""
 
     def __init__(self, ollama_url: str = 'http://127.0.0.1:11434'):
         self.ollama_url = ollama_url.rstrip('/')
@@ -107,23 +106,3 @@ class ModelService:
     def delete_model(self, name: str) -> None:
         """설치된 모델 삭제"""
         self.client.delete(name)
-
-    def pull_model_stream(self, name: str):
-        """Ollama pull 진행률 제너레이터 — NDJSON 라인 yield
-
-        클라이언트 연결이 끊기면 WSGI가 제너레이터를 close()하고(GeneratorExit)
-        ollama 클라이언트의 HTTP 스트림도 함께 닫혀 다운로드가 중단된다.
-        받다 만 레이어는 Ollama가 캐시하므로 재시도 시 이어받는다.
-        """
-        logger.info(f"Model pull start: {name}")
-        try:
-            for progress in self.client.pull(name, stream=True):
-                yield json.dumps({
-                    'status': progress.status,
-                    'total': progress.total,
-                    'completed': progress.completed,
-                }) + '\n'
-            logger.info(f"Model pull done: {name}")
-        except Exception as e:
-            logger.error(f"Model pull failed ({name}): {str(e)}")
-            yield json.dumps({'error': str(e)}) + '\n'
