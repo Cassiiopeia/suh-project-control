@@ -91,3 +91,67 @@ def test_swagger_includes_tts_paths():
     assert '/tts' in TTS_SWAGGER_PATHS
     assert '/tts/engines' in TTS_SWAGGER_PATHS
     assert '/tts/engines/{engine_id}/{action}' in TTS_SWAGGER_PATHS
+
+
+def test_synthesize_text_length_limit(client):
+    resp = client.post('/tts', json={'text': '가' * 501, 'engine': 'kokoro'})
+    assert resp.status_code == 400
+    assert '500' in resp.get_json()['error']
+
+
+def test_voices_list_includes_builtin_and_user(client, monkeypatch):
+    monkeypatch.setattr(tts_router_module.voice_store, 'list',
+                        lambda: [{'id': 'u_abc12345', 'name': '내 목소리',
+                                  'file': 'u_abc12345.wav', 'created_at': '2026-07-17T13:00:00'}])
+    resp = client.get('/tts/voices')
+    assert resp.status_code == 200
+    voices = resp.get_json()['voices']
+    ids = {v['id'] for v in voices}
+    assert 'af_heart' in ids and 'ref_a' in ids and 'u_abc12345' in ids
+    assert next(v for v in voices if v['id'] == 'u_abc12345')['builtin'] is False
+
+
+def test_add_voice_requires_file(client):
+    resp = client.post('/tts/voices', data={'name': 'x'})
+    assert resp.status_code == 400
+
+
+def test_add_voice_validation_error_400(client, monkeypatch):
+    import io as _io
+
+    def bad_add(name, blob):
+        raise ValueError('WAV 형식이 아닙니다')
+
+    monkeypatch.setattr(tts_router_module.voice_store, 'add', bad_add)
+    resp = client.post('/tts/voices',
+                       data={'name': 'x', 'file': (_io.BytesIO(b'zz'), 'a.wav')},
+                       content_type='multipart/form-data')
+    assert resp.status_code == 400
+
+
+def test_add_voice_success_records_audit(client, monkeypatch):
+    import io as _io
+    calls = []
+    monkeypatch.setattr(tts_router_module.audit_service, 'record',
+                        lambda *a, **kw: calls.append(a))
+    monkeypatch.setattr(tts_router_module.voice_store, 'add',
+                        lambda name, blob: {'id': 'u_new12345', 'name': name,
+                                            'file': 'u_new12345.wav', 'created_at': 'now'})
+    resp = client.post('/tts/voices',
+                       data={'name': '내 목소리', 'file': (_io.BytesIO(b'RIFF'), 'v.wav')},
+                       content_type='multipart/form-data')
+    assert resp.status_code == 200
+    assert resp.get_json()['voice']['id'] == 'u_new12345'
+    assert len(calls) == 1
+
+
+def test_delete_builtin_voice_403(client):
+    assert client.delete('/tts/voices/ref_a').status_code == 403
+
+
+def test_delete_missing_voice_404(client, monkeypatch):
+    def missing(vid):
+        raise KeyError(vid)
+
+    monkeypatch.setattr(tts_router_module.voice_store, 'delete', missing)
+    assert client.delete('/tts/voices/u_nope1234').status_code == 404

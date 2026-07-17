@@ -188,4 +188,99 @@ el('tts-run').addEventListener('click', async () => {
   }
 });
 
+/* ---------- 보이스 관리 ---------- */
+
+// multipart 업로드는 apiFetch(항상 JSON Content-Type)를 못 쓴다 — 키만 직접 붙인다
+function apiKey() { return localStorage.getItem('suh_admin_api_key') || ''; }
+
+async function loadVoices() {
+  const body = el('voice-body');
+  try {
+    const resp = await apiFetch(TTS_API + '/voices');
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || '조회 실패');
+    body.innerHTML = data.voices.map(v => `
+      <tr>
+        <td>${escapeHtml(v.name)}</td>
+        <td class="font-mono text-xs">${escapeHtml(v.id)}</td>
+        <td><span class="badge badge-sm ${v.builtin ? 'badge-ghost' : 'badge-primary'}">${v.builtin ? '내장' : '사용자'}</span>
+            <span class="badge badge-sm badge-ghost">${escapeHtml(v.engine)}</span></td>
+        <td class="text-xs opacity-70">${escapeHtml(v.created_at || '-')}</td>
+        <td class="flex gap-1">
+          <button class="btn btn-ghost btn-xs" onclick="previewVoice('${escapeHtml(v.id)}','${escapeHtml(v.engine)}')" title="미리듣기">
+            <i data-lucide="play" class="size-3"></i>
+          </button>
+          ${v.builtin ? '' : `<button class="btn btn-ghost btn-xs text-error" onclick="deleteVoice('${escapeHtml(v.id)}')" title="삭제">
+            <i data-lucide="trash-2" class="size-3"></i>
+          </button>`}
+        </td>
+      </tr>`).join('');
+    if (window.lucide) lucide.createIcons();
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="5" class="text-error text-xs">${escapeHtml(e.message)}</td></tr>`;
+  }
+}
+
+async function previewVoice(id, engine) {
+  try {
+    const resp = await apiFetch(TTS_API, {
+      method: 'POST',
+      body: JSON.stringify({
+        text: engine === 'kokoro' ? 'Hello, this is a voice preview.' : '안녕하세요, 보이스 미리듣기입니다.',
+        engine, voice: id,
+      }),
+    });
+    if (!resp.ok) {
+      const data = await resp.json();
+      throw new Error(data.error || '미리듣기 실패');
+    }
+    new Audio(URL.createObjectURL(await resp.blob())).play();
+  } catch (e) {
+    showToast(e.message, 'error');
+  }
+}
+
+async function deleteVoice(id) {
+  if (!confirm(`보이스 ${id}를 삭제할까요?`)) return;
+  try {
+    const resp = await apiFetch(`${TTS_API}/voices/${id}`, { method: 'DELETE' });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || '삭제 실패');
+    showToast('삭제되었습니다', 'success');
+    loadVoices();
+    loadEngines(); // 테스트 패널 보이스 목록도 갱신
+  } catch (e) {
+    showToast(e.message, 'error');
+  }
+}
+
+el('voice-upload').addEventListener('click', async () => {
+  const name = el('voice-name').value.trim();
+  const file = el('voice-file').files[0];
+  if (!name) { showToast('보이스 이름을 입력하세요', 'warning'); return; }
+  if (!file) { showToast('음성 파일(WAV)을 선택하세요', 'warning'); return; }
+  const form = new FormData();
+  form.append('name', name);
+  form.append('file', file);
+  const btn = el('voice-upload');
+  btn.disabled = true;
+  try {
+    const resp = await fetch(TTS_API + '/voices', {
+      method: 'POST', headers: { 'X-API-Key': apiKey() }, body: form,
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || '등록 실패');
+    showToast(`보이스 등록 완료: ${data.voice.id}`, 'success');
+    el('voice-name').value = '';
+    el('voice-file').value = '';
+    loadVoices();
+    loadEngines();
+  } catch (e) {
+    showToast(e.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 loadEngines();
+loadVoices();

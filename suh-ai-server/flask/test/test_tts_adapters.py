@@ -74,3 +74,28 @@ def test_health_false_when_connection_fails(monkeypatch):
 def test_get_adapter_unknown_engine_raises():
     with pytest.raises(KeyError):
         get_adapter('no-such-engine')
+
+
+def test_cosyvoice_uses_user_voice_path(monkeypatch, tmp_path):
+    ref = tmp_path / 'u_abc12345.wav'
+    ref.write_bytes(b'RIFFxxxxWAVE')
+    monkeypatch.setattr(adapters.voice_store, 'path', lambda vid: str(ref))
+    captured = {}
+
+    def fake_post(url, **kwargs):
+        captured['file_name'] = kwargs['files']['prompt_wav'].name
+        return FakeResponse(b'\x00\x00')
+
+    monkeypatch.setattr(adapters.requests, 'post', fake_post)
+    get_adapter('cosyvoice').synthesize('안녕', 'u_abc12345', 1.0)
+    assert captured['file_name'] == str(ref)
+
+
+def test_cosyvoice_deleted_user_voice_falls_back(monkeypatch):
+    def missing(vid):
+        raise KeyError(vid)
+
+    monkeypatch.setattr(adapters.voice_store, 'path', missing)
+    monkeypatch.setattr(adapters.requests, 'post', lambda url, **kw: FakeResponse(b'\x00\x00'))
+    # 삭제된 u_* id — 예외 없이 내장 보이스로 폴백해야 한다
+    get_adapter('cosyvoice').synthesize('안녕', 'u_gone9999', 1.0)

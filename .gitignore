@@ -93,3 +93,6 @@ build/
 
 ### suh-ai-server ###
 suh-ai-server/flask/.env
+
+# TTS 사용자 보이스 업로드 (서버 런타임 데이터 — 커밋 금지)
+suh-ai-server/flask/data/
