@@ -1,14 +1,40 @@
 {
   "metadata": {
-    "lastUpdated": "2026-07-17T03:58:38Z",
-    "currentVersion": "2.0.40",
+    "lastUpdated": "2026-07-17T04:06:21Z",
+    "currentVersion": "2.0.41",
     "projectType": "python",
-    "totalReleases": 36,
+    "totalReleases": 37,
     "projectTypes": [
       "python"
     ]
   },
   "releases": [
+    {
+      "version": "2.0.41",
+      "project_type": "python",
+      "project_types": [
+        "python"
+      ],
+      "date": "2026-07-17",
+      "pr_number": 93,
+      "raw_summary": "## Summary by CodeRabbit\n\n## 릴리스 노트\n\n* **새 기능**\n  * 관리자 화면에서 마이크로 바로 녹음해 보이스를 등록할 수 있습니다\n  * 등록 없이 합성 요청에 음성을 첨부하는 원샷 보이스 클로닝 지원 — 요청마다 다른 목소리 사용 가능\n\n* **개선**\n  * API 사용 가이드에 보이스 클로닝 두 가지 방법 예제 추가",
+      "parsed_changes": {
+        "새_기능": {
+          "title": "새 기능",
+          "items": [
+            "관리자 화면에서 마이크로 바로 녹음해 보이스를 등록할 수 있습니다",
+            "등록 없이 합성 요청에 음성을 첨부하는 원샷 보이스 클로닝 지원 — 요청마다 다른 목소리 사용 가능"
+          ]
+        },
+        "개선": {
+          "title": "개선",
+          "items": [
+            "API 사용 가이드에 보이스 클로닝 두 가지 방법 예제 추가"
+          ]
+        }
+      },
+      "parse_method": "markdown"
+    },
     {
       "version": "2.0.40",
       "project_type": "python",

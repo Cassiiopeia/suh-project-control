@@ -254,11 +254,101 @@ async function deleteVoice(id) {
   }
 }
 
+/* ---------- 브라우저 녹음 (마이크 → PCM16 WAV 변환 → 기존 등록 API 재사용) ---------- */
+
+let mediaRecorder = null;   // 녹음 중이면 MediaRecorder 인스턴스
+let recordedWav = null;     // 녹음 결과 WAV Blob — 파일 미선택 시 등록에 사용
+let recordTimer = null;
+let recordStartedAt = 0;
+
+function encodeWav(samples, sampleRate) {
+  /* Float32 PCM → 16bit mono WAV (서버가 RIFF 헤더를 검증하므로 WAV로 변환 필수) */
+  const buf = new ArrayBuffer(44 + samples.length * 2);
+  const v = new DataView(buf);
+  const writeStr = (off, s) => { for (let i = 0; i < s.length; i++) v.setUint8(off + i, s.charCodeAt(i)); };
+  writeStr(0, 'RIFF'); v.setUint32(4, 36 + samples.length * 2, true); writeStr(8, 'WAVE');
+  writeStr(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, sampleRate, true); v.setUint32(28, sampleRate * 2, true);
+  v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  writeStr(36, 'data'); v.setUint32(40, samples.length * 2, true);
+  for (let i = 0; i < samples.length; i++) {
+    const s = Math.max(-1, Math.min(1, samples[i]));
+    v.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+  }
+  return new Blob([buf], { type: 'audio/wav' });
+}
+
+async function blobToWav(blob) {
+  /* MediaRecorder 출력(webm/opus 등) → 디코딩 → 모노 WAV */
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  try {
+    const audio = await ctx.decodeAudioData(await blob.arrayBuffer());
+    let mono = audio.getChannelData(0);
+    if (audio.numberOfChannels > 1) {
+      const ch2 = audio.getChannelData(1);
+      mono = mono.map((s, i) => (s + ch2[i]) / 2);
+    }
+    return encodeWav(mono, audio.sampleRate);
+  } finally {
+    ctx.close();
+  }
+}
+
+function setRecordUi(recording) {
+  el('voice-record-label').textContent = recording ? '중지' : '녹음';
+  el('voice-record').classList.toggle('btn-error', recording);
+  el('voice-record-status').classList.toggle('hidden', !recording);
+}
+
+el('voice-record').addEventListener('click', async () => {
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    mediaRecorder.stop();
+    return;
+  }
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (e) {
+    showToast('마이크 권한이 필요합니다: ' + e.message, 'error');
+    return;
+  }
+  const chunks = [];
+  mediaRecorder = new MediaRecorder(stream);
+  mediaRecorder.ondataavailable = e => chunks.push(e.data);
+  mediaRecorder.onstop = async () => {
+    stream.getTracks().forEach(t => t.stop());
+    clearInterval(recordTimer);
+    setRecordUi(false);
+    try {
+      recordedWav = await blobToWav(new Blob(chunks));
+      el('voice-record-preview').classList.remove('hidden');
+      el('voice-record-audio').src = URL.createObjectURL(recordedWav);
+      showToast('녹음 완료 — 미리듣기 후 등록하세요', 'success');
+    } catch (e) {
+      showToast('녹음 변환 실패: ' + e.message, 'error');
+    }
+  };
+  mediaRecorder.start();
+  recordStartedAt = Date.now();
+  setRecordUi(true);
+  recordTimer = setInterval(() => {
+    const sec = ((Date.now() - recordStartedAt) / 1000).toFixed(0);
+    el('voice-record-status').textContent = `녹음 중... ${sec}초 (3~30초 권장)`;
+  }, 500);
+});
+
+el('voice-record-discard').addEventListener('click', () => {
+  recordedWav = null;
+  el('voice-record-preview').classList.add('hidden');
+});
+
 el('voice-upload').addEventListener('click', async () => {
   const name = el('voice-name').value.trim();
-  const file = el('voice-file').files[0];
+  // 파일 선택이 우선, 없으면 브라우저 녹음 결과 사용
+  const file = el('voice-file').files[0]
+    || (recordedWav && new File([recordedWav], 'recorded.wav', { type: 'audio/wav' }));
   if (!name) { showToast('보이스 이름을 입력하세요', 'warning'); return; }
-  if (!file) { showToast('음성 파일(WAV)을 선택하세요', 'warning'); return; }
+  if (!file) { showToast('음성 파일을 선택하거나 녹음하세요', 'warning'); return; }
   const form = new FormData();
   form.append('name', name);
   form.append('file', file);
@@ -273,6 +363,8 @@ el('voice-upload').addEventListener('click', async () => {
     showToast(`보이스 등록 완료: ${data.voice.id}`, 'success');
     el('voice-name').value = '';
     el('voice-file').value = '';
+    recordedWav = null;
+    el('voice-record-preview').classList.add('hidden');
     loadVoices();
     loadEngines();
   } catch (e) {

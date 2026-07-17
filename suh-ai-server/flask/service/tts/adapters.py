@@ -21,7 +21,9 @@ class TtsAdapter:
         self.engine = TTS_ENGINES[engine_id]
         self.base_url = f"http://127.0.0.1:{self.engine['port']}"
 
-    def synthesize(self, text: str, voice: str, speed: float) -> bytes:
+    def synthesize(self, text: str, voice: str, speed: float,
+                   ref_wav: bytes = None) -> bytes:
+        """ref_wav: 요청에 직접 첨부된 레퍼런스 음성(원샷 클로닝) — 지원 엔진만 사용"""
         raise NotImplementedError
 
     def health(self) -> bool:
@@ -34,7 +36,7 @@ class TtsAdapter:
 class KokoroAdapter(TtsAdapter):
     """Kokoro-FastAPI — OpenAI 호환 /v1/audio/speech, WAV 직접 반환"""
 
-    def synthesize(self, text, voice, speed):
+    def synthesize(self, text, voice, speed, ref_wav=None):  # ref_wav 미지원 → 무시
         resp = requests.post(
             f'{self.base_url}/v1/audio/speech',
             json={'model': 'kokoro', 'voice': voice, 'input': text,
@@ -67,15 +69,24 @@ class CosyVoiceAdapter(TtsAdapter):
                    self.engine['voices'][0])
         return os.path.join(TTS_REFS_DIR, ref['file'])
 
-    def synthesize(self, text, voice, speed):
-        ref_path = self._resolve_ref_path(voice)
-        with open(ref_path, 'rb') as f:
+    def synthesize(self, text, voice, speed, ref_wav=None):
+        if ref_wav is not None:
+            # 원샷 클로닝 — 요청에 첨부된 음성을 저장 없이 바로 레퍼런스로 사용
             resp = requests.post(
                 f'{self.base_url}/inference_cross_lingual',
                 data={'tts_text': text},
-                files={'prompt_wav': f},
+                files={'prompt_wav': ('ref.wav', io.BytesIO(ref_wav))},
                 timeout=SYNTH_TIMEOUT,
             )
+        else:
+            ref_path = self._resolve_ref_path(voice)
+            with open(ref_path, 'rb') as f:
+                resp = requests.post(
+                    f'{self.base_url}/inference_cross_lingual',
+                    data={'tts_text': text},
+                    files={'prompt_wav': f},
+                    timeout=SYNTH_TIMEOUT,
+                )
         resp.raise_for_status()
         return self._pcm_to_wav(resp.content, self.engine['sample_rate'])
 

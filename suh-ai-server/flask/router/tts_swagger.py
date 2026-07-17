@@ -9,18 +9,31 @@ TTS_SWAGGER_PATHS = {
             "summary": "텍스트 음성 합성 (WAV)",
             "requestBody": {
                 "required": True,
-                "content": {"application/json": {"schema": {
-                    "type": "object",
-                    "required": ["text"],
-                    "properties": {
-                        "text": {"type": "string", "example": "안녕하세요"},
-                        "engine": {"type": "string", "example": "cosyvoice",
-                                   "description": "생략 시 실행 중 엔진 사용"},
-                        "voice": {"type": "string", "example": "ref_a"},
-                        "speed": {"type": "number", "example": 1.0,
-                                  "description": "엔진이 미지원이면 무시"},
-                    },
-                }}},
+                "content": {
+                    "application/json": {"schema": {
+                        "type": "object",
+                        "required": ["text"],
+                        "properties": {
+                            "text": {"type": "string", "example": "안녕하세요"},
+                            "engine": {"type": "string", "example": "cosyvoice",
+                                       "description": "생략 시 실행 중 엔진 사용"},
+                            "voice": {"type": "string", "example": "ref_a",
+                                      "description": "내장 또는 등록 보이스 id (u_*)"},
+                            "speed": {"type": "number", "example": 1.0,
+                                      "description": "엔진이 미지원이면 무시"},
+                        },
+                    }},
+                    "multipart/form-data": {"schema": {
+                        "type": "object",
+                        "required": ["text"],
+                        "properties": {
+                            "text": {"type": "string"},
+                            "engine": {"type": "string"},
+                            "prompt_wav": {"type": "string", "format": "binary",
+                                           "description": "원샷 클로닝용 레퍼런스 음성 — 등록 없이 이 목소리로 합성"},
+                        },
+                    }},
+                },
             },
             "responses": {
                 "200": {"description": "WAV 오디오",
