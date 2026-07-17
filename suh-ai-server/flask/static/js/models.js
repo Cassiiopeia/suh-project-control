@@ -2,8 +2,8 @@
 const MODELS_API = '../models';
 
 let installedModels = [];   // GET /models/installed 결과 캐시
-let pullController = null;  // 진행 중 pull의 AbortController (동시 1건만 허용)
-let pullErrorMessage = null;
+let queuePollTimer = null;  // 큐 폴링 타이머 — 대기/진행 항목이 있을 때만 동작
+let queueSnapshot = [];     // 직전 폴링 결과 (완료 전이 감지용)
 let benchRunning = false;
 let deleteTarget = null;
 
@@ -141,78 +141,132 @@ async function loadFiles(repoId) {
         + '</tr>';
     }).join('');
     body.querySelectorAll('[data-pull]').forEach(function (btn) {
-      btn.addEventListener('click', function () { startPull(btn.dataset.pull); });
+      btn.addEventListener('click', function () { enqueuePull(btn.dataset.pull); });
     });
   } catch (e) {
     body.innerHTML = '<tr><td colspan="4" class="text-center text-error">' + escapeHtml(e.message) + '</td></tr>';
   }
 }
 
-/* ---------- 다운로드 (pull) ---------- */
-async function startPull(name) {
-  if (pullController) { showToast('이미 다운로드가 진행 중입니다', 'warning'); return; }
-  pullController = new AbortController();
-  pullErrorMessage = null;
-  el('pull-wrap').classList.remove('hidden');
-  el('pull-name').textContent = name;
-  el('pull-status').textContent = '시작 중...';
-  el('pull-bytes').textContent = '';
-  el('pull-progress').value = 0;
-
+/* ---------- 다운로드 큐 ---------- */
+async function enqueuePull(name) {
   try {
-    const resp = await apiFetch(MODELS_API + '/pull', {
+    const resp = await apiFetch(MODELS_API + '/queue', {
       method: 'POST',
       body: JSON.stringify({ name: name }),
-      signal: pullController.signal,
     });
-    if (!resp.ok) {
-      const data = await resp.json();
-      throw new Error(data.error || 'HTTP ' + resp.status);
-    }
-    const reader = resp.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-    while (true) {
-      const chunk = await reader.read();
-      if (chunk.done) break;
-      buffer += decoder.decode(chunk.value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop();
-      lines.filter(Boolean).forEach(function (line) {
-        try { handlePullLine(JSON.parse(line)); } catch (e) { /* 불완전 라인 무시 */ }
-      });
-    }
-    if (pullErrorMessage) {
-      showToast('다운로드 실패: ' + pullErrorMessage
-        + ' — 이 레포는 Ollama 직접 가져오기를 지원하지 않는 구조일 수 있습니다', 'error');
-    } else {
-      showToast(name + ' 다운로드 완료', 'success');
-    }
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'HTTP ' + resp.status);
+    showToast(name + ' 큐에 추가했습니다', 'success');
+    queueSnapshot = data.queue;
+    renderQueue(data.queue);
+    startQueuePolling();
   } catch (e) {
-    if (e.name === 'AbortError') {
-      showToast('다운로드를 취소했습니다. 다시 받으면 이어서 받습니다.', 'info');
-    } else if (e.message.indexOf('Unauthorized') === -1) {
-      showToast('다운로드 실패: ' + e.message, 'error');
+    if (e.message.indexOf('Unauthorized') === -1) {
+      showToast('큐 추가 실패: ' + e.message, 'error');
     }
-  } finally {
-    pullController = null;
-    el('pull-wrap').classList.add('hidden');
-    loadInstalled();
   }
 }
 
-function handlePullLine(p) {
-  if (p.error) { pullErrorMessage = p.error; return; }
-  el('pull-status').textContent = p.status || '';
-  if (p.total) {
-    const percent = p.completed ? Math.round((p.completed / p.total) * 100) : 0;
-    el('pull-progress').value = percent;
-    el('pull-bytes').textContent = fmtSize(p.completed || 0) + ' / ' + fmtSize(p.total) + ' (' + percent + '%)';
+function startQueuePolling() {
+  if (queuePollTimer) return;
+  queuePollTimer = setInterval(pollQueue, 1500);
+}
+
+function stopQueuePolling() {
+  if (queuePollTimer) { clearInterval(queuePollTimer); queuePollTimer = null; }
+}
+
+async function pollQueue() {
+  try {
+    const resp = await apiFetch(MODELS_API + '/queue');
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || '큐 조회 실패');
+    notifyFinished(queueSnapshot, data.queue);
+    queueSnapshot = data.queue;
+    renderQueue(data.queue);
+    const active = data.queue.some(function (i) {
+      return i.status === 'queued' || i.status === 'pulling';
+    });
+    if (active) startQueuePolling(); else stopQueuePolling();
+  } catch (e) {
+    stopQueuePolling(); // 인증 만료 등 — 다음 사용자 조작에서 재개
   }
 }
 
-function cancelPull() {
-  if (pullController) pullController.abort();
+/* 직전 폴링과 비교해 이번에 끝난 항목을 토스트로 알리고 설치 목록을 갱신 */
+function notifyFinished(prev, next) {
+  const wasActive = {};
+  prev.forEach(function (i) {
+    if (i.status === 'queued' || i.status === 'pulling') wasActive[i.id] = true;
+  });
+  let anyDone = false;
+  next.forEach(function (i) {
+    if (!wasActive[i.id]) return;
+    if (i.status === 'done') {
+      showToast(i.name + ' 다운로드 완료', 'success');
+      anyDone = true;
+    } else if (i.status === 'error') {
+      showToast(i.name + ' 다운로드 실패: ' + (i.error || '')
+        + ' — 이 레포는 Ollama 직접 가져오기를 지원하지 않는 구조일 수 있습니다', 'error');
+    } else if (i.status === 'canceled') {
+      showToast(i.name + ' 다운로드를 취소했습니다. 다시 받으면 이어서 받습니다.', 'info');
+    }
+  });
+  if (anyDone) loadInstalled();
+}
+
+const QUEUE_BADGE = {
+  queued: ['badge-ghost', '대기'],
+  pulling: ['badge-info', '다운로드 중'],
+  done: ['badge-success', '완료'],
+  error: ['badge-error', '실패'],
+  canceled: ['badge-warning', '취소'],
+};
+
+function renderQueue(items) {
+  const wrap = el('queue-wrap');
+  const body = el('queue-body');
+  if (!items.length) { wrap.classList.add('hidden'); return; }
+  wrap.classList.remove('hidden');
+  body.innerHTML = items.map(function (i) {
+    const badge = QUEUE_BADGE[i.status] || ['badge-ghost', i.status];
+    let html = '<div class="border border-base-300 rounded-lg p-2 space-y-1">'
+      + '<div class="flex items-center justify-between gap-2">'
+      + '<span class="text-sm font-mono break-all">' + escapeHtml(i.name) + '</span>'
+      + '<span class="flex items-center gap-2 shrink-0">'
+      + '<span class="badge badge-sm ' + badge[0] + '">' + badge[1] + '</span>';
+    if (i.status === 'queued' || i.status === 'pulling') {
+      html += '<button class="btn btn-error btn-xs" data-qcancel="' + escapeHtml(i.id) + '">'
+        + (i.status === 'queued' ? '제거' : '취소') + '</button>';
+    }
+    html += '</span></div>';
+    if (i.status === 'pulling') {
+      const percent = (i.total && i.completed) ? Math.round((i.completed / i.total) * 100) : 0;
+      html += '<progress class="progress progress-primary w-full" value="' + percent + '" max="100"></progress>'
+        + '<div class="text-xs opacity-70 text-right">'
+        + fmtSize(i.completed || 0) + ' / ' + fmtSize(i.total || 0) + ' (' + percent + '%)</div>';
+    } else if (i.status === 'error' && i.error) {
+      html += '<div class="text-xs text-error">' + escapeHtml(i.error) + '</div>';
+    }
+    return html + '</div>';
+  }).join('');
+  body.querySelectorAll('[data-qcancel]').forEach(function (btn) {
+    btn.addEventListener('click', function () { cancelQueueItem(btn.dataset.qcancel); });
+  });
+}
+
+async function cancelQueueItem(itemId) {
+  try {
+    const resp = await apiFetch(MODELS_API + '/queue/' + encodeURIComponent(itemId), { method: 'DELETE' });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || '취소 실패');
+    pollQueue(); // 즉시 갱신 — 다음 폴링 주기를 기다리지 않음
+  } catch (e) {
+    if (e.message.indexOf('Unauthorized') === -1) {
+      showToast('취소 실패: ' + e.message, 'error');
+    }
+  }
 }
 
 /* ---------- 테스트·벤치마크 ---------- */
@@ -340,10 +394,10 @@ function finishBenchRow(row, ok, durationMs, text) {
 /* ---------- 초기화 ---------- */
 document.addEventListener('DOMContentLoaded', function () {
   loadInstalled();
+  pollQueue(); // 새로고침해도 진행 중인 큐 상태 복원 — 활성 항목 있으면 폴링 자동 시작
   el('installed-refresh').addEventListener('click', loadInstalled);
   el('search-btn').addEventListener('click', searchHf);
   el('search-input').addEventListener('keydown', function (e) { if (e.key === 'Enter') searchHf(); });
-  el('pull-cancel').addEventListener('click', cancelPull);
   el('delete-confirm').addEventListener('click', doDelete);
   el('bench-run').addEventListener('click', runBenchmark);
   el('bench-file').addEventListener('change', renderBenchModels);

@@ -67,17 +67,12 @@
         </div>
       </div>
 
-      <!-- 다운로드 진행률 -->
-      <div id="pull-wrap" class="hidden border border-base-300 rounded-lg p-3 space-y-2">
-        <div class="flex items-center justify-between">
-          <span id="pull-name" class="text-sm font-mono"></span>
-          <button id="pull-cancel" class="btn btn-error btn-xs">취소</button>
-        </div>
-        <progress id="pull-progress" class="progress progress-primary w-full" value="0" max="100"></progress>
-        <div class="flex justify-between text-xs opacity-70">
-          <span id="pull-status">준비 중...</span>
-          <span id="pull-bytes"></span>
-        </div>
+      <!-- 다운로드 큐 — 서버 워커가 순차 실행, 탭을 닫아도 계속 진행 -->
+      <div id="queue-wrap" class="hidden border border-base-300 rounded-lg p-3 space-y-2">
+        <h3 class="font-semibold text-sm flex items-center gap-2">
+          <i data-lucide="download" class="size-4 text-primary"></i>다운로드 큐
+        </h3>
+        <div id="queue-body" class="space-y-2"></div>
       </div>
     </div>
   </div>
