@@ -17,7 +17,10 @@ WORKDIR /opt/CosyVoice
 RUN echo 'setuptools<81' > /tmp/pip-constraints.txt
 ENV PIP_CONSTRAINT=/tmp/pip-constraints.txt
 RUN pip3 install --no-cache-dir -U pip wheel 'setuptools<81' && \
-    pip3 install --no-cache-dir -r requirements.txt
+    pip3 install --no-cache-dir -r requirements.txt && \
+    # deepspeed는 학습 전용인데 transformers가 import 시 CUDA 컴파일을 시도해
+    # 컴파일러(nvcc) 없는 runtime 이미지에서 기동이 죽는다 → 추론 이미지에서 제거
+    pip3 uninstall -y deepspeed
 
 # Fun-CosyVoice3 전환은 이 env만 교체 (예: iic/Fun-CosyVoice3-0.5B-2512)
 ENV MODEL_DIR=iic/CosyVoice2-0.5B
