@@ -1,6 +1,4 @@
 """test_model_router.py — /models/* 엔드포인트 동작 검증 (서비스는 mock)"""
-import json
-
 import pytest
 from flask import Flask
 
@@ -79,19 +77,59 @@ def test_hf_files_returns_files(client, monkeypatch):
     assert resp.get_json()['files'][0]['quant'] == 'Q4_K_M'
 
 
-def test_pull_requires_name(client):
-    assert client.post('/models/pull', json={}).status_code == 400
+# ---------- 다운로드 큐 ----------
+
+def test_queue_add_requires_name(client):
+    assert client.post('/models/queue', json={}).status_code == 400
 
 
-def test_pull_streams_ndjson_with_no_buffering_header(client, monkeypatch):
-    def fake_stream(name):
-        yield json.dumps({'status': 'pulling manifest'}) + '\n'
-        yield json.dumps({'status': 'success'}) + '\n'
-
-    monkeypatch.setattr(model_router_module.model_service, 'pull_model_stream', fake_stream)
-    resp = client.post('/models/pull', json={'name': 'hf.co/unsloth/x:Q4_K_M'})
+def test_queue_add_returns_queue_state(client, monkeypatch):
+    added = []
+    monkeypatch.setattr(model_router_module.queue_service, 'enqueue',
+                        lambda name: added.append(name))
+    monkeypatch.setattr(model_router_module.queue_service, 'get_state',
+                        lambda: [{'id': 'a1', 'name': 'hf.co/unsloth/x:Q4_K_M', 'status': 'queued'}])
+    resp = client.post('/models/queue', json={'name': 'hf.co/unsloth/x:Q4_K_M'})
     assert resp.status_code == 200
-    assert resp.headers['X-Accel-Buffering'] == 'no'
-    lines = [json.loads(line) for line in resp.get_data(as_text=True).strip().split('\n')]
-    assert lines[0]['status'] == 'pulling manifest'
-    assert lines[-1]['status'] == 'success'
+    assert added == ['hf.co/unsloth/x:Q4_K_M']
+    assert resp.get_json()['queue'][0]['status'] == 'queued'
+
+
+def test_queue_add_duplicate_returns_409(client, monkeypatch):
+    def dup(name):
+        raise ValueError(f'이미 큐에 있습니다: {name}')
+
+    monkeypatch.setattr(model_router_module.queue_service, 'enqueue', dup)
+    resp = client.post('/models/queue', json={'name': 'x'})
+    assert resp.status_code == 409
+    assert '이미 큐에' in resp.get_json()['error']
+
+
+def test_queue_state_returns_items(client, monkeypatch):
+    monkeypatch.setattr(model_router_module.queue_service, 'get_state',
+                        lambda: [{'id': 'a1', 'status': 'pulling', 'total': 100, 'completed': 50}])
+    resp = client.get('/models/queue')
+    assert resp.status_code == 200
+    assert resp.get_json()['queue'][0]['completed'] == 50
+
+
+def test_queue_cancel_returns_result(client, monkeypatch):
+    canceled = []
+
+    def fake_cancel(item_id):
+        canceled.append(item_id)
+        return 'canceling'
+
+    monkeypatch.setattr(model_router_module.queue_service, 'cancel', fake_cancel)
+    resp = client.delete('/models/queue/a1')
+    assert resp.status_code == 200
+    assert resp.get_json()['result'] == 'canceling'
+    assert canceled == ['a1']
+
+
+def test_queue_cancel_unknown_id_returns_404(client, monkeypatch):
+    def missing(item_id):
+        raise KeyError(item_id)
+
+    monkeypatch.setattr(model_router_module.queue_service, 'cancel', missing)
+    assert client.delete('/models/queue/nope').status_code == 404

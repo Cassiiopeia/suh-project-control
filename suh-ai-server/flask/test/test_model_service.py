@@ -1,5 +1,4 @@
 """test_model_service.py — HF 검색·GGUF 파싱·Ollama 모델 관리 로직 검증"""
-import json
 from datetime import datetime
 from types import SimpleNamespace
 
@@ -91,16 +90,14 @@ def test_list_hf_gguf_files_gated_repo_raises_permission_error(monkeypatch):
         ModelService().list_hf_gguf_files('meta-llama/gated-repo')
 
 
-# ---------- Ollama 설치 목록 / 삭제 / pull ----------
+# ---------- Ollama 설치 목록 / 삭제 ----------
 
 class FakeOllamaClient:
-    """ollama.Client 대역 — list/show/delete/pull"""
+    """ollama.Client 대역 — list/show/delete"""
 
-    def __init__(self, models=None, capabilities=None, pull_events=None, pull_error=None):
+    def __init__(self, models=None, capabilities=None):
         self._models = models or []
         self._capabilities = capabilities or {}
-        self._pull_events = pull_events or []
-        self._pull_error = pull_error
         self.deleted = []
 
     def list(self):
@@ -111,11 +108,6 @@ class FakeOllamaClient:
 
     def delete(self, name):
         self.deleted.append(name)
-
-    def pull(self, name, stream=True):
-        if self._pull_error:
-            raise self._pull_error
-        return iter(self._pull_events)
 
 
 def make_model(name, size=1000, family='gemma3', param='4.3B', quant='Q4_K_M'):
@@ -155,24 +147,3 @@ def test_delete_model_calls_client():
     svc.client = FakeOllamaClient()
     svc.delete_model('gemma3:4b')
     assert svc.client.deleted == ['gemma3:4b']
-
-
-def test_pull_model_stream_yields_ndjson_progress():
-    svc = ModelService()
-    svc.client = FakeOllamaClient(pull_events=[
-        SimpleNamespace(status='pulling manifest', total=None, completed=None),
-        SimpleNamespace(status='pulling abc123', total=100, completed=50),
-        SimpleNamespace(status='success', total=None, completed=None),
-    ])
-    lines = [json.loads(line) for line in svc.pull_model_stream('hf.co/unsloth/x:Q4_K_M')]
-    assert lines[0]['status'] == 'pulling manifest'
-    assert lines[1] == {'status': 'pulling abc123', 'total': 100, 'completed': 50}
-    assert lines[2]['status'] == 'success'
-
-
-def test_pull_model_stream_yields_error_line_on_failure():
-    svc = ModelService()
-    svc.client = FakeOllamaClient(pull_error=Exception('pull model manifest: file does not exist'))
-    lines = [json.loads(line) for line in svc.pull_model_stream('hf.co/bad/repo')]
-    assert len(lines) == 1
-    assert 'file does not exist' in lines[0]['error']
