@@ -53,3 +53,9 @@ def ollama_test():
 def models():
     """모델 관리 페이지 (HF 검색·다운로드·벤치마크)"""
     return render_template('admin/models.html', root='..', active='models')
+
+
+@admin_bp.route('/admin/tts', methods=['GET'])
+def tts():
+    """TTS 엔진 관리 페이지 (설치·전환·테스트)"""
+    return render_template('admin/tts.html', root='..', active='tts')

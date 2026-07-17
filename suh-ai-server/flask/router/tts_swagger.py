@@ -1,0 +1,68 @@
+"""
+TTS API Swagger 경로 정의 — swagger_router가 병합해 노출
+"""
+
+TTS_SWAGGER_PATHS = {
+    "/tts": {
+        "post": {
+            "tags": ["TTS"],
+            "summary": "텍스트 음성 합성 (WAV)",
+            "requestBody": {
+                "required": True,
+                "content": {"application/json": {"schema": {
+                    "type": "object",
+                    "required": ["text"],
+                    "properties": {
+                        "text": {"type": "string", "example": "안녕하세요"},
+                        "engine": {"type": "string", "example": "cosyvoice",
+                                   "description": "생략 시 실행 중 엔진 사용"},
+                        "voice": {"type": "string", "example": "ref_a"},
+                        "speed": {"type": "number", "example": 1.0,
+                                  "description": "엔진이 미지원이면 무시"},
+                    },
+                }}},
+            },
+            "responses": {
+                "200": {"description": "WAV 오디오",
+                        "content": {"audio/wav": {"schema": {"type": "string", "format": "binary"}}}},
+                "400": {"description": "text 누락 또는 speed 형식 오류"},
+                "503": {"description": "실행 중 엔진 없음 또는 엔진 미응답"},
+            },
+        }
+    },
+    "/tts/engines": {
+        "get": {
+            "tags": ["TTS"],
+            "summary": "TTS 엔진 카탈로그·상태 조회",
+            "responses": {"200": {"description": "엔진 목록 (status: not_installed|installing|stopped|starting|running|error)"}},
+        }
+    },
+    "/tts/engines/{engine_id}/{action}": {
+        "post": {
+            "tags": ["TTS"],
+            "summary": "엔진 제어 (install / start / stop)",
+            "parameters": [
+                {"name": "engine_id", "in": "path", "required": True,
+                 "schema": {"type": "string", "enum": ["kokoro", "cosyvoice"]}},
+                {"name": "action", "in": "path", "required": True,
+                 "schema": {"type": "string", "enum": ["install", "start", "stop"]}},
+            ],
+            "responses": {
+                "200": {"description": "제어 성공 + 최신 엔진 상태"},
+                "404": {"description": "알 수 없는 엔진/동작"},
+                "409": {"description": "중복 설치 또는 미설치 상태 start"},
+            },
+        }
+    },
+    "/tts/engines/{engine_id}/logs": {
+        "get": {
+            "tags": ["TTS"],
+            "summary": "엔진 컨테이너 로그 tail",
+            "parameters": [
+                {"name": "engine_id", "in": "path", "required": True,
+                 "schema": {"type": "string"}},
+            ],
+            "responses": {"200": {"description": "로그 텍스트"}},
+        }
+    },
+}

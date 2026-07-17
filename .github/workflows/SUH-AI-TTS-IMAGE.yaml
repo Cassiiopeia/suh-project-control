@@ -1,0 +1,39 @@
+# =========================================
+# CosyVoice TTS 서빙 이미지 빌드·배포
+# =========================================
+# docker/cosyvoice/** 변경 시에만 빌드 (이미지가 커서 매 push 빌드는 낭비)
+# 최초 1회는 workflow_dispatch로 수동 실행
+
+name: SUH-AI-TTS-IMAGE
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - "suh-ai-server/docker/cosyvoice/**"
+  workflow_dispatch:
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 소스 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Docker Buildx 설정
+        uses: docker/setup-buildx-action@v3
+
+      - name: DockerHub 로그인
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: 이미지 빌드 및 push (latest + sha 태그)
+        uses: docker/build-push-action@v6
+        with:
+          context: suh-ai-server/docker/cosyvoice
+          push: true
+          tags: |
+            cassiiopeia/suh-tts-cosyvoice:latest
+            cassiiopeia/suh-tts-cosyvoice:${{ github.sha }}

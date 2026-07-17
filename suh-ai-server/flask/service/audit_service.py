@@ -19,6 +19,7 @@ MAX_LIST_LINES = 500
 
 class AuditCategory(str, Enum):
     PALWORLD = "PALWORLD"
+    TTS = "TTS"
     SYSTEM = "SYSTEM"  # 향후 확장용
 
 
@@ -29,6 +30,9 @@ class AuditAction(str, Enum):
     SETTINGS_UPDATE = "SETTINGS_UPDATE"
     BACKUP_CREATE = "BACKUP_CREATE"
     SERVER_UPDATE = "SERVER_UPDATE"
+    TTS_INSTALL = "TTS_INSTALL"
+    TTS_START = "TTS_START"
+    TTS_STOP = "TTS_STOP"
 
 
 def record(category: AuditCategory, action: AuditAction, actor_ip: str, detail: dict = None) -> bool:
