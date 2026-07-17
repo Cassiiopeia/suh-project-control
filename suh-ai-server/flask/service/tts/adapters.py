@@ -9,6 +9,7 @@ import wave
 import requests
 
 from config.tts_config import TTS_ENGINES, TTS_REFS_DIR
+from service.tts.voice_store import voice_store
 
 # 합성 대기 한도 — 컨테이너 첫 요청은 모델 워밍업으로 오래 걸릴 수 있다
 SYNTH_TIMEOUT = 120
@@ -55,10 +56,19 @@ class CosyVoiceAdapter(TtsAdapter):
     """CosyVoice fastapi 서버 — cross_lingual 모드로 레퍼런스 화자가 다른 언어를 말하게 한다.
     speed 파라미터는 서버가 미지원이라 무시한다."""
 
-    def synthesize(self, text, voice, speed):
+    def _resolve_ref_path(self, voice: str) -> str:
+        """보이스 id → 레퍼런스 파일 경로. 사용자 등록(u_*) 우선, 못 찾으면 내장 폴백"""
+        if voice and voice.startswith('u_'):
+            try:
+                return voice_store.path(voice)
+            except KeyError:
+                pass  # 삭제된 보이스 id — 내장 첫 보이스로 폴백
         ref = next((v for v in self.engine['voices'] if v['id'] == voice),
                    self.engine['voices'][0])
-        ref_path = os.path.join(TTS_REFS_DIR, ref['file'])
+        return os.path.join(TTS_REFS_DIR, ref['file'])
+
+    def synthesize(self, text, voice, speed):
+        ref_path = self._resolve_ref_path(voice)
         with open(ref_path, 'rb') as f:
             resp = requests.post(
                 f'{self.base_url}/inference_cross_lingual',

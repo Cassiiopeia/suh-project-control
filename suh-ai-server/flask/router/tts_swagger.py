@@ -54,6 +54,48 @@ TTS_SWAGGER_PATHS = {
             },
         }
     },
+    "/tts/voices": {
+        "get": {
+            "tags": ["TTS"],
+            "summary": "보이스 목록 (내장 + 사용자 등록)",
+            "responses": {"200": {"description": "보이스 목록 (id, name, engine, builtin)"}},
+        },
+        "post": {
+            "tags": ["TTS"],
+            "summary": "보이스 클로닝용 레퍼런스 음성 등록",
+            "requestBody": {
+                "required": True,
+                "content": {"multipart/form-data": {"schema": {
+                    "type": "object",
+                    "required": ["name", "file"],
+                    "properties": {
+                        "name": {"type": "string", "example": "내 목소리"},
+                        "file": {"type": "string", "format": "binary",
+                                 "description": "WAV, 3~30초, 10MB 이하"},
+                    },
+                }}},
+            },
+            "responses": {
+                "200": {"description": "등록된 보이스 (voice.id를 POST /tts의 voice로 사용)"},
+                "400": {"description": "검증 실패 (형식/길이/크기)"},
+            },
+        },
+    },
+    "/tts/voices/{voice_id}": {
+        "delete": {
+            "tags": ["TTS"],
+            "summary": "사용자 등록 보이스 삭제",
+            "parameters": [
+                {"name": "voice_id", "in": "path", "required": True,
+                 "schema": {"type": "string", "example": "u_abc12345"}},
+            ],
+            "responses": {
+                "200": {"description": "삭제 완료"},
+                "403": {"description": "내장 보이스는 삭제 불가"},
+                "404": {"description": "보이스 없음"},
+            },
+        }
+    },
     "/tts/engines/{engine_id}/logs": {
         "get": {
             "tags": ["TTS"],

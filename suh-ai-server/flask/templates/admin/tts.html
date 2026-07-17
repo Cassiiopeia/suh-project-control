@@ -52,6 +52,116 @@
     </div>
   </div>
 
+  <!-- 보이스 관리 (제로샷 클로닝) -->
+  <div class="card bg-base-100 shadow">
+    <div class="card-body space-y-3">
+      <h2 class="card-title text-base">
+        <i data-lucide="user-round-plus" class="size-5 text-primary"></i>보이스 관리
+        <span class="text-xs opacity-60 font-normal">10초 내외 음성을 등록하면 그 목소리로 합성됩니다 (CosyVoice 전용)</span>
+      </h2>
+      <div class="flex flex-wrap items-end gap-3">
+        <label class="form-control">
+          <span class="label-text text-xs mb-1">보이스 이름</span>
+          <input id="voice-name" type="text" maxlength="40" placeholder="예: 내 목소리"
+                 class="input input-bordered input-sm w-48" />
+        </label>
+        <label class="form-control">
+          <span class="label-text text-xs mb-1">음성 파일 (WAV, 3~30초, 10MB 이하)</span>
+          <input id="voice-file" type="file" accept=".wav,audio/wav"
+                 class="file-input file-input-bordered file-input-sm w-72" />
+        </label>
+        <button id="voice-upload" class="btn btn-primary btn-sm">
+          <i data-lucide="upload" class="size-4"></i>등록
+        </button>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="table table-sm">
+          <thead><tr><th>이름</th><th>ID</th><th>구분</th><th>등록일</th><th></th></tr></thead>
+          <tbody id="voice-body">
+            <tr><td colspan="5" class="text-center opacity-60">불러오는 중...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- API 사용 가이드 (외부 공유용 — 이 페이지는 열람 공개) -->
+  <div class="card bg-base-100 shadow">
+    <div class="card-body">
+      <div class="collapse collapse-arrow">
+        <input type="checkbox" />
+        <div class="collapse-title card-title text-base p-0">
+          <i data-lucide="book-open" class="size-5 text-primary"></i>API 사용 가이드
+          <span class="text-xs opacity-60 font-normal">외부에서 TTS API를 사용하는 방법</span>
+        </div>
+        <div class="collapse-content space-y-4 text-sm px-0">
+
+          <div>
+            <h3 class="font-semibold mb-1">1. 시작하기</h3>
+            <p class="opacity-80">모든 API 요청에는 <code class="bg-base-200 px-1 rounded">X-API-Key</code> 헤더가 필요합니다.
+            API 키는 서버 관리자에게 요청해 발급받으세요. 기본 주소: <code class="bg-base-200 px-1 rounded">https://ai.suhsaechan.kr/api/flask</code></p>
+          </div>
+
+          <div>
+            <h3 class="font-semibold mb-1">2. 엔진·보이스 확인</h3>
+            <p class="opacity-80 mb-1">합성 전에 어떤 엔진이 실행 중인지 확인하세요 (한 번에 1개 엔진만 실행됩니다).</p>
+            <pre class="bg-base-200 rounded p-3 text-xs overflow-x-auto">curl https://ai.suhsaechan.kr/api/flask/tts/engines -H "X-API-Key: {API키}"
+curl https://ai.suhsaechan.kr/api/flask/tts/voices  -H "X-API-Key: {API키}"</pre>
+          </div>
+
+          <div>
+            <h3 class="font-semibold mb-1">3. 음성 합성 — <code>POST /tts</code></h3>
+            <p class="opacity-80 mb-1">응답은 WAV 오디오 바이트입니다. <code class="bg-base-200 px-1 rounded">engine</code> 생략 시 실행 중 엔진 사용, 텍스트는 500자 이하.</p>
+            <pre class="bg-base-200 rounded p-3 text-xs overflow-x-auto">« curl »
+curl -X POST https://ai.suhsaechan.kr/api/flask/tts \
+  -H "X-API-Key: {API키}" -H "Content-Type: application/json" \
+  -d '{"text": "안녕하세요", "engine": "cosyvoice", "voice": "ref_a"}' \
+  --output result.wav
+
+« Python »
+import requests
+resp = requests.post("https://ai.suhsaechan.kr/api/flask/tts",
+    headers={"X-API-Key": "{API키}"},
+    json={"text": "안녕하세요", "engine": "cosyvoice"})
+open("result.wav", "wb").write(resp.content)
+
+« JavaScript »
+const resp = await fetch("https://ai.suhsaechan.kr/api/flask/tts", {
+  method: "POST",
+  headers: {"X-API-Key": "{API키}", "Content-Type": "application/json"},
+  body: JSON.stringify({text: "안녕하세요", engine: "cosyvoice"}),
+});
+new Audio(URL.createObjectURL(await resp.blob())).play();</pre>
+          </div>
+
+          <div>
+            <h3 class="font-semibold mb-1">4. 보이스 클로닝 — <code>POST /tts/voices</code></h3>
+            <p class="opacity-80 mb-1">조용한 곳에서 10초 내외로 녹음한 WAV를 등록하면, 반환된 <code class="bg-base-200 px-1 rounded">voice id</code>로 그 목소리 합성이 가능합니다.</p>
+            <pre class="bg-base-200 rounded p-3 text-xs overflow-x-auto">curl -X POST https://ai.suhsaechan.kr/api/flask/tts/voices \
+  -H "X-API-Key: {API키}" \
+  -F "name=내 목소리" -F "file=@my_voice.wav"</pre>
+            <p class="text-warning text-xs mt-1">본인 또는 동의받은 사람의 목소리만 등록하세요. 타인 음성의 무단 클로닝은 금지됩니다.</p>
+          </div>
+
+          <div>
+            <h3 class="font-semibold mb-1">5. 제한사항</h3>
+            <ul class="list-disc list-inside opacity-80 space-y-0.5">
+              <li>GPU 보호를 위해 한 번에 1개 엔진만 실행 — 실행 엔진은 <code class="bg-base-200 px-1 rounded">GET /tts/engines</code>로 확인</li>
+              <li>텍스트 500자 이하 · 업로드 WAV 3~30초, 10MB 이하</li>
+              <li>사용자 등록 보이스는 CosyVoice 엔진에서만 동작 (Kokoro는 내장 프리셋 전용)</li>
+            </ul>
+          </div>
+
+          <div>
+            <h3 class="font-semibold mb-1">6. 상세 문서</h3>
+            <p class="opacity-80">전체 API 명세는 <a href="{{ root }}/docs/swagger" class="link link-primary">Swagger 문서</a>에서 확인하세요.</p>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <!-- 로그 모달 (설치·기동 진행 확인) -->

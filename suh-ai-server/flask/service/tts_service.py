@@ -10,6 +10,7 @@ from collections import deque
 
 from config.tts_config import TTS_ENGINES
 from service.tts.adapters import get_adapter
+from service.tts.voice_store import voice_store
 
 logger = logging.getLogger(__name__)
 
@@ -64,13 +65,18 @@ class TtsService:
             except Exception as e:  # docker 데몬 다운 등 — 원인 그대로 노출 (palworld 패턴)
                 logger.error(f"TTS state check failed ({engine_id}): {str(e)}")
                 status = 'error'
+            voices = [{'id': v['id'], 'name': v['name']} for v in spec['voices']]
+            if engine_id == 'cosyvoice':
+                # 사용자 등록 보이스(제로샷 클로닝)는 CosyVoice에서만 사용 가능
+                voices += [{'id': v['id'], 'name': f"{v['name']} (등록됨)"}
+                           for v in voice_store.list()]
             states.append({
                 'id': engine_id,
                 'name': spec['name'],
                 'description': spec['description'],
                 'languages': spec['languages'],
                 'vram': spec['vram'],
-                'voices': [{'id': v['id'], 'name': v['name']} for v in spec['voices']],
+                'voices': voices,
                 'status': status,
                 'install_error': install.get('error'),
                 'install_progress': install.get('progress'),

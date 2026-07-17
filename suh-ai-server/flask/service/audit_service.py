@@ -33,6 +33,8 @@ class AuditAction(str, Enum):
     TTS_INSTALL = "TTS_INSTALL"
     TTS_START = "TTS_START"
     TTS_STOP = "TTS_STOP"
+    TTS_VOICE_ADD = "TTS_VOICE_ADD"
+    TTS_VOICE_DELETE = "TTS_VOICE_DELETE"
 
 
 def record(category: AuditCategory, action: AuditAction, actor_ip: str, detail: dict = None) -> bool:
