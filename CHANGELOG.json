@@ -1,14 +1,67 @@
 {
   "metadata": {
-    "lastUpdated": "2026-07-17T01:29:51Z",
-    "currentVersion": "2.0.35",
+    "lastUpdated": "2026-07-17T02:01:34Z",
+    "currentVersion": "2.0.36",
     "projectType": "python",
-    "totalReleases": 31,
+    "totalReleases": 32,
     "projectTypes": [
       "python"
     ]
   },
   "releases": [
+    {
+      "version": "2.0.36",
+      "project_type": "python",
+      "project_types": [
+        "python"
+      ],
+      "date": "2026-07-17",
+      "pr_number": 87,
+      "raw_summary": "## Summary by CodeRabbit\n\n## 릴리스 노트\n\n## 새 기능\n- /admin/tts 관리 페이지 추가\n- /tts 합성·엔진 제어 API 및 감사로그 추가\n- docker CLI 기반 엔진 수명주기 서비스 추가\n- Kokoro·CosyVoice 어댑터 추가\n- 엔진 레지스트리 및 레퍼런스 음성 자산 추가\n\n## 버그 수정\n- 해당 항목 없음\n\n## 개선\n- deploy-tts 사전준비 스크립트 및 배포 단계 추가\n- CosyVoice 서빙 이미지 및 CI 빌드 워크플로우 추가\n- Swagger에 TTS API 경로 추가\n- 구현 계획 문서 추가",
+      "parsed_changes": {
+        "admin_tts_관리_페이지_추가": {
+          "title": "/admin/tts 관리 페이지 추가",
+          "items": []
+        },
+        "tts_합성_엔진_제어_api_및_감사로그_추가": {
+          "title": "/tts 합성·엔진 제어 API 및 감사로그 추가",
+          "items": []
+        },
+        "docker_cli_기반_엔진_수명주기_서비스_추가": {
+          "title": "docker CLI 기반 엔진 수명주기 서비스 추가",
+          "items": []
+        },
+        "kokoro_cosyvoice_어댑터_추가": {
+          "title": "Kokoro·CosyVoice 어댑터 추가",
+          "items": []
+        },
+        "엔진_레지스트리_및_레퍼런스_음성_자산_추가": {
+          "title": "엔진 레지스트리 및 레퍼런스 음성 자산 추가",
+          "items": []
+        },
+        "해당_항목_없음": {
+          "title": "해당 항목 없음",
+          "items": []
+        },
+        "deploy_tts_사전준비_스크립트_및_배포_단계_추가": {
+          "title": "deploy-tts 사전준비 스크립트 및 배포 단계 추가",
+          "items": []
+        },
+        "cosyvoice_서빙_이미지_및_ci_빌드_워크플로우_추가": {
+          "title": "CosyVoice 서빙 이미지 및 CI 빌드 워크플로우 추가",
+          "items": []
+        },
+        "swagger에_tts_api_경로_추가": {
+          "title": "Swagger에 TTS API 경로 추가",
+          "items": []
+        },
+        "구현_계획_문서_추가": {
+          "title": "구현 계획 문서 추가",
+          "items": []
+        }
+      },
+      "parse_method": "markdown"
+    },
     {
       "version": "2.0.35",
       "project_type": "python",
