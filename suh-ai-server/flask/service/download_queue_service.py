@@ -15,7 +15,7 @@ MAX_FINISHED_ITEMS = 20  # 완료/실패/취소 이력 보관 개수 — 폴링 
 
 
 class DownloadQueueService:
-    """다운로드 큐 관리 — enqueue/get_state (취소·이력 정리는 Task 2에서 추가)"""
+    """다운로드 큐 관리 — enqueue/get_state/cancel, 완료 이력은 최근 20개만 유지"""
 
     def __init__(self, ollama_url: str = 'http://127.0.0.1:11434'):
         # model_service와 동일하게 명시적 Client 생성 (OLLAMA_HOST 환경변수 비의존)
