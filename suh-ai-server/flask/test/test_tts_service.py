@@ -96,3 +96,33 @@ def test_install_duplicate_rejected(fake, monkeypatch):
     svc._installs['kokoro'] = {'status': 'pulling', 'error': None}
     with pytest.raises(ValueError):
         svc.install('kokoro')
+
+
+def test_logs_during_install_returns_pull_log(fake):
+    svc = TtsService()
+    svc._installs['kokoro'] = {'status': 'pulling', 'error': None,
+                               'log': ['abc: Pulling fs layer', 'abc: Downloading']}
+    out = svc.logs('kokoro')
+    assert '다운로드' in out and 'abc: Downloading' in out
+    assert fake.calls == []  # docker logs를 호출하지 않아야 한다
+
+
+def test_logs_no_container_translated(fake, monkeypatch):
+    def fake_run(cmd, **kwargs):
+        from types import SimpleNamespace
+        return SimpleNamespace(returncode=1,
+                               stdout='Error response from daemon: No such container: suh-tts-kokoro')
+
+    monkeypatch.setattr(tts_service_module.subprocess, 'run', fake_run)
+    with pytest.raises(RuntimeError) as e:
+        TtsService().logs('kokoro')
+    assert '컨테이너가 아직 없습니다' in str(e.value)
+
+
+def test_state_includes_install_progress(fake):
+    svc = TtsService()
+    svc._installs['kokoro'] = {'status': 'pulling', 'error': None,
+                               'progress': '레이어 3개 완료 · abc: Downloading'}
+    state = {s['id']: s for s in svc.get_engines_state()}
+    assert state['kokoro']['status'] == 'installing'
+    assert state['kokoro']['install_progress'] == '레이어 3개 완료 · abc: Downloading'

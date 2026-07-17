@@ -60,6 +60,9 @@ function renderEngines() {
     }
     const installError = e.install_error
       ? `<div class="text-error text-xs mt-1">${escapeHtml(e.install_error)}</div>` : '';
+    // 설치(pull) 진행 상황 — 3초 폴링으로 갱신된다
+    const installProgress = e.status === 'installing'
+      ? `<div class="text-xs opacity-70 font-mono truncate mt-1">${escapeHtml(e.install_progress || '이미지 다운로드 준비 중...')}</div>` : '';
     return `
       <div class="border border-base-300 rounded-lg p-4 space-y-2">
         <div class="flex items-center justify-between">
@@ -68,6 +71,7 @@ function renderEngines() {
         </div>
         <p class="text-xs opacity-70">${escapeHtml(e.description)}</p>
         <div class="text-xs opacity-60">언어: ${e.languages.join(', ')} · VRAM: ${escapeHtml(e.vram)}</div>
+        ${installProgress}
         ${installError}
         <div class="flex gap-2 pt-1">${buttons.join('')}</div>
       </div>`;

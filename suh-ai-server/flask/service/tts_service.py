@@ -6,6 +6,7 @@ TTS 엔진 수명주기 관리 — docker CLI subprocess 제어
 import logging
 import subprocess
 import threading
+from collections import deque
 
 from config.tts_config import TTS_ENGINES
 from service.tts.adapters import get_adapter
@@ -13,7 +14,7 @@ from service.tts.adapters import get_adapter
 logger = logging.getLogger(__name__)
 
 DOCKER_TIMEOUT = 60
-PULL_TIMEOUT = 3600  # 이미지가 수 GB — 서버 회선 기준 여유값
+INSTALL_LOG_TAIL = 15  # 설치(pull) 로그 보관 줄 수 — 폴링 응답 크기 제한
 
 
 class TtsService:
@@ -72,6 +73,7 @@ class TtsService:
                 'voices': [{'id': v['id'], 'name': v['name']} for v in spec['voices']],
                 'status': status,
                 'install_error': install.get('error'),
+                'install_progress': install.get('progress'),
             })
         return states
 
@@ -98,13 +100,33 @@ class TtsService:
                          daemon=True, name=f'tts-pull-{engine_id}').start()
 
     def _pull(self, engine_id: str, image: str):
+        """pull 출력을 한 줄씩 읽어 진행 상황(progress)·로그 tail을 상태에 반영한다"""
+        tail = deque(maxlen=INSTALL_LOG_TAIL)
         try:
-            self._run_docker(['pull', image], timeout=PULL_TIMEOUT)
-            state = {'status': 'done', 'error': None}
+            proc = subprocess.Popen(['docker', 'pull', image],
+                                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                    text=True)
+            done_layers = 0
+            for raw in proc.stdout:
+                line = raw.strip()
+                if not line:
+                    continue
+                tail.append(line)
+                if line.endswith('Pull complete'):
+                    done_layers += 1
+                with self._install_lock:
+                    cur = self._installs.get(engine_id)
+                    if cur is not None and cur['status'] == 'pulling':
+                        cur['progress'] = f'레이어 {done_layers}개 완료 · {line}'
+                        cur['log'] = list(tail)
+            if proc.wait() != 0:
+                raise RuntimeError(tail[-1] if tail else 'docker pull failed')
+            state = {'status': 'done', 'error': None, 'progress': None}
             logger.info(f"TTS image pull done: {image}")
         except Exception as e:
-            state = {'status': 'error', 'error': str(e)}
+            state = {'status': 'error', 'error': str(e), 'progress': None}
             logger.error(f"TTS image pull failed ({engine_id}): {str(e)}")
+        state['log'] = list(tail)
         with self._install_lock:
             self._installs[engine_id] = state
 
@@ -131,11 +153,18 @@ class TtsService:
         logger.info(f"TTS engine stopped: {engine_id}")
 
     def logs(self, engine_id: str) -> str:
-        """컨테이너 로그 tail — 설치/기동 진행 상황 표시용 (stderr 포함)"""
+        """로그 tail — 설치 중엔 pull 로그, 그 외엔 컨테이너 로그 (stderr 포함)"""
+        install = self._installs.get(engine_id, {})
+        if install.get('status') == 'pulling':
+            lines = install.get('log') or ['(아직 출력 없음)']
+            return '[이미지 다운로드 중]\n' + '\n'.join(lines)
         result = subprocess.run(
             ['docker', 'logs', '--tail', '80', TTS_ENGINES[engine_id]['container']],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, timeout=DOCKER_TIMEOUT)
         if result.returncode != 0:
-            raise RuntimeError(result.stdout.strip() or 'docker logs failed')
+            out = result.stdout.strip()
+            if 'No such container' in out:
+                raise RuntimeError('컨테이너가 아직 없습니다 — 엔진을 시작하면 로그가 생성됩니다')
+            raise RuntimeError(out or 'docker logs failed')
         return result.stdout
