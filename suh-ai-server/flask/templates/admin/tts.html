@@ -1,0 +1,71 @@
+{% extends "admin/base.html" %}
+{% block title %}TTS 관리 | SUH AI Server{% endblock %}
+{% block page_title %}TTS 관리{% endblock %}
+{% block content %}
+<div class="space-y-6 max-w-6xl mx-auto">
+
+  <!-- 엔진 카탈로그 -->
+  <div class="card bg-base-100 shadow">
+    <div class="card-body">
+      <div class="flex items-center justify-between">
+        <h2 class="card-title text-base">
+          <i data-lucide="audio-lines" class="size-5 text-primary"></i>TTS 엔진
+        </h2>
+        <span class="text-xs opacity-60">VRAM 보호를 위해 한 번에 1개만 실행됩니다</span>
+      </div>
+      <div id="engines-error" class="alert alert-error hidden"><span></span></div>
+      <div id="engine-cards" class="grid md:grid-cols-2 gap-4">
+        <div class="text-center opacity-60 py-8">불러오는 중...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 합성 테스트 -->
+  <div class="card bg-base-100 shadow">
+    <div class="card-body space-y-3">
+      <h2 class="card-title text-base">
+        <i data-lucide="mic" class="size-5 text-primary"></i>합성 테스트
+        <span id="test-engine-badge" class="badge badge-ghost badge-sm">실행 중 엔진 없음</span>
+      </h2>
+      <textarea id="tts-text" class="textarea textarea-bordered w-full" rows="3"
+                placeholder="합성할 텍스트를 입력하세요"></textarea>
+      <div class="flex flex-wrap items-end gap-4">
+        <label class="form-control">
+          <span class="label-text text-xs mb-1">보이스</span>
+          <select id="tts-voice" class="select select-bordered select-sm min-w-48"></select>
+        </label>
+        <label class="form-control">
+          <span class="label-text text-xs mb-1">속도: <span id="speed-value">1.0</span>x</span>
+          <input id="tts-speed" type="range" min="0.5" max="2" step="0.1" value="1"
+                 class="range range-sm w-40" />
+        </label>
+        <button id="tts-run" class="btn btn-primary btn-sm">
+          <i data-lucide="play" class="size-4"></i>합성
+        </button>
+      </div>
+      <div id="tts-result" class="hidden items-center gap-3 flex">
+        <audio id="tts-audio" controls class="w-full max-w-md"></audio>
+        <a id="tts-download" class="btn btn-ghost btn-sm" download="tts.wav">
+          <i data-lucide="download" class="size-4"></i>WAV
+        </a>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- 로그 모달 (설치·기동 진행 확인) -->
+<dialog id="logs-modal" class="modal">
+  <div class="modal-box max-w-3xl">
+    <h3 id="logs-title" class="font-bold text-sm mb-2">컨테이너 로그</h3>
+    <pre id="logs-body" class="bg-base-200 rounded p-3 text-xs overflow-x-auto max-h-96"></pre>
+    <div class="modal-action">
+      <form method="dialog"><button class="btn btn-sm">닫기</button></form>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+{% endblock %}
+{% block extra_js %}
+<script src="{{ root }}/static/js/tts.js?v={{ asset('js/tts.js') }}"></script>
+{% endblock %}
