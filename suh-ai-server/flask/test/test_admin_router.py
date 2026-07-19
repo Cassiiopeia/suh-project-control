@@ -60,8 +60,26 @@ def test_tts_page_renders(client):
     assert 'logs-modal' in body
 
 
+def test_api_docs_page_renders_iframe(client):
+    resp = client.get('/admin/api-docs')
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert 'API 문서' in body
+    assert '<iframe' in body
+    assert '../docs/swagger' in body  # nginx 프리픽스 뒤에서도 동작하는 상대경로
+
+
+def test_dashboard_cards_cover_all_sidebar_menus(client):
+    """사이드바 메뉴 전 항목이 대시보드 바로가기 카드로 존재해야 한다"""
+    body = client.get('/admin').get_data(as_text=True)
+    for href in ('./admin/palworld', './admin/ollama-test', './admin/models',
+                 './admin/tts', './admin/api-docs', './admin/logs'):
+        assert href in body, f'대시보드에 {href} 카드가 없음'
+
+
 def test_no_emoji_icons_on_any_admin_page(client):
-    for path in ('/admin', '/admin/palworld', '/admin/logs', '/admin/models', '/admin/tts'):
+    for path in ('/admin', '/admin/palworld', '/admin/logs', '/admin/models', '/admin/tts',
+                 '/admin/api-docs'):
         body = client.get(path).get_data(as_text=True)
         match = EMOJI_RE.search(body)
         assert not match, f'{path} 에 이모지가 남아있음: {match.group() if match else ""}'

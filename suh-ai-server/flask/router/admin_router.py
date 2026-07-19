@@ -59,3 +59,9 @@ def models():
 def tts():
     """TTS 엔진 관리 페이지 (설치·전환·테스트)"""
     return render_template('admin/tts.html', root='..', active='tts')
+
+
+@admin_bp.route('/admin/api-docs', methods=['GET'])
+def api_docs():
+    """API 문서 페이지 - Swagger UI를 admin 레이아웃 안에 iframe으로 임베드"""
+    return render_template('admin/api_docs.html', root='..', active='api-docs')

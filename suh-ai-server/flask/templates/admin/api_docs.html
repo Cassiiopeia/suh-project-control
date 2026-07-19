@@ -1,0 +1,13 @@
+{% extends "admin/base.html" %}
+{% block title %}API 문서 - SUH AI Server Admin{% endblock %}
+{% block page_title %}API 문서{% endblock %}
+{% block content %}
+{# 스웨거 UI를 admin 레이아웃(사이드바·네비바) 안에 iframe으로 임베드.
+   스크롤은 iframe 내부 스웨거 UI가 처리하므로 높이만 뷰포트에 맞춘다. #}
+<iframe
+  src="{{ root }}/docs/swagger"
+  title="API Swagger 문서"
+  class="w-full bg-base-100 rounded-box border border-base-300"
+  style="height: calc(100vh - 11rem); min-height: 480px;"
+></iframe>
+{% endblock %}
