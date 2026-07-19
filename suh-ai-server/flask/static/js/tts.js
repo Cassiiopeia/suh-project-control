@@ -350,23 +350,41 @@ el('voice-record-discard').addEventListener('click', () => {
   el('voice-record-preview').classList.add('hidden');
 });
 
-let droppedFile = null;  // 드래그&드랍으로 받은 파일 (파일 선택보다 우선순위 낮음)
+/* 드랍존 — 점선 영역이 드래그 대상임을 명확히 하고, 선택된 파일명을 칩으로 표시 */
+let selectedFile = null;
+const dropzone = el('voice-dropzone');
 
-// 카드 전체를 드랍 영역으로 — 어떤 오디오든 받는다 (업로드 시 WAV로 자동 변환)
-const voiceCard = el('voice-card');
-['dragover', 'dragenter'].forEach(ev => voiceCard.addEventListener(ev, e => {
+function setSelectedFile(f) {
+  selectedFile = f;
+  el('voice-selected').classList.remove('hidden');
+  el('voice-selected-name').textContent = `${f.name} (${(f.size / 1024 / 1024).toFixed(1)}MB)`;
+  if (window.lucide) lucide.createIcons();
+}
+
+['dragover', 'dragenter'].forEach(ev => dropzone.addEventListener(ev, e => {
   e.preventDefault();
-  voiceCard.classList.add('ring', 'ring-primary');
+  dropzone.classList.add('border-primary', 'bg-base-200');
 }));
-['dragleave', 'drop'].forEach(ev => voiceCard.addEventListener(ev, e => {
+['dragleave', 'drop'].forEach(ev => dropzone.addEventListener(ev, e => {
   e.preventDefault();
-  voiceCard.classList.remove('ring', 'ring-primary');
+  dropzone.classList.remove('border-primary', 'bg-base-200');
 }));
-voiceCard.addEventListener('drop', e => {
+dropzone.addEventListener('drop', e => {
   const f = e.dataTransfer.files && e.dataTransfer.files[0];
-  if (!f) return;
-  droppedFile = f;
-  showToast(`파일 준비됨: ${f.name} — 이름 입력 후 등록을 누르세요`, 'info');
+  if (f) setSelectedFile(f);
+});
+dropzone.addEventListener('click', e => {
+  if (e.target.closest('#voice-selected-clear')) return; // 해제 버튼은 파일창 안 띄움
+  el('voice-file').click();
+});
+el('voice-file').addEventListener('change', () => {
+  const f = el('voice-file').files[0];
+  if (f) setSelectedFile(f);
+});
+el('voice-selected-clear').addEventListener('click', () => {
+  selectedFile = null;
+  el('voice-file').value = '';
+  el('voice-selected').classList.add('hidden');
 });
 
 async function toUploadWav(file) {
@@ -381,8 +399,8 @@ async function toUploadWav(file) {
 
 el('voice-upload').addEventListener('click', async () => {
   const name = el('voice-name').value.trim();
-  // 우선순위: 파일 선택 > 드래그&드랍 > 브라우저 녹음
-  const source = el('voice-file').files[0] || droppedFile
+  // 우선순위: 선택/드랍된 파일 > 브라우저 녹음
+  const source = selectedFile
     || (recordedWav && new File([recordedWav], 'recorded.wav', { type: 'audio/wav' }));
   if (!name) { showToast('보이스 이름을 입력하세요', 'warning'); return; }
   if (!source) { showToast('음성 파일을 선택/드랍하거나 녹음하세요', 'warning'); return; }
@@ -407,7 +425,8 @@ el('voice-upload').addEventListener('click', async () => {
     showToast(`보이스 등록 완료: ${data.voice.id}`, 'success');
     el('voice-name').value = '';
     el('voice-file').value = '';
-    droppedFile = null;
+    selectedFile = null;
+    el('voice-selected').classList.add('hidden');
     recordedWav = null;
     el('voice-record-preview').classList.add('hidden');
     loadVoices();

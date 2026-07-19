@@ -59,25 +59,41 @@
         <i data-lucide="user-round-plus" class="size-5 text-primary"></i>보이스 관리
         <span class="text-xs opacity-60 font-normal">10초 내외 음성을 등록하면 그 목소리로 합성됩니다 (CosyVoice 전용)</span>
       </h2>
-      <div class="flex flex-wrap items-end gap-3">
-        <label class="form-control">
-          <span class="label-text text-xs mb-1">보이스 이름</span>
-          <input id="voice-name" type="text" maxlength="40" placeholder="예: 내 목소리"
-                 class="input input-bordered input-sm w-48" />
-        </label>
-        <label class="form-control">
-          <span class="label-text text-xs mb-1">음성 파일 (m4a/mp3/wav 등, 3~30초 — 자동 변환됨)</span>
-          <input id="voice-file" type="file" accept="audio/*,.wav,.mp3,.m4a,.aac,.ogg,.webm"
-                 class="file-input file-input-bordered file-input-sm w-72" />
-        </label>
-        <span class="text-xs opacity-60 pb-2">또는</span>
-        <button id="voice-record" class="btn btn-outline btn-sm">
-          <i data-lucide="mic" class="size-4"></i><span id="voice-record-label">녹음</span>
-        </button>
-        <span id="voice-record-status" class="text-xs opacity-70 pb-2 hidden"></span>
-        <button id="voice-upload" class="btn btn-primary btn-sm">
-          <i data-lucide="upload" class="size-4"></i>등록
-        </button>
+      <div class="flex flex-wrap items-stretch gap-4">
+        <div class="flex flex-col gap-2 w-56">
+          <label class="form-control">
+            <span class="label-text text-xs mb-1 flex items-center gap-1">보이스 이름
+              <span class="tooltip tooltip-right" data-tip="m4a/mp3/wav 등 대부분의 오디오 지원 - 3~30초, 10MB 이하 - 등록 시 자동으로 WAV 변환됩니다">
+                <i data-lucide="info" class="size-3.5 opacity-60"></i>
+              </span>
+            </span>
+            <input id="voice-name" type="text" maxlength="40" placeholder="예: 내 목소리"
+                   class="input input-bordered input-sm w-full" />
+          </label>
+          <div class="flex gap-2">
+            <button id="voice-record" class="btn btn-outline btn-sm flex-1">
+              <i data-lucide="mic" class="size-4"></i><span id="voice-record-label">녹음</span>
+            </button>
+            <button id="voice-upload" class="btn btn-primary btn-sm flex-1">
+              <i data-lucide="upload" class="size-4"></i>등록
+            </button>
+          </div>
+          <span id="voice-record-status" class="text-xs opacity-70 hidden"></span>
+        </div>
+        <div id="voice-dropzone"
+             class="flex-1 min-w-64 border-2 border-dashed border-base-300 rounded-lg p-4 text-center cursor-pointer transition-colors hover:border-primary">
+          <i data-lucide="file-audio" class="size-6 mx-auto opacity-50"></i>
+          <p class="text-xs opacity-70 mt-1">음성 파일을 여기로 드래그하거나 클릭해서 선택</p>
+          <div id="voice-selected" class="hidden justify-center items-center gap-2 mt-2 flex">
+            <span class="badge badge-primary badge-sm gap-1">
+              <i data-lucide="paperclip" class="size-3"></i><span id="voice-selected-name"></span>
+            </span>
+            <button id="voice-selected-clear" class="btn btn-ghost btn-xs" title="선택 해제">
+              <i data-lucide="x" class="size-3"></i>
+            </button>
+          </div>
+          <input id="voice-file" type="file" accept="audio/*,.wav,.mp3,.m4a,.aac,.ogg,.webm" class="hidden" />
+        </div>
       </div>
       <div id="voice-record-preview" class="hidden items-center gap-2 flex">
         <span class="text-xs opacity-70">녹음 미리듣기:</span>
