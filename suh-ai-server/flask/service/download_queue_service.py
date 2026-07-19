@@ -7,7 +7,7 @@ import threading
 import uuid
 from datetime import datetime
 
-from ollama import Client
+from util.ollama_client import create_ollama_client
 
 logger = logging.getLogger(__name__)
 
@@ -18,8 +18,7 @@ class DownloadQueueService:
     """다운로드 큐 관리 — enqueue/get_state/cancel, 완료 이력은 최근 20개만 유지"""
 
     def __init__(self, ollama_url: str = 'http://127.0.0.1:11434'):
-        # model_service와 동일하게 명시적 Client 생성 (OLLAMA_HOST 환경변수 비의존)
-        self.client = Client(host=ollama_url.rstrip('/'))
+        self.client = create_ollama_client(ollama_url)
         self._lock = threading.Lock()
         self._items = []                # 큐 + 완료 이력 (추가 순서 유지)
         self._wake = threading.Event()  # 워커 깨우기 — 빈 큐에서 busy-wait 방지

@@ -3,7 +3,9 @@ Ollama Test Service
 Structured Outputs 테스트용 — 모델 목록 조회 + format(JSON Schema) 지정 chat 실행
 """
 import logging
-from ollama import Client, ChatResponse
+from ollama import ChatResponse
+
+from util.ollama_client import create_ollama_client
 
 logger = logging.getLogger(__name__)
 
@@ -18,8 +20,7 @@ class OllamaService:
 
     def __init__(self, ollama_url: str = "http://127.0.0.1:11434"):
         self.ollama_url = ollama_url.rstrip('/')
-        # 명시적으로 Client를 생성하여 OLLAMA_HOST 환경변수(0.0.0.0)에 의존하지 않음
-        self.client = Client(host=self.ollama_url)
+        self.client = create_ollama_client(self.ollama_url)
 
     def list_models(self) -> list:
         """

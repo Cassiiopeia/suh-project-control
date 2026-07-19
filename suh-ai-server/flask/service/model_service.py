@@ -6,7 +6,8 @@ import logging
 import re
 
 import requests
-from ollama import Client
+
+from util.ollama_client import create_ollama_client
 
 logger = logging.getLogger(__name__)
 
@@ -37,8 +38,7 @@ class ModelService:
 
     def __init__(self, ollama_url: str = 'http://127.0.0.1:11434'):
         self.ollama_url = ollama_url.rstrip('/')
-        # 명시적으로 Client를 생성하여 OLLAMA_HOST 환경변수(0.0.0.0)에 의존하지 않음
-        self.client = Client(host=self.ollama_url)
+        self.client = create_ollama_client(self.ollama_url)
 
     # ---------- Hugging Face ----------
 

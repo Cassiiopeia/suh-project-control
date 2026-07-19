@@ -4,7 +4,9 @@ Image description using local vision models via Ollama
 """
 import os
 import logging
-from ollama import Client, ChatResponse
+from ollama import ChatResponse
+
+from util.ollama_client import create_ollama_client
 from util.common_util import (
     download_image_from_url,
     save_bytes_to_temp_file,
@@ -22,7 +24,7 @@ class VisionService:
 
     def __init__(self, ollama_url: str = "http://127.0.0.1:11434"):
         self.ollama_url = ollama_url.rstrip('/')
-        self.client = Client(host=self.ollama_url)
+        self.client = create_ollama_client(self.ollama_url)
 
     def get_image_base64(self, source: str) -> str:
         temp_file_path = None

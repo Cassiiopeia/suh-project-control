@@ -1,14 +1,33 @@
 {
   "metadata": {
-    "lastUpdated": "2026-07-19T08:15:14Z",
-    "currentVersion": "2.0.51",
+    "lastUpdated": "2026-07-19T08:33:56Z",
+    "currentVersion": "2.0.52",
     "projectType": "python",
-    "totalReleases": 47,
+    "totalReleases": 48,
     "projectTypes": [
       "python"
     ]
   },
   "releases": [
+    {
+      "version": "2.0.52",
+      "project_type": "python",
+      "project_types": [
+        "python"
+      ],
+      "date": "2026-07-19",
+      "pr_number": 110,
+      "raw_summary": "## Summary by CodeRabbit\n\n## 릴리스 노트\n\n* **버그 수정**\n  * AI 응답이 지연될 때 서버 전체가 멈추던 문제 해결",
+      "parsed_changes": {
+        "버그_수정": {
+          "title": "버그 수정",
+          "items": [
+            "AI 응답이 지연될 때 서버 전체가 멈추던 문제 해결"
+          ]
+        }
+      },
+      "parse_method": "markdown"
+    },
     {
       "version": "2.0.51",
       "project_type": "python",
