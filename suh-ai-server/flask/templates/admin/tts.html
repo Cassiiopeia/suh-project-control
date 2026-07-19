@@ -52,8 +52,8 @@
     </div>
   </div>
 
-  <!-- 보이스 관리 (제로샷 클로닝) -->
-  <div class="card bg-base-100 shadow">
+  <!-- 보이스 관리 (제로샷 클로닝) — 카드 전체가 드래그&드랍 영역 -->
+  <div id="voice-card" class="card bg-base-100 shadow">
     <div class="card-body space-y-3">
       <h2 class="card-title text-base">
         <i data-lucide="user-round-plus" class="size-5 text-primary"></i>보이스 관리
@@ -66,8 +66,8 @@
                  class="input input-bordered input-sm w-48" />
         </label>
         <label class="form-control">
-          <span class="label-text text-xs mb-1">음성 파일 (WAV, 3~30초, 10MB 이하)</span>
-          <input id="voice-file" type="file" accept=".wav,audio/wav"
+          <span class="label-text text-xs mb-1">음성 파일 (m4a/mp3/wav 등, 3~30초 — 자동 변환됨)</span>
+          <input id="voice-file" type="file" accept="audio/*,.wav,.mp3,.m4a,.aac,.ogg,.webm"
                  class="file-input file-input-bordered file-input-sm w-72" />
         </label>
         <span class="text-xs opacity-60 pb-2">또는</span>
