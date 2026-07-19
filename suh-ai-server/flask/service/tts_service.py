@@ -16,6 +16,7 @@ from service.tts.voice_store import voice_store
 logger = logging.getLogger(__name__)
 
 DOCKER_TIMEOUT = 60
+STATUS_DOCKER_TIMEOUT = 5  # 상태 확인용 — 도커가 느릴 때 워커가 오래 붙잡히지 않게
 INSTALL_LOG_TAIL = 15  # 설치(pull) 로그 보관 줄 수 — 폴링 응답 크기 제한
 STATE_CACHE_SEC = 3    # 상태 조회 캐시 — 다중 탭 폴링이 docker 호출을 중복 발사해
                        # 도커가 느릴 때 워커 스레드풀을 고갈시키는 것 방지 (실측 장애)
@@ -28,6 +29,7 @@ class TtsService:
         self._installs = {}  # engine_id -> {'status': 'pulling'|'done'|'error', 'error': str|None}
         self._state_lock = threading.Lock()
         self._state_cache = None   # (계산 시각, 상태 리스트)
+        self._state_computing = False  # 재계산 중이면 다른 스레드는 낡은 캐시 즉시 반환
 
     # ---------- docker CLI 래퍼 ----------
 
@@ -40,27 +42,37 @@ class TtsService:
 
     def _image_exists(self, image: str) -> bool:
         try:
-            self._run_docker(['image', 'inspect', image])
+            self._run_docker(['image', 'inspect', image], timeout=STATUS_DOCKER_TIMEOUT)
             return True
         except RuntimeError:
             return False
 
     def _container_running(self, container: str) -> bool:
         out = self._run_docker(['ps', '--filter', f'name=^{container}$',
-                                '--format', '{{.Names}}'])
+                                '--format', '{{.Names}}'], timeout=STATUS_DOCKER_TIMEOUT)
         return container in out.split()
 
     # ---------- 조회 ----------
 
     def get_engines_state(self) -> list:
         """카탈로그 + 엔진별 상태 (관리자 화면 폴링·외부 조회용).
-        짧은 캐시로 동시 폴링의 docker 호출 중복을 막는다 — 락 안에서 계산해 single-flight"""
+        재계산은 한 스레드만 수행하고, 그동안 다른 스레드는 낡은 캐시라도 즉시 반환한다
+        (도커가 느릴 때 폴링 스레드들이 락 대기로 고갈되는 실측 장애 방지)"""
         with self._state_lock:
-            if self._state_cache and time.monotonic() - self._state_cache[0] < STATE_CACHE_SEC:
-                return self._state_cache[1]
+            cached = self._state_cache
+            if cached and time.monotonic() - cached[0] < STATE_CACHE_SEC:
+                return cached[1]
+            if self._state_computing and cached:
+                return cached[1]
+            self._state_computing = True
+        try:
             states = self._compute_engines_state()
-            self._state_cache = (time.monotonic(), states)
+            with self._state_lock:
+                self._state_cache = (time.monotonic(), states)
             return states
+        finally:
+            with self._state_lock:
+                self._state_computing = False
 
     def _compute_engines_state(self) -> list:
         states = []

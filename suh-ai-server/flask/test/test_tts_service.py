@@ -158,3 +158,13 @@ def test_gpu_engine_start_keeps_cpu_engine(fake):
     assert 'suh-tts-supertonic' in fake.running   # CPU 엔진 유지
     assert 'suh-tts-cosyvoice' not in fake.running  # GPU 엔진은 교체
     assert 'suh-tts-kokoro' in fake.running
+
+
+def test_engines_state_serves_stale_while_computing(fake):
+    svc = TtsService()
+    first = svc.get_engines_state()
+    svc._state_cache = (0, first)   # TTL 만료로 조작
+    svc._state_computing = True     # 다른 스레드가 재계산 중인 상황
+    calls = len(fake.calls)
+    assert svc.get_engines_state() == first  # 낡은 캐시 즉시 반환
+    assert len(fake.calls) == calls          # docker 재호출 없음
