@@ -47,9 +47,9 @@ def fake(monkeypatch):
 
 def test_state_not_installed(fake):
     states = TtsService().get_engines_state()
-    assert {s['id']: s['status'] for s in states} == {
-        'kokoro': 'not_installed', 'cosyvoice': 'not_installed',
-        'supertonic': 'not_installed'}
+    assert all(s['status'] == 'not_installed' for s in states)
+    assert {s['id'] for s in states} == set(
+        tts_service_module.TTS_ENGINES.keys())
 
 
 def test_state_running_needs_health(fake, monkeypatch):
