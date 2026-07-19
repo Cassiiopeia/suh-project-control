@@ -28,6 +28,7 @@ async function loadEngines() {
     el('engines-error').classList.add('hidden');
     renderEngines();
     renderTestPanel();
+    loadVoices(); // 엔진 실행 상태에 따라 미리듣기 버튼 활성화가 달라진다
   } catch (e) {
     el('engines-error').classList.remove('hidden');
     el('engines-error').querySelector('span').textContent = e.message;
@@ -207,7 +208,8 @@ async function loadVoices() {
             <span class="badge badge-sm badge-ghost">${escapeHtml(v.engine)}</span></td>
         <td class="text-xs opacity-70">${escapeHtml(v.created_at || '-')}</td>
         <td class="flex gap-1">
-          <button class="btn btn-ghost btn-xs" onclick="previewVoice('${escapeHtml(v.id)}','${escapeHtml(v.engine)}')" title="미리듣기">
+          <button class="btn btn-ghost btn-xs ${engines.some(e => e.id === v.engine && e.status === 'running') ? '' : 'btn-disabled opacity-40'}"
+                  onclick="previewVoice('${escapeHtml(v.id)}','${escapeHtml(v.engine)}')" title="미리듣기 (엔진 실행 중일 때)">
             <i data-lucide="play" class="size-3"></i>
           </button>
           ${v.builtin ? '' : `<button class="btn btn-ghost btn-xs text-error" onclick="deleteVoice('${escapeHtml(v.id)}')" title="삭제">
@@ -222,6 +224,12 @@ async function loadVoices() {
 }
 
 async function previewVoice(id, engine) {
+  // 해당 보이스의 엔진이 실행 중이 아니면 호출하지 않고 안내 (실측: 중지 엔진 미리듣기 503)
+  const eng = engines.find(e => e.id === engine);
+  if (!eng || eng.status !== 'running') {
+    showToast(`${eng ? eng.name : engine} 엔진이 실행 중이 아닙니다 — 시작 후 미리듣기할 수 있어요`, 'warning');
+    return;
+  }
   try {
     const resp = await apiFetch(TTS_API, {
       method: 'POST',
