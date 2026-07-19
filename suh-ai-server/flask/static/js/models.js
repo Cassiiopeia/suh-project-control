@@ -9,6 +9,34 @@ let deleteTarget = null;
 
 function el(id) { return document.getElementById(id); }
 
+/* ---------- 패밀리 그룹핑 ---------- */
+const HF_FAMILY = 'HuggingFace';
+
+/* 모델명에서 패밀리 산출 — hf.co 레포는 통째로 HuggingFace 그룹, 나머지는 ':' 앞부분 */
+function familyOf(name) {
+  if (name.indexOf('hf.co/') === 0) return HF_FAMILY;
+  return name.split(':')[0];
+}
+
+/* 패밀리 → 모델 배열 맵을 [패밀리명, 모델들] 배열로 반환. 알파벳순, HuggingFace는 맨 뒤 */
+function groupByFamily(models) {
+  const groups = {};
+  models.forEach(function (m) {
+    const fam = familyOf(m.name);
+    (groups[fam] = groups[fam] || []).push(m);
+  });
+  return Object.keys(groups)
+    .sort(function (a, b) {
+      if (a === HF_FAMILY) return 1;
+      if (b === HF_FAMILY) return -1;
+      return a.localeCompare(b);
+    })
+    .map(function (fam) {
+      groups[fam].sort(function (a, b) { return a.name.localeCompare(b.name); });
+      return [fam, groups[fam]];
+    });
+}
+
 function fmtSize(bytes) {
   if (!bytes && bytes !== 0) return '-';
   const gb = bytes / 1024 / 1024 / 1024;
@@ -43,17 +71,20 @@ function renderInstalled() {
     body.innerHTML = '<tr><td colspan="7" class="text-center opacity-60">설치된 모델이 없습니다. 아래에서 검색해 받아보세요.</td></tr>';
     return;
   }
-  body.innerHTML = installedModels.map(function (m) {
-    const vision = m.vision ? ' <span class="badge badge-info badge-xs">vision</span>' : '';
-    return '<tr>'
-      + '<td class="font-mono">' + escapeHtml(m.name) + vision + '</td>'
-      + '<td>' + fmtSize(m.size) + '</td>'
-      + '<td>' + escapeHtml(m.family || '-') + '</td>'
-      + '<td>' + escapeHtml(m.parameter_size || '-') + '</td>'
-      + '<td>' + escapeHtml(m.quantization || '-') + '</td>'
-      + '<td>' + (m.modified_at ? escapeHtml(m.modified_at.slice(0, 10)) : '-') + '</td>'
-      + '<td><button class="btn btn-error btn-xs" data-delete="' + escapeHtml(m.name) + '">삭제</button></td>'
-      + '</tr>';
+  /* 패밀리 → 이름순으로 묶어서 같은 계열이 붙어 보이게 렌더링 */
+  body.innerHTML = groupByFamily(installedModels).map(function (group) {
+    return group[1].map(function (m) {
+      const vision = m.vision ? ' <span class="badge badge-info badge-xs">vision</span>' : '';
+      return '<tr>'
+        + '<td class="font-mono">' + escapeHtml(m.name) + vision + '</td>'
+        + '<td>' + fmtSize(m.size) + '</td>'
+        + '<td>' + escapeHtml(m.family || '-') + '</td>'
+        + '<td>' + escapeHtml(m.parameter_size || '-') + '</td>'
+        + '<td>' + escapeHtml(m.quantization || '-') + '</td>'
+        + '<td>' + (m.modified_at ? escapeHtml(m.modified_at.slice(0, 10)) : '-') + '</td>'
+        + '<td><button class="btn btn-error btn-xs" data-delete="' + escapeHtml(m.name) + '">삭제</button></td>'
+        + '</tr>';
+    }).join('');
   }).join('');
   body.querySelectorAll('[data-delete]').forEach(function (btn) {
     btn.addEventListener('click', function () { openDeleteModal(btn.dataset.delete); });
@@ -84,27 +115,102 @@ async function doDelete() {
   }
 }
 
-/* ---------- HF 검색 ---------- */
-async function searchHf() {
+/* ---------- 검색 (Ollama · HF 동시) ---------- */
+function searchAll() {
   const q = el('search-input').value.trim();
   if (!q) { showToast('검색어를 입력하세요', 'warning'); return; }
-  const body = el('search-body');
   el('search-results-wrap').classList.remove('hidden');
   el('files-wrap').classList.add('hidden');
-  body.innerHTML = '<tr><td colspan="4" class="text-center opacity-60">검색 중...</td></tr>';
+  el('ollama-tags-wrap').classList.add('hidden');
+  /* 두 소스를 병렬 검색 — 한쪽이 실패해도 다른 쪽 결과는 그대로 표시 */
+  searchOllama(q);
+  searchHf(q);
+}
+
+async function searchOllama(q) {
+  const body = el('ollama-search-body');
+  el('ollama-count').textContent = '0';
+  body.innerHTML = '<tr><td colspan="2" class="text-center opacity-60">검색 중...</td></tr>';
+  try {
+    const resp = await apiFetch(MODELS_API + '/ollama/search?q=' + encodeURIComponent(q));
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || '검색 실패');
+    el('ollama-count').textContent = data.results.length;
+    if (!data.results.length) {
+      body.innerHTML = '<tr><td colspan="2" class="text-center opacity-60">결과 없음</td></tr>';
+      return;
+    }
+    body.innerHTML = data.results.map(function (r) {
+      const caps = (r.capabilities || []).map(function (c) {
+        return ' <span class="badge badge-info badge-xs">' + escapeHtml(c) + '</span>';
+      }).join('');
+      const sizes = (r.sizes || []).length
+        ? '<div class="text-xs opacity-60">' + r.sizes.map(escapeHtml).join(' · ') + '</div>' : '';
+      return '<tr class="cursor-pointer hover" data-ollama="' + escapeHtml(r.name) + '">'
+        + '<td><span class="font-mono">' + escapeHtml(r.name) + '</span>' + caps
+        + (r.description ? '<div class="text-xs opacity-60 max-w-xs truncate">' + escapeHtml(r.description) + '</div>' : '')
+        + sizes + '</td>'
+        + '<td>' + escapeHtml(r.pulls || '-') + '</td>'
+        + '</tr>';
+    }).join('');
+    body.querySelectorAll('[data-ollama]').forEach(function (row) {
+      row.addEventListener('click', function () { loadOllamaTags(row.dataset.ollama); });
+    });
+  } catch (e) {
+    body.innerHTML = '<tr><td colspan="2" class="text-center text-error">검색 실패</td></tr>';
+    if (e.message.indexOf('Unauthorized') === -1) {
+      showToast('Ollama 검색 실패: ' + e.message, 'error');
+    }
+  }
+}
+
+/* Ollama 모델의 설치 가능한 태그 목록 → [받기]로 기존 다운로드 큐에 추가 */
+async function loadOllamaTags(name) {
+  const body = el('ollama-tags-body');
+  el('ollama-tags-wrap').classList.remove('hidden');
+  el('ollama-tags-name').textContent = name;
+  body.innerHTML = '<tr><td colspan="4" class="text-center opacity-60">태그 조회 중...</td></tr>';
+  try {
+    const resp = await apiFetch(MODELS_API + '/ollama/tags?name=' + encodeURIComponent(name));
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || '태그 조회 실패');
+    if (!data.tags.length) {
+      body.innerHTML = '<tr><td colspan="4" class="text-center opacity-60">태그가 없습니다</td></tr>';
+      return;
+    }
+    body.innerHTML = data.tags.map(function (t) {
+      return '<tr>'
+        + '<td class="font-mono text-xs">' + escapeHtml(t.full_name) + '</td>'
+        + '<td>' + escapeHtml(t.size_text || '-') + '</td>'
+        + '<td>' + escapeHtml(t.context || '-') + '</td>'
+        + '<td><button class="btn btn-primary btn-xs" data-pull="' + escapeHtml(t.full_name) + '">받기</button></td>'
+        + '</tr>';
+    }).join('');
+    body.querySelectorAll('[data-pull]').forEach(function (btn) {
+      btn.addEventListener('click', function () { enqueuePull(btn.dataset.pull); });
+    });
+  } catch (e) {
+    body.innerHTML = '<tr><td colspan="4" class="text-center text-error">' + escapeHtml(e.message) + '</td></tr>';
+  }
+}
+
+async function searchHf(q) {
+  const body = el('search-body');
+  el('hf-count').textContent = '0';
+  body.innerHTML = '<tr><td colspan="3" class="text-center opacity-60">검색 중...</td></tr>';
   try {
     const resp = await apiFetch(MODELS_API + '/search?q=' + encodeURIComponent(q));
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error || '검색 실패');
+    el('hf-count').textContent = data.results.length;
     if (!data.results.length) {
-      body.innerHTML = '<tr><td colspan="4" class="text-center opacity-60">결과 없음</td></tr>';
+      body.innerHTML = '<tr><td colspan="3" class="text-center opacity-60">결과 없음</td></tr>';
       return;
     }
     body.innerHTML = data.results.map(function (r) {
       return '<tr class="cursor-pointer hover" data-repo="' + escapeHtml(r.repo_id) + '">'
         + '<td class="font-mono">' + escapeHtml(r.repo_id) + '</td>'
         + '<td>' + (r.downloads || 0).toLocaleString() + '</td>'
-        + '<td>' + (r.likes || 0) + '</td>'
         + '<td>' + (r.updated_at ? escapeHtml(r.updated_at.slice(0, 10)) : '-') + '</td>'
         + '</tr>';
     }).join('');
@@ -112,7 +218,7 @@ async function searchHf() {
       row.addEventListener('click', function () { loadFiles(row.dataset.repo); });
     });
   } catch (e) {
-    body.innerHTML = '<tr><td colspan="4" class="text-center text-error">검색 실패</td></tr>';
+    body.innerHTML = '<tr><td colspan="3" class="text-center text-error">검색 실패</td></tr>';
     if (e.message.indexOf('Unauthorized') === -1) {
       showToast('HF 검색 실패: ' + e.message, 'error');
     }
@@ -282,15 +388,23 @@ function renderBenchModels() {
     return;
   }
   const imageMode = hasImageInput();
-  wrap.innerHTML = installedModels.map(function (m) {
-    const disabled = imageMode && !m.vision;
-    return '<label class="label cursor-pointer gap-2 border border-base-300 rounded-lg px-3 py-1'
-      + (disabled ? ' opacity-40' : '') + '">'
-      + '<input type="checkbox" class="checkbox checkbox-sm" value="' + escapeHtml(m.name) + '"'
-      + (disabled ? ' disabled' : '') + (!disabled && checked.has(m.name) ? ' checked' : '') + '>'
-      + '<span class="font-mono text-sm">' + escapeHtml(m.name) + '</span>'
-      + (m.vision ? '<span class="badge badge-info badge-xs">vision</span>' : '')
-      + '</label>';
+  /* 패밀리별 그룹 헤더 아래 체크박스 나열 — hf.co 모델은 HuggingFace 그룹으로 맨 아래 */
+  wrap.innerHTML = groupByFamily(installedModels).map(function (group) {
+    const boxes = group[1].map(function (m) {
+      const disabled = imageMode && !m.vision;
+      return '<label class="label cursor-pointer gap-2 border border-base-300 rounded-lg px-3 py-1'
+        + (disabled ? ' opacity-40' : '') + '">'
+        + '<input type="checkbox" class="checkbox checkbox-sm" value="' + escapeHtml(m.name) + '"'
+        + (disabled ? ' disabled' : '') + (!disabled && checked.has(m.name) ? ' checked' : '') + '>'
+        + '<span class="font-mono text-sm">' + escapeHtml(m.name) + '</span>'
+        + (m.vision ? '<span class="badge badge-info badge-xs">vision</span>' : '')
+        + '</label>';
+    }).join('');
+    return '<div class="w-full">'
+      + '<div class="text-xs font-semibold opacity-60 mt-2 mb-1">'
+      + escapeHtml(group[0]) + ' <span class="badge badge-ghost badge-xs">' + group[1].length + '</span></div>'
+      + '<div class="flex flex-wrap gap-2">' + boxes + '</div>'
+      + '</div>';
   }).join('');
 }
 
@@ -396,8 +510,8 @@ document.addEventListener('DOMContentLoaded', function () {
   loadInstalled();
   pollQueue(); // 새로고침해도 진행 중인 큐 상태 복원 — 활성 항목 있으면 폴링 자동 시작
   el('installed-refresh').addEventListener('click', loadInstalled);
-  el('search-btn').addEventListener('click', searchHf);
-  el('search-input').addEventListener('keydown', function (e) { if (e.key === 'Enter') searchHf(); });
+  el('search-btn').addEventListener('click', searchAll);
+  el('search-input').addEventListener('keydown', function (e) { if (e.key === 'Enter') searchAll(); });
   el('delete-confirm').addEventListener('click', doDelete);
   el('bench-run').addEventListener('click', runBenchmark);
   el('bench-file').addEventListener('change', renderBenchModels);

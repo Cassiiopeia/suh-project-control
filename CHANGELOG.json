@@ -1,14 +1,46 @@
 {
   "metadata": {
-    "lastUpdated": "2026-07-19T06:52:14Z",
-    "currentVersion": "2.0.49",
+    "lastUpdated": "2026-07-19T07:13:56Z",
+    "currentVersion": "2.0.50",
     "projectType": "python",
-    "totalReleases": 45,
+    "totalReleases": 46,
     "projectTypes": [
       "python"
     ]
   },
   "releases": [
+    {
+      "version": "2.0.50",
+      "project_type": "python",
+      "project_types": [
+        "python"
+      ],
+      "date": "2026-07-19",
+      "pr_number": 106,
+      "raw_summary": "## Summary by CodeRabbit\n\n## 릴리스 노트\n\n* **새 기능**\n  * Ollama 공식 라이브러리 모델 검색 및 바로 설치 지원\n  * 모델 검색 시 Ollama·Hugging Face 결과 동시 표시\n\n* **개선**\n  * 모델 목록·벤치마크 선택을 패밀리별로 묶어 가독성 개선\n\n* **문서**\n  * TTS 엔진 구현 보고서 추가",
+      "parsed_changes": {
+        "새_기능": {
+          "title": "새 기능",
+          "items": [
+            "Ollama 공식 라이브러리 모델 검색 및 바로 설치 지원",
+            "모델 검색 시 Ollama·Hugging Face 결과 동시 표시"
+          ]
+        },
+        "개선": {
+          "title": "개선",
+          "items": [
+            "모델 목록·벤치마크 선택을 패밀리별로 묶어 가독성 개선"
+          ]
+        },
+        "문서": {
+          "title": "문서",
+          "items": [
+            "TTS 엔진 구현 보고서 추가"
+          ]
+        }
+      },
+      "parse_method": "markdown"
+    },
     {
       "version": "2.0.49",
       "project_type": "python",

@@ -11,9 +11,25 @@ from ollama import Client
 logger = logging.getLogger(__name__)
 
 HF_API_BASE = 'https://huggingface.co/api'
+OLLAMA_SITE_BASE = 'https://ollama.com'
+
+# ollama.com은 브라우저 UA가 없으면 요청을 차단할 수 있음
+_SITE_HEADERS = {'User-Agent': 'Mozilla/5.0 (compatible; suh-ai-server)'}
 
 # 파일명 끝의 양자화 태그 추출: gemma-3-4b-it-Q4_K_M.gguf → Q4_K_M (IQ4_XS, F16, BF16 등 포함)
 _QUANT_RE = re.compile(r'[-.]((?:i?q\d[a-z0-9_]*)|f16|f32|bf16)\.gguf$', re.IGNORECASE)
+
+# ollama.com/search 결과 파싱 — 공식 API가 없어 HTML 클래스 패턴에 의존 (구조 변경 시 결과 0건)
+_OLLAMA_ITEM_RE = re.compile(r'<li\s[^>]*>(.*?)</li>', re.S)
+_OLLAMA_NAME_RE = re.compile(r'href="/library/([^"/:]+)"')
+_OLLAMA_DESC_RE = re.compile(r'<p class="max-w-lg break-words[^"]*">(.*?)</p>', re.S)
+_OLLAMA_CAP_RE = re.compile(r'text-indigo-600[^"]*">([^<]+)</span>')      # vision·tools 등 capability 뱃지
+_OLLAMA_SIZE_RE = re.compile(r'text-blue-600[^"]*">([^<]+)</span>')       # 1b·4b 등 사이즈 뱃지
+_OLLAMA_PULLS_RE = re.compile(r'>([\d.,]+[KMB]?)</span>\s*<span[^>]*>&nbsp;Pulls')
+
+# ollama.com/library/{name}/tags의 태그 행 파싱: digest • 크기 • context window
+_OLLAMA_TAG_INFO_RE = re.compile(
+    r'([0-9a-f]{12})</span>\s*•\s*([\d.]+\s?[KMGT]B)(?:\s*•\s*([\d.]+[KM]?) context window)?')
 
 
 class ModelService:
@@ -74,6 +90,72 @@ class ModelService:
                 'ollama_name': f'hf.co/{repo_id}:{quant}' if quant else f'hf.co/{repo_id}',
             })
         return files
+
+    # ---------- Ollama 라이브러리 (ollama.com 파싱) ----------
+
+    def search_ollama_models(self, query: str, limit: int = 20) -> list:
+        """ollama.com/search 파싱 — 모델명·설명·pull 수·capability·사이즈
+
+        Returns:
+            [{'name', 'description', 'pulls', 'capabilities', 'sizes'}, ...]
+        """
+        resp = requests.get(
+            f'{OLLAMA_SITE_BASE}/search',
+            params={'q': query}, headers=_SITE_HEADERS, timeout=15,
+        )
+        resp.raise_for_status()
+        results = []
+        for item in _OLLAMA_ITEM_RE.findall(resp.text):
+            name_match = _OLLAMA_NAME_RE.search(item)
+            if not name_match:
+                continue
+            desc_match = _OLLAMA_DESC_RE.search(item)
+            pulls_match = _OLLAMA_PULLS_RE.search(item)
+            results.append({
+                'name': name_match.group(1),
+                'description': re.sub(r'\s+', ' ', desc_match.group(1)).strip() if desc_match else '',
+                'pulls': pulls_match.group(1) if pulls_match else None,
+                'capabilities': _OLLAMA_CAP_RE.findall(item),
+                'sizes': _OLLAMA_SIZE_RE.findall(item),
+            })
+            if len(results) >= limit:
+                break
+        if not results:
+            # 결과 없음은 정상일 수 있으나, 사이트 구조 변경으로 파싱이 깨졌을 가능성도 있어 로그를 남김
+            logger.warning(f"Ollama search returned no results (query={query}) - site structure may have changed")
+        return results
+
+    def list_ollama_tags(self, name: str) -> list:
+        """ollama.com/library/{name}/tags 파싱 — 설치 가능한 태그·크기·context window
+
+        Returns:
+            [{'tag', 'full_name', 'size_text', 'context', 'digest'}, ...]
+        """
+        resp = requests.get(
+            f'{OLLAMA_SITE_BASE}/library/{name}/tags',
+            headers=_SITE_HEADERS, timeout=15,
+        )
+        resp.raise_for_status()
+        html = resp.text
+        tags = []
+        seen = set()
+        # 모바일/데스크톱 레이아웃에 같은 태그가 중복 등장 — 첫 등장(정보 포함)만 사용
+        for match in re.finditer(r'href="/library/' + re.escape(name) + r':([^"]+)"', html):
+            tag = match.group(1)
+            if tag in seen:
+                continue
+            seen.add(tag)
+            info = _OLLAMA_TAG_INFO_RE.search(html[match.end():match.end() + 1500])
+            tags.append({
+                'tag': tag,
+                'full_name': f'{name}:{tag}',
+                'digest': info.group(1) if info else None,
+                'size_text': info.group(2) if info else None,
+                'context': info.group(3) if info else None,
+            })
+        if not tags:
+            logger.warning(f"Ollama tag list empty (name={name}) - site structure may have changed")
+        return tags
 
     # ---------- Ollama ----------
 

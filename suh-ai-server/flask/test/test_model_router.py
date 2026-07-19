@@ -55,6 +55,50 @@ def test_search_returns_results(client, monkeypatch):
     assert resp.get_json()['results'][0]['repo_id'] == 'unsloth/gemma-GGUF'
 
 
+def test_ollama_search_requires_query(client):
+    assert client.get('/models/ollama/search').status_code == 400
+
+
+def test_ollama_search_returns_results(client, monkeypatch):
+    monkeypatch.setattr(model_router_module.model_service, 'search_ollama_models',
+                        lambda q: [{'name': 'gemma3', 'pulls': '38.7M'}])
+    resp = client.get('/models/ollama/search?q=gemma')
+    assert resp.status_code == 200
+    assert resp.get_json()['results'][0]['name'] == 'gemma3'
+
+
+def test_ollama_search_failure_returns_500(client, monkeypatch):
+    def boom(q):
+        raise Exception('site changed')
+
+    monkeypatch.setattr(model_router_module.model_service, 'search_ollama_models', boom)
+    resp = client.get('/models/ollama/search?q=gemma')
+    assert resp.status_code == 500
+    assert 'error' in resp.get_json()
+
+
+def test_ollama_tags_requires_name(client):
+    assert client.get('/models/ollama/tags').status_code == 400
+
+
+def test_ollama_tags_returns_tags(client, monkeypatch):
+    monkeypatch.setattr(model_router_module.model_service, 'list_ollama_tags',
+                        lambda name: [{'tag': '4b', 'full_name': 'gemma3:4b', 'size_text': '3.3GB'}])
+    resp = client.get('/models/ollama/tags?name=gemma3')
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body['name'] == 'gemma3'
+    assert body['tags'][0]['full_name'] == 'gemma3:4b'
+
+
+def test_ollama_tags_failure_returns_500(client, monkeypatch):
+    def boom(name):
+        raise Exception('connection refused')
+
+    monkeypatch.setattr(model_router_module.model_service, 'list_ollama_tags', boom)
+    assert client.get('/models/ollama/tags?name=gemma3').status_code == 500
+
+
 def test_hf_files_requires_repo(client):
     assert client.get('/models/hf/files').status_code == 400
 
