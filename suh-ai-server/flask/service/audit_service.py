@@ -86,7 +86,7 @@ def list_logs(lines: int = 200) -> dict:
         try:
             with conn, conn.cursor() as cur:
                 cur.execute(
-                    "SELECT occurred_at, actor_ip, action, detail FROM audit_log "
+                    "SELECT occurred_at, actor_ip, action, detail, category FROM audit_log "
                     "ORDER BY occurred_at DESC, id DESC LIMIT %s",
                     (lines,),
                 )
@@ -101,8 +101,78 @@ def list_logs(lines: int = 200) -> dict:
         return result
 
 
-def _format_line(occurred_at, actor_ip, action, detail) -> str:
-    line = f'[{occurred_at.isoformat()}] {actor_ip} · {action}'
+def query_logs(category: str = None, action: str = None, success: bool = None,
+               search: str = None, limit: int = 100, before_id: int = None) -> dict:
+    """전용 감사로그 페이지용 구조화 조회 (최신순, 키셋 페이징)"""
+    limit = min(max(int(limit), 1), MAX_LIST_LINES)
+    url = get_audit_database_url()
+    result = {
+        'available': False,
+        'location': _masked_location(url) if url else 'AUDIT_DATABASE_URL 미설정',
+        'rows': [],
+        'has_more': False,
+    }
+    if not url:
+        return result
+    where, params = [], []
+    if category:
+        where.append('category = %s')
+        params.append(category)
+    if action:
+        where.append('action = %s')
+        params.append(action)
+    if success is not None:
+        where.append('success = %s')
+        params.append(success)
+    if before_id is not None:
+        where.append('id < %s')
+        params.append(before_id)
+    if search:
+        like = f'%{search}%'
+        where.append('(client_ip ILIKE %s OR actor_ip ILIKE %s OR action ILIKE %s '
+                     'OR detail::text ILIKE %s)')
+        params.extend([like, like, like, like])
+    sql = ('SELECT id, occurred_at, category, action, actor_ip, client_ip, '
+           'proxy_chain, user_agent, success, detail FROM audit_log')
+    if where:
+        sql += ' WHERE ' + ' AND '.join(where)
+    sql += ' ORDER BY id DESC LIMIT %s'
+    params.append(limit + 1)  # 한 건 더 조회해 다음 페이지 유무 판정
+    try:
+        conn = psycopg2.connect(url, connect_timeout=3)
+        try:
+            with conn, conn.cursor() as cur:
+                cur.execute(sql, tuple(params))
+                rows = cur.fetchall()
+        finally:
+            conn.close()
+        result['available'] = True
+        result['has_more'] = len(rows) > limit
+        for (row_id, occurred_at, cat, act, actor_ip, client_ip,
+             proxy_chain, user_agent, ok, detail) in rows[:limit]:
+            # 마이그레이션 전 기록은 client_ip가 비어 있으므로 체인 첫 항목으로 보정
+            if not client_ip and actor_ip:
+                client_ip = actor_ip.split(',')[0].strip()
+            result['rows'].append({
+                'id': row_id,
+                'occurred_at': occurred_at.isoformat(),
+                'category': cat,
+                'action': act,
+                'client_ip': client_ip,
+                'proxy_chain': proxy_chain,
+                'user_agent': user_agent,
+                'success': ok,
+                'detail': detail,
+            })
+        return result
+    except Exception as e:
+        logger.warning(f'Audit query failed: {e}')
+        return result
+
+
+def _format_line(occurred_at, actor_ip, action, detail, category=None) -> str:
+    action_label = f'{category}/{action}' if category else action
+    line = f'[{occurred_at.isoformat()}] {actor_ip} · {action_label}'
     if detail and isinstance(detail, dict):
         changed = detail.get('changed')
         if changed and isinstance(changed, dict):
@@ -113,7 +183,8 @@ def _format_line(occurred_at, actor_ip, action, detail) -> str:
                 else:
                     parts.append(f'{key}: {value}')
             return f'{line} ({", ".join(parts)})'
-        name = detail.get('name')
+        # 대표 식별자 하나를 괄호로 노출 (보이스명, 엔진명, 항목 id 순)
+        name = detail.get('name') or detail.get('engine') or detail.get('voice_id')
         if name:
             return f'{line} ({name})'
     return line
