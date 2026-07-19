@@ -37,3 +37,7 @@ jobs:
           tags: |
             cassiiopeia/suh-tts-cosyvoice:latest
             cassiiopeia/suh-tts-cosyvoice:${{ github.sha }}
+          # 레이어 캐시 — 없으면 매 빌드가 전체 레이어를 새로 만들어
+          # 서버가 ~7GB를 통째로 재다운로드하게 된다
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
