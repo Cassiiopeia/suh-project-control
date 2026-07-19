@@ -122,3 +122,37 @@ def test_supertonic_detects_english_lang(monkeypatch):
                         lambda url, **kw: captured.update(kw) or FakeResponse(b'x'))
     get_adapter('supertonic').synthesize('Hello world', 'M1', 1.0)
     assert captured['json']['lang'] == 'en'
+
+
+def test_qwen3tts_korean_language_and_endpoint(monkeypatch):
+    captured = {}
+
+    def fake_post(url, **kwargs):
+        captured['url'] = url
+        captured['json'] = kwargs['json']
+        return FakeResponse(b'RIFF-qwen')
+
+    monkeypatch.setattr(adapters.requests, 'post', fake_post)
+    wav = get_adapter('qwen3tts').synthesize('안녕하세요', 'Sohee', 1.0)
+    assert wav == b'RIFF-qwen'
+    assert captured['url'] == 'http://127.0.0.1:7801/synthesize'
+    assert captured['json'] == {'text': '안녕하세요', 'voice': 'Sohee', 'language': 'Korean'}
+
+
+def test_chatterbox_ref_wav_oneshot(monkeypatch):
+    captured = {}
+
+    def fake_post(url, **kwargs):
+        captured['url'] = url
+        captured['data'] = kwargs['data']
+        captured['has_ref'] = kwargs.get('files') is not None
+        return FakeResponse(b'RIFF-cb')
+
+    monkeypatch.setattr(adapters.requests, 'post', fake_post)
+    get_adapter('chatterbox').synthesize('안녕', 'default', 1.0, ref_wav=b'RIFF-ref')
+    assert captured['url'] == 'http://127.0.0.1:7802/synthesize'
+    assert captured['data'] == {'text': '안녕', 'lang': 'ko'}
+    assert captured['has_ref'] is True
+    get_adapter('chatterbox').synthesize('hello', 'default', 1.0)
+    assert captured['data']['lang'] == 'en'
+    assert captured['has_ref'] is False

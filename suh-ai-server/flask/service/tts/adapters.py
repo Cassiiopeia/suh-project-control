@@ -141,8 +141,53 @@ class SupertonicAdapter(TtsAdapter):
             return False
 
 
+class Qwen3TtsAdapter(TtsAdapter):
+    """Qwen3-TTS CustomVoice 자체 서버 — 프리셋 화자, 한글이면 Korean 지정"""
+
+    def synthesize(self, text, voice, speed, ref_wav=None):  # speed·ref_wav 미지원 → 무시
+        language = 'Korean' if re.search(r'[가-힣]', text) else 'English'
+        resp = requests.post(
+            f'{self.base_url}/synthesize',
+            json={'text': text, 'voice': voice, 'language': language},
+            timeout=SYNTH_TIMEOUT,
+        )
+        resp.raise_for_status()
+        return resp.content
+
+    def health(self):
+        try:
+            return requests.get(f'{self.base_url}/health',
+                                timeout=HEALTH_TIMEOUT).status_code == 200
+        except requests.RequestException:
+            return False
+
+
+class ChatterboxAdapter(TtsAdapter):
+    """Chatterbox Multilingual 자체 서버 — 기본 보이스, ref_wav 첨부 시 원샷 클로닝"""
+
+    def synthesize(self, text, voice, speed, ref_wav=None):
+        lang = 'ko' if re.search(r'[가-힣]', text) else 'en'
+        files = {'prompt_wav': ('ref.wav', io.BytesIO(ref_wav))} if ref_wav else None
+        resp = requests.post(
+            f'{self.base_url}/synthesize',
+            data={'text': text, 'lang': lang},
+            files=files,
+            timeout=SYNTH_TIMEOUT,
+        )
+        resp.raise_for_status()
+        return resp.content
+
+    def health(self):
+        try:
+            return requests.get(f'{self.base_url}/health',
+                                timeout=HEALTH_TIMEOUT).status_code == 200
+        except requests.RequestException:
+            return False
+
+
 _ADAPTER_CLASSES = {'kokoro': KokoroAdapter, 'cosyvoice': CosyVoiceAdapter,
-                    'supertonic': SupertonicAdapter}
+                    'supertonic': SupertonicAdapter, 'qwen3tts': Qwen3TtsAdapter,
+                    'chatterbox': ChatterboxAdapter}
 
 
 def get_adapter(engine_id: str) -> TtsAdapter:
