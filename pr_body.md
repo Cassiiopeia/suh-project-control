@@ -4,15 +4,9 @@
 
 ## 릴리스 노트
 
-* **새 기능**
-  * Ollama 공식 라이브러리 모델 검색 및 바로 설치 지원
-  * 모델 검색 시 Ollama·Hugging Face 결과 동시 표시
-
-* **개선**
-  * 모델 목록·벤치마크 선택을 패밀리별로 묶어 가독성 개선
-
-* **문서**
-  * TTS 엔진 구현 보고서 추가
+* **버그 수정**
+  * Chatterbox 엔진이 시작되지 않던 문제 해결
+  * 엔진 설치·다운로드 중 관리자 화면 전체가 멈출 수 있던 문제 해결 (동시 처리 성능 강화)
 
 <!-- end of auto-generated comment: release notes by coderabbit.ai -->
 
