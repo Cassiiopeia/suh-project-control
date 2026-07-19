@@ -22,7 +22,11 @@ RUN pip3 install --no-cache-dir -U pip wheel 'setuptools<81' && \
     # 컴파일러(nvcc) 없는 runtime 이미지에서 기동이 죽는다 → 추론 이미지에서 제거
     pip3 uninstall -y deepspeed
 
+# 업스트림 server.py가 텐서를 넘겨 frontend(경로 기대)와 안 맞아 합성이 죽는다
+# → 임시 파일 경로를 전달하는 패치 서버로 교체
+COPY server_fixed.py /opt/CosyVoice/runtime/python/fastapi/server_fixed.py
+
 # Fun-CosyVoice3 전환은 이 env만 교체 (예: iic/Fun-CosyVoice3-0.5B-2512)
 ENV MODEL_DIR=iic/CosyVoice2-0.5B
 EXPOSE 50000
-CMD ["sh", "-c", "python3 runtime/python/fastapi/server.py --port 50000 --model_dir ${MODEL_DIR}"]
+CMD ["sh", "-c", "python3 runtime/python/fastapi/server_fixed.py --port 50000 --model_dir ${MODEL_DIR}"]
