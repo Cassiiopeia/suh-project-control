@@ -92,6 +92,7 @@ class TtsService:
                 'vram': spec['vram'],
                 'voices': voices,
                 'status': status,
+                'gpu': spec.get('gpu', True),
                 'install_error': install.get('error'),
                 'install_progress': install.get('progress'),
             })
@@ -118,6 +119,12 @@ class TtsService:
             self._installs[engine_id] = {'status': 'pulling', 'error': None}
         threading.Thread(target=self._pull, args=(engine_id, spec['image']),
                          daemon=True, name=f'tts-pull-{engine_id}').start()
+        self._invalidate_state_cache()
+
+    def _invalidate_state_cache(self):
+        """제어 직후 폴링이 낡은 상태를 보지 않게 캐시 폐기"""
+        with self._state_lock:
+            self._state_cache = None
 
     def _pull(self, engine_id: str, image: str):
         """pull 출력을 한 줄씩 읽어 진행 상황(progress)·로그 tail을 상태에 반영한다"""
@@ -154,11 +161,14 @@ class TtsService:
         spec = TTS_ENGINES[engine_id]
         if not self._image_exists(spec['image']):
             raise ValueError('이미지가 설치되지 않았습니다 — 먼저 설치를 실행하세요')
-        # 1개만 실행 정책 — 다른 실행 중 엔진을 먼저 내린다
-        for other_id, other in TTS_ENGINES.items():
-            if other_id != engine_id and self._container_running(other['container']):
-                self._run_docker(['stop', other['container']], timeout=120)
-                logger.info(f"TTS engine stopped for switch: {other_id}")
+        # VRAM 보호 정책: GPU 엔진은 한 번에 1개만 — GPU 엔진 시작 시 다른 GPU 엔진만 내린다.
+        # CPU 엔진(supertonic 등)은 GPU를 안 쓰므로 상시 동시 가동 가능
+        if spec.get('gpu', True):
+            for other_id, other in TTS_ENGINES.items():
+                if (other_id != engine_id and other.get('gpu', True)
+                        and self._container_running(other['container'])):
+                    self._run_docker(['stop', other['container']], timeout=120)
+                    logger.info(f"TTS engine stopped for switch: {other_id}")
         # 이전 컨테이너 잔재 제거 (없으면 무시) 후 새로 기동
         self._run_docker(['rm', '-f', spec['container']], check=False)
         args = (['run', '-d', '--name', spec['container'],
@@ -166,10 +176,12 @@ class TtsService:
                  '-p', f"{spec['port']}:{spec['port']}"]
                 + spec['docker_args'] + [spec['image']] + spec['command'])
         self._run_docker(args, timeout=300)
+        self._invalidate_state_cache()
         logger.info(f"TTS engine started: {engine_id}")
 
     def stop(self, engine_id: str):
         self._run_docker(['stop', TTS_ENGINES[engine_id]['container']], timeout=120)
+        self._invalidate_state_cache()
         logger.info(f"TTS engine stopped: {engine_id}")
 
     def logs(self, engine_id: str) -> str:

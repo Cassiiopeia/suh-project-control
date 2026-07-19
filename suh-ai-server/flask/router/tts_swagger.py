@@ -56,7 +56,7 @@ TTS_SWAGGER_PATHS = {
             "summary": "엔진 제어 (install / start / stop)",
             "parameters": [
                 {"name": "engine_id", "in": "path", "required": True,
-                 "schema": {"type": "string", "enum": ["kokoro", "cosyvoice"]}},
+                 "schema": {"type": "string", "enum": ["cosyvoice", "supertonic", "kokoro"]}},
                 {"name": "action", "in": "path", "required": True,
                  "schema": {"type": "string", "enum": ["install", "start", "stop"]}},
             ],

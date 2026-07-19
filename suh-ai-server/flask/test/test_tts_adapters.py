@@ -99,3 +99,26 @@ def test_cosyvoice_deleted_user_voice_falls_back(monkeypatch):
     monkeypatch.setattr(adapters.requests, 'post', lambda url, **kw: FakeResponse(b'\x00\x00'))
     # 삭제된 u_* id — 예외 없이 내장 보이스로 폴백해야 한다
     get_adapter('cosyvoice').synthesize('안녕', 'u_gone9999', 1.0)
+
+
+def test_supertonic_detects_korean_lang(monkeypatch):
+    captured = {}
+
+    def fake_post(url, **kwargs):
+        captured['url'] = url
+        captured['json'] = kwargs['json']
+        return FakeResponse(b'RIFF-supertonic-wav')
+
+    monkeypatch.setattr(adapters.requests, 'post', fake_post)
+    wav = get_adapter('supertonic').synthesize('안녕하세요', 'F1', 1.0)
+    assert wav == b'RIFF-supertonic-wav'
+    assert captured['url'] == 'http://127.0.0.1:7788/v1/tts'
+    assert captured['json'] == {'text': '안녕하세요', 'voice': 'F1', 'lang': 'ko'}
+
+
+def test_supertonic_detects_english_lang(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(adapters.requests, 'post',
+                        lambda url, **kw: captured.update(kw) or FakeResponse(b'x'))
+    get_adapter('supertonic').synthesize('Hello world', 'M1', 1.0)
+    assert captured['json']['lang'] == 'en'

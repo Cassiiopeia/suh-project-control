@@ -48,7 +48,8 @@ def fake(monkeypatch):
 def test_state_not_installed(fake):
     states = TtsService().get_engines_state()
     assert {s['id']: s['status'] for s in states} == {
-        'kokoro': 'not_installed', 'cosyvoice': 'not_installed'}
+        'kokoro': 'not_installed', 'cosyvoice': 'not_installed',
+        'supertonic': 'not_installed'}
 
 
 def test_state_running_needs_health(fake, monkeypatch):
@@ -135,3 +136,25 @@ def test_engines_state_cached_within_ttl(fake):
     second = svc.get_engines_state()
     assert second == first
     assert len(fake.calls) == calls_after_first  # 캐시 적중 — docker 재호출 없음
+
+
+def test_cpu_engine_start_keeps_gpu_engine(fake):
+    # CPU 엔진(supertonic) 시작 시 GPU 엔진(cosyvoice)은 내리지 않는다
+    fake.images = {'cassiiopeia/suh-tts-supertonic:latest',
+                   'cassiiopeia/suh-tts-cosyvoice:latest'}
+    fake.running = {'suh-tts-cosyvoice'}
+    TtsService().start('supertonic')
+    assert 'suh-tts-cosyvoice' in fake.running
+    assert 'suh-tts-supertonic' in fake.running
+
+
+def test_gpu_engine_start_keeps_cpu_engine(fake):
+    # GPU 엔진 시작 시 CPU 엔진(supertonic)은 그대로 두고 GPU 엔진만 교체
+    fake.images = {'cassiiopeia/suh-tts-supertonic:latest',
+                   'ghcr.io/remsky/kokoro-fastapi-gpu:latest',
+                   'cassiiopeia/suh-tts-cosyvoice:latest'}
+    fake.running = {'suh-tts-supertonic', 'suh-tts-cosyvoice'}
+    TtsService().start('kokoro')
+    assert 'suh-tts-supertonic' in fake.running   # CPU 엔진 유지
+    assert 'suh-tts-cosyvoice' not in fake.running  # GPU 엔진은 교체
+    assert 'suh-tts-kokoro' in fake.running
