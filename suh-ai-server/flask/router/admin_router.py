@@ -37,6 +37,12 @@ def palworld():
     return render_template('admin/palworld.html', root='..', active='palworld')
 
 
+@admin_bp.route('/admin/audit', methods=['GET'])
+def audit():
+    """관리 행위 감사로그 페이지"""
+    return render_template('admin/audit.html', root='..', active='audit')
+
+
 @admin_bp.route('/admin/logs', methods=['GET'])
 def flask_logs():
     """Flask 서버 로그 페이지"""

@@ -13,6 +13,7 @@ from router.admin_router import admin_bp
 from router.model_router import model_bp
 from router.ollama_router import ollama_bp
 from router.tts_router import tts_bp
+from router.audit_router import audit_bp
 from config.app_config import SWAGGER_URL, API_URL
 from config.logging_config import setup_logging
 
@@ -42,6 +43,7 @@ app.register_blueprint(admin_bp)
 app.register_blueprint(model_bp)
 app.register_blueprint(ollama_bp)
 app.register_blueprint(tts_bp)
+app.register_blueprint(audit_bp)
 
 
 @app.route('/health', methods=['GET'])
