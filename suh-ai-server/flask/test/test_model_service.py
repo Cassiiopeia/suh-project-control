@@ -10,9 +10,10 @@ from service.model_service import ModelService
 class FakeHttpResponse:
     """requests.get 응답 대역"""
 
-    def __init__(self, status_code=200, payload=None):
+    def __init__(self, status_code=200, payload=None, text=''):
         self.status_code = status_code
         self._payload = payload if payload is not None else []
+        self.text = text
 
     def json(self):
         return self._payload
@@ -88,6 +89,95 @@ def test_list_hf_gguf_files_gated_repo_raises_permission_error(monkeypatch):
     monkeypatch.setattr('service.model_service.requests.get', fake_get)
     with pytest.raises(PermissionError):
         ModelService().list_hf_gguf_files('meta-llama/gated-repo')
+
+
+# ---------- Ollama 라이브러리 검색 (ollama.com 파싱) ----------
+
+# ollama.com/search 실제 마크업 축약본 — 클래스 패턴이 파싱 기준
+OLLAMA_SEARCH_HTML = '''
+<ul role="list" class="grid grid-cols-1">
+<li  class="flex items-baseline border-b border-neutral-200 py-6">
+  <a href="/library/gemma3" class="group w-full">
+    <h2><span >gemma3</span></h2>
+    <p class="max-w-lg break-words text-neutral-800 text-md">The current, most capable model
+      that runs on a single GPU.</p>
+    <span  class="inline-flex text-xs font-medium text-indigo-600 sm:text-[13px]">vision</span>
+    <span  class="inline-flex text-xs font-medium text-blue-600 sm:text-[13px]">1b</span>
+    <span  class="inline-flex text-xs font-medium text-blue-600 sm:text-[13px]">4b</span>
+    <span class="flex items-center"><span >38.7M</span><span class="hidden sm:flex">&nbsp;Pulls</span></span>
+  </a>
+</li>
+<li  class="flex items-baseline border-b border-neutral-200 py-6">
+  <a href="/library/embeddinggemma" class="group w-full">
+    <h2><span >embeddinggemma</span></h2>
+    <p class="max-w-lg break-words text-neutral-800 text-md">Embedding model.</p>
+    <span class="flex items-center"><span >1.2M</span><span class="hidden sm:flex">&nbsp;Pulls</span></span>
+  </a>
+</li>
+</ul>
+'''
+
+# ollama.com/library/{name}/tags 축약본 — 모바일/데스크톱 중복 앵커 포함
+OLLAMA_TAGS_HTML = '''
+<a href="/library/gemma3:latest" class="md:hidden flex flex-col">
+  <span class="font-mono">a2af6cc3eb7f</span> • 3.3GB • 128K context window
+</a>
+<a href="/library/gemma3:latest" class="group-hover:underline">gemma3:latest</a>
+<a href="/library/gemma3:1b" class="md:hidden flex flex-col">
+  <span class="font-mono">8648f39daa8f</span> • 815MB • 32K context window
+</a>
+<a href="/library/gemma3:1b" class="group-hover:underline">gemma3:1b</a>
+'''
+
+
+def test_search_ollama_models_parses_items(monkeypatch):
+    captured = {}
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        captured['url'] = url
+        captured['params'] = params
+        return FakeHttpResponse(200, text=OLLAMA_SEARCH_HTML)
+
+    monkeypatch.setattr('service.model_service.requests.get', fake_get)
+    results = ModelService().search_ollama_models('gemma')
+
+    assert captured['url'].endswith('/search')
+    assert captured['params'] == {'q': 'gemma'}
+    assert len(results) == 2
+    assert results[0]['name'] == 'gemma3'
+    assert results[0]['pulls'] == '38.7M'
+    assert results[0]['capabilities'] == ['vision']
+    assert results[0]['sizes'] == ['1b', '4b']
+    assert 'single GPU' in results[0]['description']
+    assert results[1] == {'name': 'embeddinggemma', 'description': 'Embedding model.',
+                          'pulls': '1.2M', 'capabilities': [], 'sizes': []}
+
+
+def test_search_ollama_models_broken_html_returns_empty(monkeypatch):
+    monkeypatch.setattr('service.model_service.requests.get',
+                        lambda *a, **k: FakeHttpResponse(200, text='<html>redesigned</html>'))
+    assert ModelService().search_ollama_models('gemma') == []
+
+
+def test_list_ollama_tags_dedups_and_parses_info(monkeypatch):
+    def fake_get(url, headers=None, timeout=None):
+        assert url.endswith('/library/gemma3/tags')
+        return FakeHttpResponse(200, text=OLLAMA_TAGS_HTML)
+
+    monkeypatch.setattr('service.model_service.requests.get', fake_get)
+    tags = ModelService().list_ollama_tags('gemma3')
+
+    assert [t['tag'] for t in tags] == ['latest', '1b']
+    assert tags[0] == {'tag': 'latest', 'full_name': 'gemma3:latest',
+                       'digest': 'a2af6cc3eb7f', 'size_text': '3.3GB', 'context': '128K'}
+    assert tags[1]['size_text'] == '815MB'
+
+
+def test_list_ollama_tags_http_error_raises(monkeypatch):
+    monkeypatch.setattr('service.model_service.requests.get',
+                        lambda *a, **k: FakeHttpResponse(500))
+    with pytest.raises(Exception):
+        ModelService().list_ollama_tags('gemma3')
 
 
 # ---------- Ollama 설치 목록 / 삭제 ----------

@@ -32,11 +32,11 @@
     </div>
   </div>
 
-  <!-- HF 검색·다운로드 -->
+  <!-- 모델 검색·다운로드 (Ollama · HF 동시 검색) -->
   <div class="card bg-base-100 shadow">
     <div class="card-body">
       <h2 class="card-title text-base">
-        <i data-lucide="search" class="size-5 text-primary"></i>Hugging Face 모델 검색
+        <i data-lucide="search" class="size-5 text-primary"></i>모델 검색 (Ollama · Hugging Face)
       </h2>
       <div class="join w-full max-w-md">
         <input id="search-input" class="input input-sm join-item flex-1"
@@ -44,26 +44,59 @@
         <button id="search-btn" class="btn btn-primary btn-sm join-item">검색</button>
       </div>
       <p class="text-xs opacity-60">
-        GGUF 형식 공개 모델만 검색됩니다. gated 모델(승인 필요)은 지원하지 않습니다.
-        vision 모델은 레포 구조에 따라 가져오기가 실패할 수 있습니다.
+        Ollama 공식 라이브러리와 Hugging Face(GGUF 공개 모델)를 동시에 검색합니다.
+        HF gated 모델(승인 필요)은 지원하지 않으며, vision 모델은 레포 구조에 따라 가져오기가 실패할 수 있습니다.
       </p>
 
-      <div id="search-results-wrap" class="overflow-x-auto hidden">
-        <table class="table table-sm">
-          <thead><tr><th>레포 (클릭해서 파일 보기)</th><th>다운로드</th><th>좋아요</th><th>업데이트</th></tr></thead>
-          <tbody id="search-body"></tbody>
-        </table>
-      </div>
+      <div id="search-results-wrap" class="grid grid-cols-1 lg:grid-cols-2 gap-4 hidden">
+        <!-- Ollama 라이브러리 검색 결과 -->
+        <div class="space-y-2">
+          <h3 class="font-semibold text-sm flex items-center gap-2">
+            <i data-lucide="box" class="size-4 text-primary"></i>Ollama 라이브러리
+            <span id="ollama-count" class="badge badge-ghost badge-sm">0</span>
+          </h3>
+          <div class="overflow-x-auto">
+            <table class="table table-sm">
+              <thead><tr><th>모델 (클릭해서 태그 보기)</th><th>Pulls</th></tr></thead>
+              <tbody id="ollama-search-body"></tbody>
+            </table>
+          </div>
+          <div id="ollama-tags-wrap" class="hidden">
+            <h3 class="font-semibold text-sm mt-2">
+              <span id="ollama-tags-name" class="font-mono"></span> 의 설치 가능한 태그
+            </h3>
+            <div class="overflow-x-auto">
+              <table class="table table-sm">
+                <thead><tr><th>태그</th><th>크기</th><th>컨텍스트</th><th></th></tr></thead>
+                <tbody id="ollama-tags-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
 
-      <div id="files-wrap" class="hidden">
-        <h3 class="font-semibold text-sm mt-2">
-          <span id="files-repo" class="font-mono"></span> 의 GGUF 파일
-        </h3>
-        <div class="overflow-x-auto">
-          <table class="table table-sm">
-            <thead><tr><th>파일</th><th>양자화</th><th>크기</th><th></th></tr></thead>
-            <tbody id="files-body"></tbody>
-          </table>
+        <!-- HF 검색 결과 -->
+        <div class="space-y-2">
+          <h3 class="font-semibold text-sm flex items-center gap-2">
+            <i data-lucide="package" class="size-4 text-primary"></i>Hugging Face
+            <span id="hf-count" class="badge badge-ghost badge-sm">0</span>
+          </h3>
+          <div class="overflow-x-auto">
+            <table class="table table-sm">
+              <thead><tr><th>레포 (클릭해서 파일 보기)</th><th>다운로드</th><th>업데이트</th></tr></thead>
+              <tbody id="search-body"></tbody>
+            </table>
+          </div>
+          <div id="files-wrap" class="hidden">
+            <h3 class="font-semibold text-sm mt-2">
+              <span id="files-repo" class="font-mono"></span> 의 GGUF 파일
+            </h3>
+            <div class="overflow-x-auto">
+              <table class="table table-sm">
+                <thead><tr><th>파일</th><th>양자화</th><th>크기</th><th></th></tr></thead>
+                <tbody id="files-body"></tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </div>
 

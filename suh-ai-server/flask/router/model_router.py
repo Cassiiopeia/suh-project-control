@@ -54,6 +54,34 @@ def search_models():
         return jsonify({'error': f'HF search failed: {str(e)}'}), 500
 
 
+@model_bp.route('/models/ollama/search', methods=['GET'])
+def search_ollama():
+    """Ollama 라이브러리 검색 — ollama.com 파싱 (공식 API 없음)"""
+    query = request.args.get('q', '').strip()
+    if not query:
+        return jsonify({'error': 'q query parameter is required'}), 400
+    try:
+        results = model_service.search_ollama_models(query)
+        return jsonify({'success': True, 'results': results}), 200
+    except Exception as e:
+        logger.error(f"Ollama search failed ({query}): {str(e)}")
+        return jsonify({'error': f'Ollama search failed: {str(e)}'}), 500
+
+
+@model_bp.route('/models/ollama/tags', methods=['GET'])
+def ollama_tags():
+    """Ollama 모델의 설치 가능한 태그(변형) 목록"""
+    name = request.args.get('name', '').strip()
+    if not name:
+        return jsonify({'error': 'name query parameter is required'}), 400
+    try:
+        tags = model_service.list_ollama_tags(name)
+        return jsonify({'success': True, 'name': name, 'tags': tags}), 200
+    except Exception as e:
+        logger.error(f"Ollama tag list failed ({name}): {str(e)}")
+        return jsonify({'error': f'Ollama tag list failed: {str(e)}'}), 500
+
+
 @model_bp.route('/models/hf/files', methods=['GET'])
 def hf_files():
     """HF 레포의 GGUF 파일(양자화별) 목록"""
