@@ -11,6 +11,7 @@ on:
     branches: [ "main" ]
     paths:
       - "suh-ai-server/docker/cosyvoice/**"
+      - "suh-ai-server/docker/supertonic/**"
   workflow_dispatch:
 
 jobs:
@@ -39,5 +40,31 @@ jobs:
             cassiiopeia/suh-tts-cosyvoice:${{ github.sha }}
           # 레이어 캐시 — 없으면 매 빌드가 전체 레이어를 새로 만들어
           # 서버가 ~7GB를 통째로 재다운로드하게 된다
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=cosyvoice
+          cache-to: type=gha,mode=max,scope=cosyvoice
+
+  build-supertonic:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 소스 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Docker Buildx 설정
+        uses: docker/setup-buildx-action@v3
+
+      - name: DockerHub 로그인
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Supertonic 이미지 빌드 및 push
+        uses: docker/build-push-action@v6
+        with:
+          context: suh-ai-server/docker/supertonic
+          push: true
+          tags: |
+            cassiiopeia/suh-tts-supertonic:latest
+            cassiiopeia/suh-tts-supertonic:${{ github.sha }}
+          cache-from: type=gha,scope=supertonic
+          cache-to: type=gha,mode=max,scope=supertonic

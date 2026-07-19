@@ -94,8 +94,10 @@ async function controlEngine(id, action) {
 }
 
 function startEngine(id) {
-  // 1개만 실행 정책 — 다른 엔진이 실행/기동 중이면 전환 확인
-  const other = engines.find(e => e.id !== id && ['running', 'starting'].includes(e.status));
+  // GPU 엔진끼리만 1개 실행 정책 — CPU 엔진은 전환 확인 불필요
+  const me = engines.find(e => e.id === id);
+  const other = engines.find(e => e.id !== id && e.gpu && (me && me.gpu)
+    && ['running', 'starting'].includes(e.status));
   if (other && !confirm(`${other.name}을(를) 중지하고 전환할까요?`)) return;
   controlEngine(id, 'start');
 }
@@ -131,26 +133,33 @@ el('logs-modal').addEventListener('close', () => {
 /* ---------- 합성 테스트 ---------- */
 
 function renderTestPanel() {
-  const running = engines.find(e => e.status === 'running');
-  const badge = el('test-engine-badge');
+  // CPU+GPU 엔진 동시 실행이 가능해서, 실행 중 엔진이 여러 개면 선택할 수 있게 한다
+  const running = engines.filter(e => e.status === 'running');
+  const engSel = el('test-engine');
   const select = el('tts-voice');
-  if (!running) {
-    badge.textContent = '실행 중 엔진 없음';
-    badge.className = 'badge badge-ghost badge-sm';
+  if (!running.length) {
+    engSel.innerHTML = '<option>실행 중 엔진 없음</option>';
+    engSel.disabled = true;
     select.innerHTML = '<option>-</option>';
     el('tts-run').disabled = true;
     return;
   }
-  badge.textContent = running.name;
-  badge.className = 'badge badge-success badge-sm';
+  engSel.disabled = false;
+  const prev = engSel.value;
+  engSel.innerHTML = running.map(e =>
+    `<option value="${escapeHtml(e.id)}">${escapeHtml(e.name)}</option>`).join('');
+  if (running.some(e => e.id === prev)) engSel.value = prev;
+  const cur = running.find(e => e.id === engSel.value) || running[0];
   el('tts-run').disabled = false;
-  // 실행 엔진이 바뀌었을 때만 보이스 목록 재구성 (선택 유지)
-  if (select.dataset.engine !== running.id) {
-    select.dataset.engine = running.id;
-    select.innerHTML = running.voices.map(v =>
+  // 선택 엔진이 바뀌었을 때만 보이스 목록 재구성 (선택 유지)
+  if (select.dataset.engine !== cur.id) {
+    select.dataset.engine = cur.id;
+    select.innerHTML = cur.voices.map(v =>
       `<option value="${escapeHtml(v.id)}">${escapeHtml(v.name)}</option>`).join('');
   }
 }
+
+el('test-engine').addEventListener('change', renderTestPanel);
 
 el('tts-speed').addEventListener('input', () => {
   el('speed-value').textContent = Number(el('tts-speed').value).toFixed(1);
@@ -167,6 +176,7 @@ el('tts-run').addEventListener('click', async () => {
       method: 'POST',
       body: JSON.stringify({
         text,
+        engine: el('test-engine').value,
         voice: el('tts-voice').value,
         speed: Number(el('tts-speed').value),
       }),

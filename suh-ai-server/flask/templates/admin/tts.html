@@ -11,7 +11,7 @@
         <h2 class="card-title text-base">
           <i data-lucide="audio-lines" class="size-5 text-primary"></i>TTS 엔진
         </h2>
-        <span class="text-xs opacity-60">VRAM 보호를 위해 한 번에 1개만 실행됩니다</span>
+        <span class="text-xs opacity-60">GPU 엔진은 한 번에 1개만 실행됩니다 (CPU 엔진은 상시 가능)</span>
       </div>
       <div id="engines-error" class="alert alert-error hidden"><span></span></div>
       <div id="engine-cards" class="grid md:grid-cols-2 gap-4">
@@ -25,7 +25,9 @@
     <div class="card-body space-y-3">
       <h2 class="card-title text-base">
         <i data-lucide="mic" class="size-5 text-primary"></i>합성 테스트
-        <span id="test-engine-badge" class="badge badge-ghost badge-sm">실행 중 엔진 없음</span>
+        <select id="test-engine" class="select select-bordered select-xs" disabled>
+          <option>실행 중 엔진 없음</option>
+        </select>
       </h2>
       <textarea id="tts-text" class="textarea textarea-bordered w-full" rows="3"
                 placeholder="합성할 텍스트를 입력하세요"></textarea>

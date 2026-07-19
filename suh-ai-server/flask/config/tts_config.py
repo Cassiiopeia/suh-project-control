@@ -28,6 +28,27 @@ TTS_ENGINES = {
             {'id': 'ref_b', 'name': '기본 보이스 B (영어 화자)', 'file': 'ref_b.wav'},
         ],
     },
+    'supertonic': {
+        'name': 'Supertonic',
+        'description': '초경량 다국어 TTS (한국어 포함 31개 언어) — CPU 전용이라 GPU 엔진과 동시 가동 가능',
+        'image': 'cassiiopeia/suh-tts-supertonic:latest',
+        'container': 'suh-tts-supertonic',
+        'port': 7788,
+        'adapter': 'supertonic',
+        'languages': ['ko', 'en', 'ja', 'de', 'fr', 'es'],
+        'vram': '0 (CPU)',
+        'gpu': False,  # GPU 미사용 — "GPU 1개 실행" 정책의 예외
+        'docker_args': ['-v', 'suh-tts-models:/root/.cache'],
+        'command': [],
+        'voices': [
+            {'id': 'F1', 'name': '여성 1'},
+            {'id': 'F2', 'name': '여성 2'},
+            {'id': 'F3', 'name': '여성 3'},
+            {'id': 'M1', 'name': '남성 1'},
+            {'id': 'M2', 'name': '남성 2'},
+            {'id': 'M3', 'name': '남성 3'},
+        ],
+    },
     'kokoro': {
         'name': 'Kokoro-82M',
         'description': '초경량 영어 TTS — OpenAI 호환 API, VRAM 부담 거의 없음',

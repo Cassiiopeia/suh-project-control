@@ -8,7 +8,7 @@ REQUIRED_KEYS = {'name', 'description', 'image', 'container', 'port',
 
 
 def test_engines_have_required_keys():
-    assert set(TTS_ENGINES) == {'kokoro', 'cosyvoice'}
+    assert set(TTS_ENGINES) == {'kokoro', 'cosyvoice', 'supertonic'}
     for spec in TTS_ENGINES.values():
         assert REQUIRED_KEYS <= set(spec)
         assert spec['voices'], '보이스가 최소 1개 필요'

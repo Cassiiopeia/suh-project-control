@@ -4,6 +4,7 @@ TTS 엔진 어댑터 — 엔진별 API 형식 차이를 공통 인터페이스�
 """
 import io
 import os
+import re
 import wave
 
 import requests
@@ -110,7 +111,38 @@ class CosyVoiceAdapter(TtsAdapter):
             return False
 
 
-_ADAPTER_CLASSES = {'kokoro': KokoroAdapter, 'cosyvoice': CosyVoiceAdapter}
+class SupertonicAdapter(TtsAdapter):
+    """Supertonic serve — 자체 /v1/tts, WAV 직접 반환 (44.1kHz).
+    lang을 명시해야 해서 텍스트로 추정: 한글→ko, 라틴→en, 그 외→na(언어 무지정 폴백).
+    speed·ref_wav 미지원 → 무시."""
+
+    @staticmethod
+    def _detect_lang(text: str) -> str:
+        if re.search(r'[가-힣]', text):
+            return 'ko'
+        if re.search(r'[a-zA-Z]', text):
+            return 'en'
+        return 'na'
+
+    def synthesize(self, text, voice, speed, ref_wav=None):
+        resp = requests.post(
+            f'{self.base_url}/v1/tts',
+            json={'text': text, 'voice': voice, 'lang': self._detect_lang(text)},
+            timeout=SYNTH_TIMEOUT,
+        )
+        resp.raise_for_status()
+        return resp.content
+
+    def health(self):
+        try:
+            return requests.get(f'{self.base_url}/docs',
+                                timeout=HEALTH_TIMEOUT).status_code == 200
+        except requests.RequestException:
+            return False
+
+
+_ADAPTER_CLASSES = {'kokoro': KokoroAdapter, 'cosyvoice': CosyVoiceAdapter,
+                    'supertonic': SupertonicAdapter}
 
 
 def get_adapter(engine_id: str) -> TtsAdapter:
