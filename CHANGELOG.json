@@ -1,14 +1,33 @@
 {
   "metadata": {
-    "lastUpdated": "2026-07-19T04:44:16Z",
-    "currentVersion": "2.0.42",
+    "lastUpdated": "2026-07-19T05:16:10Z",
+    "currentVersion": "2.0.43",
     "projectType": "python",
-    "totalReleases": 38,
+    "totalReleases": 39,
     "projectTypes": [
       "python"
     ]
   },
   "releases": [
+    {
+      "version": "2.0.43",
+      "project_type": "python",
+      "project_types": [
+        "python"
+      ],
+      "date": "2026-07-19",
+      "pr_number": 95,
+      "raw_summary": "## Summary by CodeRabbit\n\n## 릴리스 노트\n\n* **버그 수정**\n  * 대용량 다운로드 중 관리자 화면 접속이 멈추던 문제 해결 (상태 조회 부하 완화)",
+      "parsed_changes": {
+        "버그_수정": {
+          "title": "버그 수정",
+          "items": [
+            "대용량 다운로드 중 관리자 화면 접속이 멈추던 문제 해결 (상태 조회 부하 완화)"
+          ]
+        }
+      },
+      "parse_method": "markdown"
+    },
     {
       "version": "2.0.42",
       "project_type": "python",
