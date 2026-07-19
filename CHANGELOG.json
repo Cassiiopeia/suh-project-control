@@ -1,14 +1,39 @@
 {
   "metadata": {
-    "lastUpdated": "2026-07-17T04:06:21Z",
-    "currentVersion": "2.0.41",
+    "lastUpdated": "2026-07-19T04:44:16Z",
+    "currentVersion": "2.0.42",
     "projectType": "python",
-    "totalReleases": 37,
+    "totalReleases": 38,
     "projectTypes": [
       "python"
     ]
   },
   "releases": [
+    {
+      "version": "2.0.42",
+      "project_type": "python",
+      "project_types": [
+        "python"
+      ],
+      "date": "2026-07-19",
+      "pr_number": 94,
+      "raw_summary": "## Summary by CodeRabbit\n\n## 릴리스 노트\n\n* **버그 수정**\n  * 다국어 음성 엔진(CosyVoice)의 한국어 합성이 실패하던 문제 해결 — 보이스 클로닝 합성 정상화\n\n* **개선**\n  * 음성 엔진 설치 이미지 배포 속도 개선 (변경분만 다운로드)",
+      "parsed_changes": {
+        "버그_수정": {
+          "title": "버그 수정",
+          "items": [
+            "다국어 음성 엔진(CosyVoice)의 한국어 합성이 실패하던 문제 해결 — 보이스 클로닝 합성 정상화"
+          ]
+        },
+        "개선": {
+          "title": "개선",
+          "items": [
+            "음성 엔진 설치 이미지 배포 속도 개선 (변경분만 다운로드)"
+          ]
+        }
+      },
+      "parse_method": "markdown"
+    },
     {
       "version": "2.0.41",
       "project_type": "python",
