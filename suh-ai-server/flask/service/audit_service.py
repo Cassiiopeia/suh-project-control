@@ -37,18 +37,28 @@ class AuditAction(str, Enum):
     TTS_VOICE_DELETE = "TTS_VOICE_DELETE"
 
 
-def record(category: AuditCategory, action: AuditAction, actor_ip: str, detail: dict = None) -> bool:
+def record(category: AuditCategory, action: AuditAction, actor_ip: str, detail: dict = None, *,
+           client_ip: str = None, proxy_chain: list = None, user_agent: str = None,
+           success: bool = True) -> bool:
     url = get_audit_database_url()
     if not url:
         return False
+    # client_ip 미지정 호출(백그라운드 등)도 체인 첫 항목으로 실제 IP를 채운다
+    if client_ip is None and actor_ip:
+        client_ip = actor_ip.split(',')[0].strip()
     try:
         conn = psycopg2.connect(url, connect_timeout=3)
         try:
             with conn, conn.cursor() as cur:
                 cur.execute(
-                    "INSERT INTO audit_log (category, action, actor_ip, detail) VALUES (%s, %s, %s, %s)",
+                    "INSERT INTO audit_log (category, action, actor_ip, detail, "
+                    "client_ip, proxy_chain, user_agent, success) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
                     (category.value, action.value, actor_ip,
-                     Json(detail) if detail is not None else None),
+                     Json(detail) if detail is not None else None,
+                     client_ip,
+                     Json(proxy_chain) if proxy_chain else None,
+                     user_agent, success),
                 )
         finally:
             conn.close()

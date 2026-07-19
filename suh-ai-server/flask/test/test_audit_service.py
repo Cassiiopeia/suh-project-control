@@ -45,6 +45,31 @@ def test_record_fail_open_on_db_error(monkeypatch):
         assert record(AuditCategory.PALWORLD, AuditAction.SERVER_STOP, '1.2.3.4') is False  # 예외 전파 없음
 
 
+def test_record_inserts_new_actor_columns(monkeypatch):
+    monkeypatch.setenv('AUDIT_DATABASE_URL', URL)
+    conn, cursor = _mock_conn()
+    with patch('service.audit_service.psycopg2.connect', return_value=conn):
+        assert record(AuditCategory.TTS, AuditAction.TTS_START, '1.2.3.4, 10.0.0.1',
+                      {'engine': 'supertonic'},
+                      client_ip='1.2.3.4', proxy_chain=['10.0.0.1'],
+                      user_agent='Mozilla/5.0', success=False) is True
+    sql, params = cursor.execute.call_args[0]
+    assert 'client_ip' in sql and 'proxy_chain' in sql and 'user_agent' in sql and 'success' in sql
+    assert params[4] == '1.2.3.4'          # client_ip
+    assert params[6] == 'Mozilla/5.0'      # user_agent
+    assert params[7] is False              # success
+
+
+def test_record_derives_client_ip_from_actor_chain(monkeypatch):
+    monkeypatch.setenv('AUDIT_DATABASE_URL', URL)
+    conn, cursor = _mock_conn()
+    with patch('service.audit_service.psycopg2.connect', return_value=conn):
+        assert record(AuditCategory.PALWORLD, AuditAction.SERVER_START,
+                      '14.63.73.230, 162.158.186.226, 172.30.1.99') is True
+    _, params = cursor.execute.call_args[0]
+    assert params[4] == '14.63.73.230'     # 체인 첫 항목이 client_ip로 유도
+
+
 # --- list_logs ---
 
 def test_list_logs_without_url_reports_not_exists(monkeypatch):
