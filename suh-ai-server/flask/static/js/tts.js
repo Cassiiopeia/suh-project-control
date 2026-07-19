@@ -350,27 +350,64 @@ el('voice-record-discard').addEventListener('click', () => {
   el('voice-record-preview').classList.add('hidden');
 });
 
+let droppedFile = null;  // 드래그&드랍으로 받은 파일 (파일 선택보다 우선순위 낮음)
+
+// 카드 전체를 드랍 영역으로 — 어떤 오디오든 받는다 (업로드 시 WAV로 자동 변환)
+const voiceCard = el('voice-card');
+['dragover', 'dragenter'].forEach(ev => voiceCard.addEventListener(ev, e => {
+  e.preventDefault();
+  voiceCard.classList.add('ring', 'ring-primary');
+}));
+['dragleave', 'drop'].forEach(ev => voiceCard.addEventListener(ev, e => {
+  e.preventDefault();
+  voiceCard.classList.remove('ring', 'ring-primary');
+}));
+voiceCard.addEventListener('drop', e => {
+  const f = e.dataTransfer.files && e.dataTransfer.files[0];
+  if (!f) return;
+  droppedFile = f;
+  showToast(`파일 준비됨: ${f.name} — 이름 입력 후 등록을 누르세요`, 'info');
+});
+
+async function toUploadWav(file) {
+  /* m4a/mp3 등 브라우저가 디코딩 가능한 모든 오디오를 서버가 받는 PCM16 WAV로 변환.
+     이미 WAV여도 float32 등 변형이 있어 항상 재인코딩한다 */
+  try {
+    return await blobToWav(file);
+  } catch (e) {
+    throw new Error('오디오 변환 실패 — 파일 형식을 확인하세요 (' + e.message + ')');
+  }
+}
+
 el('voice-upload').addEventListener('click', async () => {
   const name = el('voice-name').value.trim();
-  // 파일 선택이 우선, 없으면 브라우저 녹음 결과 사용
-  const file = el('voice-file').files[0]
+  // 우선순위: 파일 선택 > 드래그&드랍 > 브라우저 녹음
+  const source = el('voice-file').files[0] || droppedFile
     || (recordedWav && new File([recordedWav], 'recorded.wav', { type: 'audio/wav' }));
   if (!name) { showToast('보이스 이름을 입력하세요', 'warning'); return; }
-  if (!file) { showToast('음성 파일을 선택하거나 녹음하세요', 'warning'); return; }
-  const form = new FormData();
-  form.append('name', name);
-  form.append('file', file);
+  if (!source) { showToast('음성 파일을 선택/드랍하거나 녹음하세요', 'warning'); return; }
   const btn = el('voice-upload');
   btn.disabled = true;
   try {
+    const wavBlob = await toUploadWav(source);
+    const form = new FormData();
+    form.append('name', name);
+    form.append('file', new File([wavBlob], 'voice.wav', { type: 'audio/wav' }));
     const resp = await fetch(TTS_API + '/voices', {
       method: 'POST', headers: { 'X-API-Key': apiKey() }, body: form,
     });
-    const data = await resp.json();
+    // 게이트웨이(413/524 등)가 HTML을 돌려주는 경우 대비 — JSON 파싱 실패를 친절하게
+    let data;
+    try {
+      data = await resp.json();
+    } catch (e) {
+      throw new Error(`업로드 실패 (HTTP ${resp.status}) — 파일이 크거나 서버 제한에 걸렸습니다`);
+    }
     if (!resp.ok) throw new Error(data.error || '등록 실패');
     showToast(`보이스 등록 완료: ${data.voice.id}`, 'success');
     el('voice-name').value = '';
     el('voice-file').value = '';
+    droppedFile = null;
     recordedWav = null;
     el('voice-record-preview').classList.add('hidden');
     loadVoices();
