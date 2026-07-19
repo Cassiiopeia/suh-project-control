@@ -126,3 +126,12 @@ def test_state_includes_install_progress(fake):
     state = {s['id']: s for s in svc.get_engines_state()}
     assert state['kokoro']['status'] == 'installing'
     assert state['kokoro']['install_progress'] == '레이어 3개 완료 · abc: Downloading'
+
+
+def test_engines_state_cached_within_ttl(fake):
+    svc = TtsService()
+    first = svc.get_engines_state()
+    calls_after_first = len(fake.calls)
+    second = svc.get_engines_state()
+    assert second == first
+    assert len(fake.calls) == calls_after_first  # 캐시 적중 — docker 재호출 없음

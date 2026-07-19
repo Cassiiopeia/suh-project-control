@@ -6,6 +6,7 @@ TTS 엔진 수명주기 관리 — docker CLI subprocess 제어
 import logging
 import subprocess
 import threading
+import time
 from collections import deque
 
 from config.tts_config import TTS_ENGINES
@@ -16,6 +17,8 @@ logger = logging.getLogger(__name__)
 
 DOCKER_TIMEOUT = 60
 INSTALL_LOG_TAIL = 15  # 설치(pull) 로그 보관 줄 수 — 폴링 응답 크기 제한
+STATE_CACHE_SEC = 3    # 상태 조회 캐시 — 다중 탭 폴링이 docker 호출을 중복 발사해
+                       # 도커가 느릴 때 워커 스레드풀을 고갈시키는 것 방지 (실측 장애)
 
 
 class TtsService:
@@ -23,6 +26,8 @@ class TtsService:
     def __init__(self):
         self._install_lock = threading.Lock()
         self._installs = {}  # engine_id -> {'status': 'pulling'|'done'|'error', 'error': str|None}
+        self._state_lock = threading.Lock()
+        self._state_cache = None   # (계산 시각, 상태 리스트)
 
     # ---------- docker CLI 래퍼 ----------
 
@@ -48,7 +53,16 @@ class TtsService:
     # ---------- 조회 ----------
 
     def get_engines_state(self) -> list:
-        """카탈로그 + 엔진별 상태 (관리자 화면 폴링·외부 조회용)"""
+        """카탈로그 + 엔진별 상태 (관리자 화면 폴링·외부 조회용).
+        짧은 캐시로 동시 폴링의 docker 호출 중복을 막는다 — 락 안에서 계산해 single-flight"""
+        with self._state_lock:
+            if self._state_cache and time.monotonic() - self._state_cache[0] < STATE_CACHE_SEC:
+                return self._state_cache[1]
+            states = self._compute_engines_state()
+            self._state_cache = (time.monotonic(), states)
+            return states
+
+    def _compute_engines_state(self) -> list:
         states = []
         for engine_id, spec in TTS_ENGINES.items():
             install = self._installs.get(engine_id, {})
