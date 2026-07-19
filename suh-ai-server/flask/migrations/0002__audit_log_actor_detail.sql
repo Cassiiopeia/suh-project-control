@@ -1,11 +1,11 @@
--- 실행 주체 상세화: 실제 클라이언트 IP / 프록시 체인 / UA / 성공여부
--- actor_ip(XFF 원문)는 감사 원본 보존을 위해 유지한다
+-- Actor detail columns: actual client IP / proxy chain / UA / success flag
+-- actor_ip (raw XFF chain) is kept as the audit source of truth
 ALTER TABLE audit_log ADD COLUMN client_ip VARCHAR(64);
 ALTER TABLE audit_log ADD COLUMN proxy_chain JSONB;
 ALTER TABLE audit_log ADD COLUMN user_agent TEXT;
 ALTER TABLE audit_log ADD COLUMN success BOOLEAN NOT NULL DEFAULT true;
 
--- 백필: actor_ip 콤마 체인의 첫 항목 -> client_ip, 나머지 -> proxy_chain
+-- Backfill: first hop of actor_ip chain -> client_ip, the rest -> proxy_chain
 UPDATE audit_log
 SET client_ip = btrim(split_part(actor_ip, ',', 1)),
     proxy_chain = CASE
