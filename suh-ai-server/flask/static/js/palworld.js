@@ -480,7 +480,6 @@ function initLogViewer() {
     sources: [
       { id: 'game', label: '게임 로그' },
       { id: 'events', label: '이벤트' },
-      { id: 'audit', label: '감사' },
       { id: 'update', label: '업데이트' },
       { id: 'stderr', label: '오류(stderr)' },
       { id: 'flask', label: '시스템(Flask)' },
