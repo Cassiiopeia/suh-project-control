@@ -133,3 +133,46 @@ def test_queue_cancel_unknown_id_returns_404(client, monkeypatch):
 
     monkeypatch.setattr(model_router_module.queue_service, 'cancel', missing)
     assert client.delete('/models/queue/nope').status_code == 404
+
+
+# --- 감사로그 연동 ---
+
+def test_delete_model_records_audit(client, monkeypatch):
+    from service.audit_service import AuditAction, AuditCategory
+    calls = []
+    monkeypatch.setattr('util.audit_helper.audit_service.record',
+                        lambda *a, **k: calls.append((a, k)) or True)
+    monkeypatch.setattr(model_router_module.model_service, 'delete_model', lambda name: None)
+    resp = client.delete('/models/installed?name=llama3:8b')
+    assert resp.status_code == 200
+    (args, kwargs), = calls
+    assert args[0] == AuditCategory.MODEL
+    assert args[1] == AuditAction.MODEL_DELETE
+    assert args[3] == {'name': 'llama3:8b'}
+
+
+def test_enqueue_download_records_audit(client, monkeypatch):
+    from service.audit_service import AuditAction
+    calls = []
+    monkeypatch.setattr('util.audit_helper.audit_service.record',
+                        lambda *a, **k: calls.append((a, k)) or True)
+    monkeypatch.setattr(model_router_module.queue_service, 'enqueue', lambda name: None)
+    monkeypatch.setattr(model_router_module.queue_service, 'get_state', lambda: {'items': []})
+    resp = client.post('/models/queue', json={'name': 'qwen2.5:7b'})
+    assert resp.status_code == 200
+    (args, _), = calls
+    assert args[1] == AuditAction.MODEL_DOWNLOAD
+    assert args[3] == {'name': 'qwen2.5:7b'}
+
+
+def test_cancel_download_records_audit(client, monkeypatch):
+    from service.audit_service import AuditAction
+    calls = []
+    monkeypatch.setattr('util.audit_helper.audit_service.record',
+                        lambda *a, **k: calls.append((a, k)) or True)
+    monkeypatch.setattr(model_router_module.queue_service, 'cancel', lambda item_id: 'removed')
+    resp = client.delete('/models/queue/abc123')
+    assert resp.status_code == 200
+    (args, _), = calls
+    assert args[1] == AuditAction.MODEL_DOWNLOAD_CANCEL
+    assert args[3] == {'item_id': 'abc123', 'result': 'removed'}
