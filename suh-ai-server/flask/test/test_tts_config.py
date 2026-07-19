@@ -34,3 +34,8 @@ def test_cosyvoice_ref_files_exist():
 def test_cosyvoice_has_sample_rate():
     # 서버가 헤더 없는 raw PCM을 반환하므로 WAV 래핑에 필수
     assert TTS_ENGINES['cosyvoice']['sample_rate'] == 24000
+
+
+def test_cosyvoice_is_default_first_engine():
+    # 한국어 엔진(cosyvoice)이 기본 — UI 카드·보이스 목록·기본 엔진 판정 순서
+    assert list(TTS_ENGINES)[0] == 'cosyvoice'

@@ -4,6 +4,7 @@ TTS router — 음성 합성 API + 엔진 수명주기 제어
 """
 import logging
 
+import requests
 from flask import Blueprint, Response, jsonify, request
 
 from config.tts_config import TTS_ENGINES
@@ -140,6 +141,9 @@ def synthesize():
         return jsonify({'error': 'speed must be a number'}), 400
     try:
         wav = get_adapter(engine_id).synthesize(text, voice, speed, ref_wav=ref_wav)
+    except requests.ConnectionError:
+        # 컨테이너 미기동/중지 — 원인 문자열 대신 사용자 언어로 안내
+        return jsonify({'error': f'{TTS_ENGINES[engine_id]["name"]} 엔진에 연결할 수 없습니다 — 엔진이 실행 중인지 확인하세요'}), 503
     except Exception as e:
         logger.error(f"TTS synth failed ({engine_id}): {str(e)}")
         return jsonify({'error': f'합성 실패: {str(e)}'}), 503

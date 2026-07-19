@@ -176,3 +176,16 @@ def test_synthesize_multipart_oneshot_cloning(client, monkeypatch):
     assert resp.data == b'RIFF-cloned'
     assert captured['text'] == '안녕하세요'
     assert captured['ref_wav'] == b'RIFF-ref-bytes'
+
+
+def test_synthesize_engine_not_running_friendly_message(client, monkeypatch):
+    import requests as _requests
+
+    class RefusedAdapter:
+        def synthesize(self, text, voice, speed, ref_wav=None):
+            raise _requests.ConnectionError('connection refused')
+
+    monkeypatch.setattr(tts_router_module, 'get_adapter', lambda eid: RefusedAdapter())
+    resp = client.post('/tts', json={'text': 'hello', 'engine': 'kokoro'})
+    assert resp.status_code == 503
+    assert '실행 중인지 확인' in resp.get_json()['error']

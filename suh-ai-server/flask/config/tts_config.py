@@ -9,23 +9,6 @@ TTS_REFS_DIR = os.path.abspath(
     os.path.join(os.path.dirname(__file__), '..', 'static', 'tts-refs'))
 
 TTS_ENGINES = {
-    'kokoro': {
-        'name': 'Kokoro-82M',
-        'description': '초경량 영어 TTS — OpenAI 호환 API, VRAM 부담 거의 없음',
-        'image': 'ghcr.io/remsky/kokoro-fastapi-gpu:latest',
-        'container': 'suh-tts-kokoro',
-        'port': 8880,
-        'adapter': 'kokoro',
-        'languages': ['en'],
-        'vram': '~1GB',
-        'docker_args': ['--gpus', 'all'],
-        'command': [],  # 이미지 기본 CMD 사용
-        'voices': [
-            {'id': 'af_heart', 'name': '여성 (미국)'},
-            {'id': 'am_michael', 'name': '남성 (미국)'},
-            {'id': 'bf_emma', 'name': '여성 (영국)'},
-        ],
-    },
     'cosyvoice': {
         'name': 'CosyVoice2-0.5B',
         'description': '한국어 포함 다국어 TTS — 제로샷 보이스 클로닝 (cross-lingual)',
@@ -43,6 +26,23 @@ TTS_ENGINES = {
         'voices': [
             {'id': 'ref_a', 'name': '기본 보이스 A (중국어 화자)', 'file': 'ref_a.wav'},
             {'id': 'ref_b', 'name': '기본 보이스 B (영어 화자)', 'file': 'ref_b.wav'},
+        ],
+    },
+    'kokoro': {
+        'name': 'Kokoro-82M',
+        'description': '초경량 영어 TTS — OpenAI 호환 API, VRAM 부담 거의 없음',
+        'image': 'ghcr.io/remsky/kokoro-fastapi-gpu:latest',
+        'container': 'suh-tts-kokoro',
+        'port': 8880,
+        'adapter': 'kokoro',
+        'languages': ['en'],
+        'vram': '~1GB',
+        'docker_args': ['--gpus', 'all'],
+        'command': [],  # 이미지 기본 CMD 사용
+        'voices': [
+            {'id': 'af_heart', 'name': '여성 (미국)'},
+            {'id': 'am_michael', 'name': '남성 (미국)'},
+            {'id': 'bf_emma', 'name': '여성 (영국)'},
         ],
     },
 }
