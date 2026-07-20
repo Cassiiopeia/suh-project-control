@@ -19,6 +19,51 @@
       <div id="installed-error" class="alert alert-error hidden">
         <span>Ollama 서버에 연결할 수 없습니다.</span>
       </div>
+
+      <!-- 다차원 필터링 패널 (DaisyUI 완벽 지원) -->
+      <div class="flex flex-wrap items-center gap-4 bg-base-200/40 p-4 rounded-xl mb-4 border border-base-200">
+        <div class="flex-1 min-w-[200px]">
+          <input id="filter-query" type="text" class="input input-sm input-bordered w-full" placeholder="모델명 또는 패밀리 실시간 검색...">
+        </div>
+        <select id="filter-params" class="select select-sm select-bordered shrink-0">
+          <option value="all">파라미터: 전체</option>
+          <option value="under_1b">&lt; 1B</option>
+          <option value="1b_4b">1B - 4B</option>
+          <option value="4b_8b">4B - 8B</option>
+          <option value="over_8b">&gt; 8B</option>
+        </select>
+        
+        <!-- 단계별 슬라이더 바 (뱃지 피드백 연동) -->
+        <div class="flex flex-col gap-1 w-full max-w-[240px] shrink-0">
+          <div class="flex justify-between items-center text-xs opacity-70">
+            <span class="font-semibold text-xs">파일 용량 상한:</span>
+            <span id="filter-size-badge" class="badge badge-primary badge-sm font-mono font-semibold">전체</span>
+          </div>
+          <input id="filter-size-slider" type="range" min="0" max="6" value="6" class="range range-xs range-primary">
+          <div class="flex justify-between text-[9px] opacity-50 px-1 font-mono">
+            <span>0.5G</span>
+            <span>1G</span>
+            <span>4G</span>
+            <span>8G</span>
+            <span>12G</span>
+            <span>16G</span>
+            <span>전체</span>
+          </div>
+        </div>
+
+        <select id="filter-capability" class="select select-sm select-bordered shrink-0">
+          <option value="all">유형: 전체</option>
+          <option value="vision">Vision/OCR</option>
+          <option value="embedding">Embedding</option>
+          <option value="text">일반 텍스트</option>
+        </select>
+        <select id="filter-source" class="select select-sm select-bordered shrink-0">
+          <option value="all">출처: 전체</option>
+          <option value="ollama">Ollama 공식</option>
+          <option value="hf">Hugging Face</option>
+        </select>
+      </div>
+
       <div class="overflow-x-auto">
         <table class="table table-sm">
           <thead>

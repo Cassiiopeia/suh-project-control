@@ -66,7 +66,7 @@ def test_api_docs_page_renders_iframe(client):
     body = resp.get_data(as_text=True)
     assert 'API 문서' in body
     assert '<iframe' in body
-    assert '../docs/swagger' in body  # nginx 프리픽스 뒤에서도 동작하는 상대경로
+    assert '../api/flask/docs/swagger/' in body  # 로컬 및 Nginx 역방향 프록시 모두 완벽 호환되는 실제 물리 상대경로와 트레일링 슬래시 보장
 
 
 def test_dashboard_cards_cover_all_sidebar_menus(client):

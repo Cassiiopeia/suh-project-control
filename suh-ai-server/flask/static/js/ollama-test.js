@@ -81,23 +81,14 @@ function el(id) { return document.getElementById(id); }
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 /* ---------- 패밀리 분류 및 사이즈 포맷 ---------- */
-function familyOf(name) {
-  if (name.indexOf('hf.co/') === 0) return HF_FAMILY;
-  return name.split(':')[0];
-}
-
 function groupByFamily(models) {
   const groups = {};
   models.forEach(function (m) {
-    const fam = familyOf(m.name);
+    const fam = window.getActualFamily(m);
     (groups[fam] = groups[fam] || []).push(m);
   });
   return Object.keys(groups)
-    .sort(function (a, b) {
-      if (a === HF_FAMILY) return 1;
-      if (b === HF_FAMILY) return -1;
-      return a.localeCompare(b);
-    })
+    .sort()
     .map(function (fam) {
       groups[fam].sort(function (a, b) { return a.name.localeCompare(b.name); });
       return [fam, groups[fam]];
@@ -109,6 +100,62 @@ function fmtSize(bytes) {
   const gb = bytes / 1024 / 1024 / 1024;
   if (gb >= 1) return gb.toFixed(1) + 'GB';
   return (bytes / 1024 / 1024).toFixed(0) + 'MB';
+}
+
+/* ---------- 실시간 다차원 필터링 연산 ---------- */
+let filterTimeout = null;
+
+function applyFilters() {
+  const query = el('filter-query').value;
+  const params = el('filter-params').value;
+  const maxSizeStep = parseInt(el('filter-size-slider').value);
+  const capability = el('filter-capability').value;
+  const source = el('filter-source').value;
+
+  // 슬라이더 뱃지 텍스트 업데이트
+  const sizeLabels = ["0.5GB 이하", "1.0GB 이하", "4.0GB 이하", "8.0GB 이하", "12.0GB 이하", "16.0GB 이하", "전체"];
+  el('filter-size-badge').textContent = sizeLabels[maxSizeStep] || "전체";
+
+  const filters = {
+    query: query,
+    params: params,
+    maxSizeStep: maxSizeStep,
+    capability: capability,
+    source: source
+  };
+
+  // 패밀리 섹션들을 돌면서 실시간 필터 및 렌더링 클래스 동적 전환
+  document.querySelectorAll('#model-checkbox-list .family-section').forEach(section => {
+    let visibleCount = 0;
+    
+    section.querySelectorAll('.model-check').forEach(cb => {
+      const modelName = cb.value;
+      const m = installedModels.find(item => item.name === modelName);
+      const label = cb.closest('label');
+      
+      if (m && label) {
+        const passed = window.filterModelList([m], filters).length > 0;
+        if (passed) {
+          label.classList.remove('hidden');
+          visibleCount++;
+        } else {
+          label.classList.add('hidden');
+        }
+      }
+    });
+
+    // 자식 체크박스가 전부 필터링되어 숨겨진 경우 패밀리 영역 자체를 숨김 처리
+    if (visibleCount > 0) {
+      section.classList.remove('hidden');
+    } else {
+      section.classList.add('hidden');
+    }
+  });
+}
+
+function debounceApplyFilters() {
+  if (filterTimeout) clearTimeout(filterTimeout);
+  filterTimeout = setTimeout(applyFilters, 50);
 }
 
 /* ---------- 모델 목록 체크박스 렌더링 ---------- */
@@ -133,20 +180,29 @@ function renderModelCheckboxes() {
     return;
   }
   container.innerHTML = groupByFamily(installedModels).map(function (group) {
-    const boxes = group[1].map(function (m) {
+    const famName = group[0];
+    const modelsInGroup = group[1];
+
+    const boxes = modelsInGroup.map(function (m) {
       const sizeStr = m.size ? ' (' + fmtSize(m.size) + ')' : '';
-      const isVision = m.name.includes('vision') || m.name.includes('-vl') || m.name.includes('ocr');
+      const isVision = m.name.toLowerCase().includes('vision') || m.name.toLowerCase().includes('-vl') || m.name.toLowerCase().includes('ocr');
       const visionBadge = isVision ? ' <span class="badge badge-info badge-[10px] scale-90 shrink-0">vision</span>' : '';
+      const isEmbedding = m.family === 'bert' || m.name.toLowerCase().includes('embedding');
+      const embedBadge = isEmbedding ? ' <span class="badge badge-success badge-[10px] scale-90 shrink-0">embed</span>' : '';
+      const hfBadge = m.name.toLowerCase().startsWith('hf.co/') ? ' <span class="badge badge-outline badge-[10px] text-[10px] shrink-0 scale-90 opacity-60">HF</span>' : '';
+      
       return '<label class="label cursor-pointer gap-2 border border-base-300 rounded-lg px-2.5 py-1 bg-base-100 hover:bg-base-200 transition-colors shrink-0">'
-        + '<input type="checkbox" class="checkbox checkbox-xs model-check" value="' + escapeHtml(m.name) + '">'
-        + '<span class="font-mono text-xs break-all">' + escapeHtml(m.name) + sizeStr + '</span>'
-        + visionBadge
+        + '  <input type="checkbox" class="checkbox checkbox-xs model-check" value="' + escapeHtml(m.name) + '">'
+        + '  <span class="font-mono text-xs break-all">' + escapeHtml(m.name) + sizeStr + '</span>'
+        +   visionBadge + embedBadge + hfBadge
         + '</label>';
     }).join('');
-    return '<div class="w-full">'
-      + '<div class="text-xs font-semibold opacity-60 mt-1 mb-1">'
-      + escapeHtml(group[0]) + ' <span class="badge badge-ghost badge-xs">' + group[1].length + '</span></div>'
-      + '<div class="flex flex-wrap gap-1.5">' + boxes + '</div>'
+
+    return '<div class="w-full family-section" data-family="' + escapeHtml(famName) + '">'
+      + '  <div class="text-xs font-semibold opacity-60 mt-1 mb-1">'
+      + '    ' + escapeHtml(famName) + ' <span class="badge badge-ghost badge-xs">' + modelsInGroup.length + '</span>'
+      + '  </div>'
+      + '  <div class="flex flex-wrap gap-1.5">' + boxes + '</div>'
       + '</div>';
   }).join('');
 
@@ -154,6 +210,9 @@ function renderModelCheckboxes() {
   document.querySelectorAll('.model-check').forEach(cb => {
     cb.addEventListener('change', saveState);
   });
+
+  // 즉시 동적 실시간 필터 적용
+  applyFilters();
 }
 
 /* ---------- 로컬 상태 관리 (localStorage) ---------- */
@@ -1253,13 +1312,30 @@ document.addEventListener('DOMContentLoaded', function () {
   el('history-refresh').addEventListener('click', loadHistory);
 
   el('model-select-all').addEventListener('click', function() {
-    document.querySelectorAll('.model-check').forEach(cb => cb.checked = true);
+    document.querySelectorAll('.model-check').forEach(cb => {
+      const label = cb.closest('label');
+      if (label && !label.classList.contains('hidden')) {
+        cb.checked = true;
+      }
+    });
     saveState();
   });
   el('model-select-none').addEventListener('click', function() {
-    document.querySelectorAll('.model-check').forEach(cb => cb.checked = false);
+    document.querySelectorAll('.model-check').forEach(cb => {
+      const label = cb.closest('label');
+      if (label && !label.classList.contains('hidden')) {
+        cb.checked = false;
+      }
+    });
     saveState();
   });
+
+  // 다차원 필터링 조작 바인딩
+  el('filter-query').addEventListener('input', applyFilters);
+  el('filter-params').addEventListener('change', applyFilters);
+  el('filter-size-slider').addEventListener('input', debounceApplyFilters);
+  el('filter-capability').addEventListener('change', applyFilters);
+  el('filter-source').addEventListener('change', applyFilters);
 
   el('temperature').addEventListener('input', saveState);
   el('system-prompt').addEventListener('input', saveState);

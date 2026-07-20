@@ -26,6 +26,50 @@
               <i data-lucide="refresh-cw" class="size-3"></i>새로고침
             </button>
           </div>
+
+          <!-- 다차원 필터링 패널 (DaisyUI 완벽 지원) -->
+          <div class="flex flex-wrap items-center gap-3 bg-base-200/40 p-3.5 rounded-xl border border-base-200 w-full mb-2">
+            <div class="flex-1 min-w-[180px]">
+              <input id="filter-query" type="text" class="input input-xs input-bordered w-full h-8" placeholder="모델명 또는 패밀리 실시간 검색...">
+            </div>
+            <select id="filter-params" class="select select-xs select-bordered h-8 shrink-0">
+              <option value="all">파라미터: 전체</option>
+              <option value="under_1b">&lt; 1B</option>
+              <option value="1b_4b">1B - 4B</option>
+              <option value="4b_8b">4B - 8B</option>
+              <option value="over_8b">&gt; 8B</option>
+            </select>
+            
+            <div class="flex flex-col gap-0.5 w-full max-w-[200px] shrink-0">
+              <div class="flex justify-between items-center text-[10px] opacity-70">
+                <span class="font-semibold text-[10px]">파일 용량 상한:</span>
+                <span id="filter-size-badge" class="badge badge-primary badge-xs font-mono font-semibold">전체</span>
+              </div>
+              <input id="filter-size-slider" type="range" min="0" max="6" value="6" class="range range-xs range-primary">
+              <div class="flex justify-between text-[8px] opacity-50 px-0.5 font-mono">
+                <span>0.5G</span>
+                <span>1G</span>
+                <span>4G</span>
+                <span>8G</span>
+                <span>12G</span>
+                <span>16G</span>
+                <span>전체</span>
+              </div>
+            </div>
+
+            <select id="filter-capability" class="select select-xs select-bordered h-8 shrink-0">
+              <option value="all">유형: 전체</option>
+              <option value="vision">Vision/OCR</option>
+              <option value="embedding">Embedding</option>
+              <option value="text">일반 텍스트</option>
+            </select>
+            <select id="filter-source" class="select select-xs select-bordered h-8 shrink-0">
+              <option value="all">출처: 전체</option>
+              <option value="ollama">Ollama 공식</option>
+              <option value="hf">Hugging Face</option>
+            </select>
+          </div>
+
           <div id="model-checkbox-list" class="flex flex-wrap gap-2 border border-base-300 rounded-lg p-3 bg-base-200/50 max-h-[600px] overflow-y-auto resize-y w-full">
             <span class="text-sm opacity-60">설치된 모델을 불러오는 중...</span>
           </div>
