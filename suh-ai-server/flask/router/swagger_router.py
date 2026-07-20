@@ -5,6 +5,7 @@ from flask import Blueprint, jsonify
 from config.app_config import SWAGGER_URL, API_URL
 from router.palworld_swagger import PALWORLD_SWAGGER_PATHS
 from router.tts_swagger import TTS_SWAGGER_PATHS
+from router.audit_swagger import AUDIT_SWAGGER_PATHS
 
 swagger_bp = Blueprint('swagger', __name__)
 
@@ -400,5 +401,6 @@ def swagger_json():
     }
     swagger_spec["paths"].update(PALWORLD_SWAGGER_PATHS)
     swagger_spec["paths"].update(TTS_SWAGGER_PATHS)
+    swagger_spec["paths"].update(AUDIT_SWAGGER_PATHS)
     return jsonify(swagger_spec), 200
 

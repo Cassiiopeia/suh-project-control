@@ -3,13 +3,14 @@ import pytest
 from flask import Flask
 
 import router.tts_router as tts_router_module
+import util.audit_helper as audit_helper_module
 from router.tts_router import tts_bp
 
 
 @pytest.fixture
 def client(monkeypatch):
-    # DB 접근 차단 — 감사로그는 no-op
-    monkeypatch.setattr(tts_router_module.audit_service, 'record',
+    # DB 접근 차단 — 감사로그는 no-op (@audited 데코레이터가 audit_helper 경유로 기록)
+    monkeypatch.setattr(audit_helper_module.audit_service, 'record',
                         lambda *a, **kw: True)
     app = Flask(__name__)
     app.register_blueprint(tts_bp)
@@ -34,13 +35,26 @@ def test_control_unknown_action_404(client):
 
 def test_control_start_records_audit(client, monkeypatch):
     calls = []
-    monkeypatch.setattr(tts_router_module.audit_service, 'record',
-                        lambda *a, **kw: calls.append(a))
+    monkeypatch.setattr(audit_helper_module.audit_service, 'record',
+                        lambda *a, **kw: calls.append((a, kw)))
     monkeypatch.setattr(tts_router_module.tts_service, 'start', lambda eid: None)
     monkeypatch.setattr(tts_router_module.tts_service, 'get_engines_state', lambda: [])
     resp = client.post('/tts/engines/kokoro/start')
     assert resp.status_code == 200
     assert len(calls) == 1
+    args, kwargs = calls[0]
+    assert args[1].value == 'TTS_START'
+    assert args[3] == {'engine': 'kokoro'}      # detail에 엔진 정보 유지
+    assert kwargs['success'] is True
+
+
+def test_control_unknown_engine_skips_audit(client, monkeypatch):
+    """검증 실패(404)는 action 미지정이라 감사 기록에서 제외된다"""
+    calls = []
+    monkeypatch.setattr(audit_helper_module.audit_service, 'record',
+                        lambda *a, **kw: calls.append(a))
+    assert client.post('/tts/engines/nope/start').status_code == 404
+    assert calls == []
 
 
 def test_control_conflict_returns_409(client, monkeypatch):
@@ -132,7 +146,7 @@ def test_add_voice_validation_error_400(client, monkeypatch):
 def test_add_voice_success_records_audit(client, monkeypatch):
     import io as _io
     calls = []
-    monkeypatch.setattr(tts_router_module.audit_service, 'record',
+    monkeypatch.setattr(audit_helper_module.audit_service, 'record',
                         lambda *a, **kw: calls.append(a))
     monkeypatch.setattr(tts_router_module.voice_store, 'add',
                         lambda name, blob: {'id': 'u_new12345', 'name': name,

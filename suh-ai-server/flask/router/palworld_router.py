@@ -7,6 +7,7 @@ from service.palworld_metrics_history import metrics_history
 from service import audit_service
 from service import palworld_updater
 from service.audit_service import AuditCategory, AuditAction
+from util.audit_helper import audited, client_info, set_audit_detail, skip_audit
 import logging
 
 logger = logging.getLogger(__name__)
@@ -14,20 +15,7 @@ logger = logging.getLogger(__name__)
 palworld_bp = Blueprint('palworld', __name__)
 palworld_service = PalworldService()
 
-_CONTROL_AUDIT_ACTIONS = {
-    'start': AuditAction.SERVER_START,
-    'stop': AuditAction.SERVER_STOP,
-    'restart': AuditAction.SERVER_RESTART,
-}
-
 _SENSITIVE_SETTING_KEYS = {'ServerPassword', 'AdminPassword'}
-
-
-def _client_ip() -> str:
-    forwarded = request.headers.get('X-Forwarded-For', '')
-    if forwarded:
-        return forwarded.split(',')[0].strip()
-    return request.remote_addr or 'unknown'
 
 
 @palworld_bp.route('/palworld/status', methods=['GET'])
@@ -46,25 +34,25 @@ def _control(action_name):
     except Exception as e:
         logger.error(f"{action_name} error: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
-    audit_action = _CONTROL_AUDIT_ACTIONS.get(action_name)
-    if audit_action:
-        audit_service.record(AuditCategory.PALWORLD, audit_action, _client_ip())
     return jsonify({'success': True, 'action': action_name}), 200
 
 
 @palworld_bp.route('/palworld/start', methods=['POST'])
+@audited(AuditCategory.PALWORLD, AuditAction.SERVER_START)
 def start():
     """서버 시작"""
     return _control('start')
 
 
 @palworld_bp.route('/palworld/stop', methods=['POST'])
+@audited(AuditCategory.PALWORLD, AuditAction.SERVER_STOP)
 def stop():
     """서버 중지"""
     return _control('stop')
 
 
 @palworld_bp.route('/palworld/restart', methods=['POST'])
+@audited(AuditCategory.PALWORLD, AuditAction.SERVER_RESTART)
 def restart():
     """서버 재시작"""
     return _control('restart')
@@ -83,6 +71,7 @@ def get_settings():
 
 
 @palworld_bp.route('/palworld/settings', methods=['PUT'])
+@audited(AuditCategory.PALWORLD, AuditAction.SETTINGS_UPDATE)
 def put_settings():
     """PalWorldSettings.ini 수정. 서버 가동 중이면 즉시 반영 대신 pending에 보관하고
     재시작/중지 시 적용된다(응답의 applied=False)."""
@@ -116,8 +105,9 @@ def put_settings():
                 else:
                     changed[key] = {'from': before.get(key), 'to': after_value}
         if changed:
-            audit_service.record(AuditCategory.PALWORLD, AuditAction.SETTINGS_UPDATE,
-                                 _client_ip(), {'changed': changed, 'applied': applied})
+            set_audit_detail({'changed': changed, 'applied': applied})
+        else:
+            skip_audit()  # 실변경 없는 저장은 감사 잡음이라 기록하지 않는다
         return jsonify(result), 200
     except ServerRunningError as e:
         return jsonify({'error': str(e)}), 409
@@ -184,12 +174,12 @@ def list_backups():
 
 
 @palworld_bp.route('/palworld/backups', methods=['POST'])
+@audited(AuditCategory.PALWORLD, AuditAction.BACKUP_CREATE)
 def create_backup():
     """즉시 백업 실행"""
     try:
         result = palworld_service.create_backup()
-        audit_service.record(AuditCategory.PALWORLD, AuditAction.BACKUP_CREATE,
-                             _client_ip(), {'name': result.get('name')})
+        set_audit_detail({'name': result.get('name')})
         return jsonify(result), 200
     except FileNotFoundError as e:
         return jsonify({'error': str(e)}), 404
@@ -201,7 +191,7 @@ def create_backup():
 @palworld_bp.route('/palworld/update', methods=['POST'])
 def update_server():
     """서버 바이너리 업데이트 시작 (백업→중지→steamcmd→시작, 백그라운드 실행)"""
-    if not palworld_updater.start_update('manual', _client_ip()):
+    if not palworld_updater.start_update('manual', client_info()['client_ip']):
         return jsonify({'error': '이미 업데이트가 진행 중입니다'}), 409
     return jsonify({'started': True}), 202
 

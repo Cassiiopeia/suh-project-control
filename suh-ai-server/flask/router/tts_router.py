@@ -8,11 +8,11 @@ import requests
 from flask import Blueprint, Response, jsonify, request
 
 from config.tts_config import TTS_ENGINES
-from service import audit_service
 from service.audit_service import AuditCategory, AuditAction
 from service.tts.adapters import get_adapter
 from service.tts.voice_store import voice_store
 from service.tts_service import TtsService
+from util.audit_helper import audited, set_audit_action, set_audit_detail
 
 logger = logging.getLogger(__name__)
 
@@ -32,10 +32,6 @@ def _builtin_voice_ids():
     return {v['id'] for spec in TTS_ENGINES.values() for v in spec['voices']}
 
 
-def _client_ip():
-    return request.headers.get('X-Forwarded-For', request.remote_addr or '')
-
-
 @tts_bp.route('/tts/engines', methods=['GET'])
 def engines_state():
     """엔진 카탈로그 + 상태 (관리 페이지 폴링용)"""
@@ -43,12 +39,15 @@ def engines_state():
 
 
 @tts_bp.route('/tts/engines/<engine_id>/<action>', methods=['POST'])
+@audited(AuditCategory.TTS)
 def engine_control(engine_id, action):
-    """엔진 설치/시작/중지 — 관리 행위라 감사로그 기록"""
+    """엔진 설치/시작/중지 — 관리 행위라 감사로그 기록 (검증 실패는 action 미지정으로 기록 제외)"""
     if engine_id not in TTS_ENGINES:
         return jsonify({'error': f'알 수 없는 엔진: {engine_id}'}), 404
     if action not in _CONTROL_AUDIT_ACTIONS:
         return jsonify({'error': f'알 수 없는 동작: {action}'}), 404
+    set_audit_action(_CONTROL_AUDIT_ACTIONS[action])
+    set_audit_detail({'engine': engine_id})
     try:
         getattr(tts_service, action)(engine_id)
     except ValueError as e:  # 미설치 상태 start, 중복 install 등
@@ -56,8 +55,6 @@ def engine_control(engine_id, action):
     except Exception as e:
         logger.error(f"TTS engine {action} failed ({engine_id}): {str(e)}")
         return jsonify({'error': str(e)}), 500
-    audit_service.record(AuditCategory.TTS, _CONTROL_AUDIT_ACTIONS[action],
-                         _client_ip(), {'engine': engine_id})
     return jsonify({'success': True, 'engines': tts_service.get_engines_state()}), 200
 
 
@@ -83,6 +80,7 @@ def list_voices():
 
 
 @tts_bp.route('/tts/voices', methods=['POST'])
+@audited(AuditCategory.TTS, AuditAction.TTS_VOICE_ADD)
 def add_voice():
     """보이스 클로닝용 레퍼런스 음성 등록 (multipart: name + file)"""
     name = (request.form.get('name') or '').strip()
@@ -93,23 +91,22 @@ def add_voice():
         entry = voice_store.add(name, file.read())
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
-    audit_service.record(AuditCategory.TTS, AuditAction.TTS_VOICE_ADD, _client_ip(),
-                         {'voice_id': entry['id'], 'name': entry['name']})
+    set_audit_detail({'voice_id': entry['id'], 'name': entry['name']})
     logger.info(f"TTS voice added: {entry['id']} ({entry['name']})")
     return jsonify({'success': True, 'voice': entry}), 200
 
 
 @tts_bp.route('/tts/voices/<voice_id>', methods=['DELETE'])
+@audited(AuditCategory.TTS, AuditAction.TTS_VOICE_DELETE)
 def delete_voice(voice_id):
-    """사용자 등록 보이스 삭제 — 내장 보이스는 삭제 불가"""
+    """사용자 등록 보이스 삭제 — 내장 보이스는 삭제 불가 (실패 시도도 감사에 남는다)"""
+    set_audit_detail({'voice_id': voice_id})
     if voice_id in _builtin_voice_ids():
         return jsonify({'error': '내장 보이스는 삭제할 수 없습니다'}), 403
     try:
         voice_store.delete(voice_id)
     except KeyError:
         return jsonify({'error': f'보이스를 찾을 수 없습니다: {voice_id}'}), 404
-    audit_service.record(AuditCategory.TTS, AuditAction.TTS_VOICE_DELETE, _client_ip(),
-                         {'voice_id': voice_id})
     return jsonify({'success': True, 'voice_id': voice_id}), 200
 
 

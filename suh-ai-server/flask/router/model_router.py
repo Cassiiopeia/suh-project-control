@@ -3,8 +3,10 @@ Model management router — HF 검색·다운로드(pull)·설치 목록·삭제
 관리 페이지(/admin/models)가 사용. 텍스트 테스트는 /ollama/chat, 이미지 테스트는 /ocr/* 재사용.
 """
 from flask import Blueprint, jsonify, request
+from service.audit_service import AuditCategory, AuditAction
 from service.download_queue_service import DownloadQueueService
 from service.model_service import ModelService
+from util.audit_helper import audited, set_audit_detail
 import logging
 
 logger = logging.getLogger(__name__)
@@ -26,11 +28,13 @@ def installed_models():
 
 
 @model_bp.route('/models/installed', methods=['DELETE'])
+@audited(AuditCategory.MODEL, AuditAction.MODEL_DELETE)
 def delete_model():
     """설치된 모델 삭제 — 모델명에 /·:가 있어 query parameter 사용"""
     name = request.args.get('name', '').strip()
     if not name:
         return jsonify({'error': 'name query parameter is required'}), 400
+    set_audit_detail({'name': name})
     try:
         model_service.delete_model(name)
         logger.info(f"Model deleted: {name}")
@@ -99,12 +103,14 @@ def hf_files():
 
 
 @model_bp.route('/models/queue', methods=['POST'])
+@audited(AuditCategory.MODEL, AuditAction.MODEL_DOWNLOAD)
 def enqueue_download():
     """모델 다운로드 큐 추가 — 워커가 순차 실행하므로 브라우저를 닫아도 진행된다"""
     data = request.get_json(silent=True) or {}
     name = data.get('name', '').strip() if isinstance(data.get('name'), str) else ''
     if not name:
         return jsonify({'error': 'name is required'}), 400
+    set_audit_detail({'name': name})
     try:
         queue_service.enqueue(name)
     except ValueError as e:
@@ -120,11 +126,14 @@ def queue_state():
 
 
 @model_bp.route('/models/queue/<item_id>', methods=['DELETE'])
+@audited(AuditCategory.MODEL, AuditAction.MODEL_DOWNLOAD_CANCEL)
 def cancel_download(item_id):
     """대기 항목 제거 또는 진행 중 다운로드 취소"""
+    set_audit_detail({'item_id': item_id})
     try:
         result = queue_service.cancel(item_id)
     except KeyError:
         return jsonify({'error': '해당 항목을 찾을 수 없습니다'}), 404
+    set_audit_detail({'result': result})
     logger.info(f"Model queue cancel: {item_id} -> {result}")
     return jsonify({'success': True, 'result': result}), 200
