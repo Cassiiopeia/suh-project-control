@@ -294,9 +294,8 @@ async function run() {
 
       const modelStart = performance.now();
       try {
-        const resp = await fetch(OLLAMA_API + '/chat', {
+        const resp = await apiFetch(OLLAMA_API + '/chat', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(reqBody),
           signal: signal,
         });
