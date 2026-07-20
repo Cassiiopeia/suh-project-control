@@ -189,8 +189,10 @@ def create_backup():
 
 
 @palworld_bp.route('/palworld/update', methods=['POST'])
+@audited(AuditCategory.PALWORLD, AuditAction.SERVER_UPDATE)
 def update_server():
     """서버 바이너리 업데이트 시작 (백업→중지→steamcmd→시작, 백그라운드 실행)"""
+    set_audit_detail({'trigger': 'manual'})
     if not palworld_updater.start_update('manual', client_info()['client_ip']):
         return jsonify({'error': '이미 업데이트가 진행 중입니다'}), 409
     return jsonify({'started': True}), 202
@@ -203,10 +205,17 @@ def update_status():
 
 
 @palworld_bp.route('/palworld/update/check', methods=['POST'])
+@audited(AuditCategory.PALWORLD, AuditAction.SERVER_UPDATE_CHECK)
 def update_check():
     """최신 빌드 즉시 확인 (동기 — steamcmd 조회로 수십 초 걸릴 수 있음)"""
     try:
-        return jsonify(palworld_updater.check_for_update()), 200
+        result = palworld_updater.check_for_update()
+        set_audit_detail({
+            'local_build': result.get('local_build'),
+            'remote_build': result.get('remote_build'),
+            'update_available': result.get('update_available')
+        })
+        return jsonify(result), 200
     except Exception as e:
         logger.error(f"Update check error: {str(e)}")
         return jsonify({'error': str(e)}), 500
