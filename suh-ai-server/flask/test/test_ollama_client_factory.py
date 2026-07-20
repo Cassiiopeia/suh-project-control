@@ -71,7 +71,7 @@ def test_services_use_factory(monkeypatch, module_path, class_name):
 
     called = {}
 
-    def fake_factory(url='http://127.0.0.1:11434'):
+    def fake_factory(url='http://127.0.0.1:11434', timeout_sec=None):
         called['url'] = url
         return FakeClient(host=url)
 

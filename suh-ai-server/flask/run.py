@@ -63,5 +63,8 @@ if __name__ == '__main__':
         host='0.0.0.0',
         port=5000,
         threads=16,  # TTS 합성 등 장시간 요청과 폴링이 겹쳐도 여유 있게
+        # 기본 120초로는 벤치마크 중 reasoning 모델 추론이 끝나기 전에 연결이 끊긴다.
+        # 상위 Nginx(1800s) 및 Ollama 벤치마크 클라이언트 상한과 맞춘다.
+        channel_timeout=1800,
         url_scheme='http'
     )

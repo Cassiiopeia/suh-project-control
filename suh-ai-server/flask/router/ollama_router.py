@@ -2,6 +2,7 @@
 Ollama test router — 관리자 Structured Output 테스트 페이지 전용
 외부 호출자는 nginx가 Ollama를 직접 프록시하므로 이 엔드포인트를 쓸 필요 없음
 """
+import httpx
 from flask import Blueprint, request, jsonify
 from service.ollama_service import OllamaService
 from service.audit_service import AuditCategory, AuditAction
@@ -99,6 +100,13 @@ def chat():
             'metrics': result['metrics'],
         }), 200
 
+    except httpx.TimeoutException as e:
+        # 타임아웃을 500 HTML로 흘리면 프론트에서 "Unexpected token '<'"로 보여
+        # 원인을 알 수 없다. 504로 원인을 명확히 전달한다.
+        logger.error(f"Ollama chat timeout (model={model}): {str(e)}")
+        return jsonify({
+            'error': f'응답 대기 시간 초과 — 모델이 제한 시간 내에 답변을 끝내지 못했습니다 (model={model})'
+        }), 504
     except Exception as e:
         logger.error(f"Ollama chat error: {str(e)}")
         return jsonify({'error': f'Ollama chat failed: {str(e)}'}), 500

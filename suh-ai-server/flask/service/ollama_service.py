@@ -14,7 +14,7 @@ import subprocess
 import os
 import platform
 
-from util.ollama_client import create_ollama_client
+from util.ollama_client import create_ollama_client, OLLAMA_BENCHMARK_TIMEOUT_SEC
 from config.db_config import get_audit_database_url
 
 logger = logging.getLogger(__name__)
@@ -34,6 +34,10 @@ class OllamaService:
     def __init__(self, ollama_url: str = "http://127.0.0.1:11434"):
         self.ollama_url = ollama_url.rstrip('/')
         self.client = create_ollama_client(self.ollama_url)
+        # 벤치마크 전용 클라이언트 — reasoning 모델이 완주하도록 상한을 길게 잡는다.
+        # 일반 서비스(vision/OCR 등)는 위 client(300초)를 그대로 써 #109 재발을 막는다.
+        self.benchmark_client = create_ollama_client(
+            self.ollama_url, timeout_sec=OLLAMA_BENCHMARK_TIMEOUT_SEC)
 
     def list_models(self) -> list:
         """
@@ -86,8 +90,11 @@ class OllamaService:
         if auto_unload:
             chat_kwargs['keep_alive'] = 0
 
+        # 벤치마크는 reasoning 모델이 끝까지 돌아야 성능 측정이 되므로 긴 상한을 쓴다
+        client = self.benchmark_client if auto_unload else self.client
+
         try:
-            response: ChatResponse = self.client.chat(
+            response: ChatResponse = client.chat(
                 model=model,
                 messages=messages,
                 format=format_spec,
