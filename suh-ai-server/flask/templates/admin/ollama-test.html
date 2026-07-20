@@ -94,6 +94,23 @@
       </div>
     </div>
   </div>
+
+  <!-- 과거 벤치마크 테스트 이력 -->
+  <div class="card bg-base-100 shadow">
+    <div class="card-body">
+      <div class="flex items-center justify-between">
+        <h2 class="card-title text-base">
+          <i data-lucide="history" class="size-5 text-primary"></i>과거 벤치마크 테스트 이력 (최근 15개)
+        </h2>
+        <button id="history-refresh" class="btn btn-ghost btn-sm" title="이력 새로고침">
+          <i data-lucide="refresh-cw" class="size-4"></i>
+        </button>
+      </div>
+      <div id="history-list" class="space-y-3 mt-2">
+        <p id="history-empty" class="text-sm opacity-60">저장된 과거 이력을 불러오는 중...</p>
+      </div>
+    </div>
+  </div>
 </div>
 {% endblock %}
 {% block extra_js %}

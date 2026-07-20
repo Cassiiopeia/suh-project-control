@@ -98,3 +98,86 @@ def chat():
     except Exception as e:
         logger.error(f"Ollama chat error: {str(e)}")
         return jsonify({'error': f'Ollama chat failed: {str(e)}'}), 500
+
+
+@ollama_bp.route('/ollama/benchmark/batch', methods=['POST'])
+def create_benchmark_batch():
+    """벤치마크 마스터 배치 생성"""
+    try:
+        data = request.get_json() or {}
+        prompt = data.get('prompt', '').strip()
+        system = data.get('system', '').strip() or None
+        
+        try:
+            temperature = float(data.get('temperature', 0.0))
+        except (TypeError, ValueError):
+            return jsonify({'error': 'temperature must be a number'}), 400
+            
+        format_mode = data.get('format_mode', 'none')
+        schema_definition = data.get('schema_definition') or None
+
+        if not prompt:
+            return jsonify({'error': 'prompt is required'}), 400
+
+        batch_id = ollama_service.create_benchmark_batch(
+            prompt=prompt,
+            system_prompt=system,
+            temperature=temperature,
+            format_mode=format_mode,
+            schema_definition=schema_definition
+        )
+        return jsonify({'success': True, 'batch_id': batch_id}), 200
+    except Exception as e:
+        logger.error(f"Failed to create benchmark batch: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ollama_bp.route('/ollama/benchmark/result', methods=['POST'])
+def upsert_benchmark_result():
+    """단일 모델 실행 결과 UPSERT"""
+    try:
+        data = request.get_json() or {}
+        batch_id = data.get('batch_id')
+        model_name = data.get('model_name')
+        status = data.get('status')
+        response_content = data.get('response_content')
+        metrics = data.get('metrics')
+        schema_compliance = data.get('schema_compliance', 'N/A')
+
+        if not batch_id or not model_name or not status:
+            return jsonify({'error': 'batch_id, model_name, and status are required'}), 400
+
+        ok = ollama_service.upsert_benchmark_result(
+            batch_id=int(batch_id),
+            model_name=model_name,
+            status=status,
+            response_content=response_content,
+            metrics=metrics,
+            schema_compliance=schema_compliance
+        )
+        return jsonify({'success': ok}), 200
+    except Exception as e:
+        logger.error(f"Failed to upsert benchmark result: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ollama_bp.route('/ollama/benchmark/history', methods=['GET'])
+def list_benchmark_history():
+    """최근 15개 벤치마크 마스터 이력 목록 조회"""
+    try:
+        batches = ollama_service.list_benchmark_history(limit=15)
+        return jsonify({'success': True, 'batches': batches}), 200
+    except Exception as e:
+        logger.error(f"Failed to list benchmark history: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ollama_bp.route('/ollama/benchmark/history/<int:batch_id>', methods=['GET'])
+def get_benchmark_batch_details(batch_id):
+    """특정 배치 세부 지표 및 응답 JSON 로드 (Lazy Loading)"""
+    try:
+        results = ollama_service.get_benchmark_batch_details(batch_id)
+        return jsonify({'success': True, 'results': results}), 200
+    except Exception as e:
+        logger.error(f"Failed to load details for batch {batch_id}: {str(e)}")
+        return jsonify({'error': str(e)}), 500
