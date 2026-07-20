@@ -1,14 +1,39 @@
 {
   "metadata": {
-    "lastUpdated": "2026-07-20T05:31:03Z",
-    "currentVersion": "2.0.62",
+    "lastUpdated": "2026-07-20T06:01:02Z",
+    "currentVersion": "2.0.63",
     "projectType": "python",
-    "totalReleases": 58,
+    "totalReleases": 59,
     "projectTypes": [
       "python"
     ]
   },
   "releases": [
+    {
+      "version": "2.0.63",
+      "project_type": "python",
+      "project_types": [
+        "python"
+      ],
+      "date": "2026-07-20",
+      "pr_number": 126,
+      "raw_summary": "## Summary by CodeRabbit\n\n## 릴리스 노트\n\n* **새 기능**\n  * 형상 상태 변경 유발 엔드포인트에 대한 감사로그 전수조사 조치 완료: Ollama 벤치마킹 세션 기동(`BENCHMARK_CREATE`), 모델 결과 적재(`BENCHMARK_RESULT`), 팰월드 서버 바이너리 실배포 업데이트(`SERVER_UPDATE`) 및 수동 업데이트 버전 검증(`SERVER_UPDATE_CHECK`)에 가드 데코레이터 `@audited` 전면 안전 연동\n\n* **개선**\n  * `audit_service.py` 내의 `AuditAction` 전용 Enum 정보 확장 및 정적 관리자 감사 제어기인 `static/js/audit.js` 내에 신규 액션 3종에 대한 자연스러운 한국어 액션 라벨과 카테고리 정렬 필터 매핑 전격 등재",
+      "parsed_changes": {
+        "새_기능": {
+          "title": "새 기능",
+          "items": [
+            "형상 상태 변경 유발 엔드포인트에 대한 감사로그 전수조사 조치 완료: Ollama 벤치마킹 세션 기동(`BENCHMARK_CREATE`), 모델 결과 적재(`BENCHMARK_RESULT`), 팰월드 서버 바이너리 실배포 업데이트(`SERVER_UPDATE`) 및 수동 업데이트 버전 검증(`SERVER_UPDATE_CHECK`)에 가드 데코레이터 `@audited` 전면 안전 연동"
+          ]
+        },
+        "개선": {
+          "title": "개선",
+          "items": [
+            "`audit_service.py` 내의 `AuditAction` 전용 Enum 정보 확장 및 정적 관리자 감사 제어기인 `static/js/audit.js` 내에 신규 액션 3종에 대한 자연스러운 한국어 액션 라벨과 카테고리 정렬 필터 매핑 전격 등재"
+          ]
+        }
+      },
+      "parse_method": "markdown"
+    },
     {
       "version": "2.0.62",
       "project_type": "python",
