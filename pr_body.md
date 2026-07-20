@@ -4,9 +4,11 @@
 
 ## 릴리스 노트
 
-* **버그 수정**
-  * 데이터베이스 테이블(마그레이션 0003)에 최초로 마스터 벤치마크 배치 세션 생성 시 발급된 정당한 ID인 `1` 임에도 불구하고, 1000 미만 배제 가드 조건에 잘못 저촉되어 하위 모델 성능 지표 및 생성 JSON 결과 적재(`POST /ollama/benchmark/result`) 호출이 클라이언트 단에서 전면 누락되던 논리적 결함 해결
-  * `isDbBound` 명시적 바인딩 상태 지시자(Boolean)를 도입하여, 로컬 임시 가상 시퀀스 차단 및 SERIAL `1`번부터의 안전한 실시간 DB 적재를 100% 무결 보호 완료
+* **새 기능**
+  * 형상 상태 변경 유발 엔드포인트에 대한 감사로그 전수조사 조치 완료: Ollama 벤치마킹 세션 기동(`BENCHMARK_CREATE`), 모델 결과 적재(`BENCHMARK_RESULT`), 팰월드 서버 바이너리 실배포 업데이트(`SERVER_UPDATE`) 및 수동 업데이트 버전 검증(`SERVER_UPDATE_CHECK`)에 가드 데코레이터 `@audited` 전면 안전 연동
+
+* **개선**
+  * `audit_service.py` 내의 `AuditAction` 전용 Enum 정보 확장 및 정적 관리자 감사 제어기인 `static/js/audit.js` 내에 신규 액션 3종에 대한 자연스러운 한국어 액션 라벨과 카테고리 정렬 필터 매핑 전격 등재
 
 <!-- end of auto-generated comment: release notes by coderabbit.ai -->
 

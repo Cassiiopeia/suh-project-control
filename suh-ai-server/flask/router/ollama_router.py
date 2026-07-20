@@ -4,6 +4,8 @@ Ollama test router — 관리자 Structured Output 테스트 페이지 전용
 """
 from flask import Blueprint, request, jsonify
 from service.ollama_service import OllamaService
+from service.audit_service import AuditCategory, AuditAction
+from util.audit_helper import audited, set_audit_detail
 import logging
 
 logger = logging.getLogger(__name__)
@@ -101,6 +103,7 @@ def chat():
 
 
 @ollama_bp.route('/ollama/benchmark/batch', methods=['POST'])
+@audited(AuditCategory.MODEL, AuditAction.BENCHMARK_CREATE)
 def create_benchmark_batch():
     """벤치마크 마스터 배치 생성"""
     try:
@@ -119,6 +122,13 @@ def create_benchmark_batch():
         if not prompt:
             return jsonify({'error': 'prompt is required'}), 400
 
+        # 감사로그 상세 정보 적재
+        set_audit_detail({
+            'prompt_summary': prompt[:100] + '...' if len(prompt) > 100 else prompt,
+            'format_mode': format_mode,
+            'temperature': temperature
+        })
+
         batch_id = ollama_service.create_benchmark_batch(
             prompt=prompt,
             system_prompt=system,
@@ -133,6 +143,7 @@ def create_benchmark_batch():
 
 
 @ollama_bp.route('/ollama/benchmark/result', methods=['POST'])
+@audited(AuditCategory.MODEL, AuditAction.BENCHMARK_RESULT)
 def upsert_benchmark_result():
     """단일 모델 실행 결과 UPSERT"""
     try:
@@ -146,6 +157,14 @@ def upsert_benchmark_result():
 
         if not batch_id or not model_name or not status:
             return jsonify({'error': 'batch_id, model_name, and status are required'}), 400
+
+        # 감사로그 상세 정보 적재
+        set_audit_detail({
+            'batch_id': batch_id,
+            'model_name': model_name,
+            'status': status,
+            'schema_compliance': schema_compliance
+        })
 
         ok = ollama_service.upsert_benchmark_result(
             batch_id=int(batch_id),

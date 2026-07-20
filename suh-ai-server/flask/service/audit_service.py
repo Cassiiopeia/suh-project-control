@@ -39,6 +39,9 @@ class AuditAction(str, Enum):
     MODEL_DELETE = "MODEL_DELETE"
     MODEL_DOWNLOAD = "MODEL_DOWNLOAD"
     MODEL_DOWNLOAD_CANCEL = "MODEL_DOWNLOAD_CANCEL"
+    BENCHMARK_CREATE = "BENCHMARK_CREATE"
+    BENCHMARK_RESULT = "BENCHMARK_RESULT"
+    SERVER_UPDATE_CHECK = "SERVER_UPDATE_CHECK"
 
 
 def record(category: AuditCategory, action: AuditAction, actor_ip: str, detail: dict = None, *,
