@@ -200,3 +200,87 @@ def get_benchmark_batch_details(batch_id):
     except Exception as e:
         logger.error(f"Failed to load details for batch {batch_id}: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+
+@ollama_bp.route('/ollama/status', methods=['GET'])
+def get_ollama_status():
+    """로컬 Ollama 서비스의 구동 여부 및 현재 VRAM 로드된 모델 목록 조회"""
+    try:
+        is_running = ollama_service.is_ollama_running()
+        loaded = ollama_service.get_vram_loaded_models() if is_running else []
+        return jsonify({
+            'success': True,
+            'running': is_running,
+            'loaded_models': loaded
+        }), 200
+    except Exception as e:
+        logger.error(f"Ollama status check failed: {str(e)}")
+        return jsonify({'success': False, 'running': False, 'loaded_models': []}), 500
+
+
+@ollama_bp.route('/ollama/control/<action>', methods=['POST'])
+@audited(AuditCategory.MODEL)
+def control_ollama_daemon(action):
+    """Ollama 프로세스 제어 (시작, 정지, 재시작 및 VRAM 강제 비우기)"""
+    from util.audit_helper import set_audit_action
+    
+    if action not in ('start', 'stop', 'restart', 'unload'):
+        return jsonify({'error': 'Invalid action'}), 400
+
+    try:
+        data = request.get_json() or {}
+        model_name = data.get('model') or None
+
+        # 감사 액션 및 디테일 매핑 설정
+        if action == 'start':
+            set_audit_action(AuditAction.OLLAMA_START)
+        elif action == 'stop':
+            set_audit_action(AuditAction.OLLAMA_STOP)
+        elif action == 'restart':
+            set_audit_action(AuditAction.OLLAMA_RESTART)
+        elif action == 'unload':
+            set_audit_action(AuditAction.OLLAMA_UNLOAD)
+            set_audit_detail({'model': model_name or 'ALL'})
+
+        # 서비스 비즈니스 레이어 구동
+        ok = False
+        summary = ""
+        if action == 'start':
+            ok = ollama_service.start_ollama_daemon()
+            summary = "Ollama 서비스 데몬을 안전 기동하였습니다."
+        elif action == 'stop':
+            ok = ollama_service.stop_ollama_daemon()
+            summary = "Ollama 서비스를 강제 중지하였습니다."
+        elif action == 'restart':
+            ok = ollama_service.restart_ollama_daemon()
+            summary = "Ollama 서비스를 완전 재기동하였습니다."
+        elif action == 'unload':
+            ok = ollama_service.unload_vram_model(model_name)
+            summary = f"VRAM 모델 [{model_name or '전체'}] 언로드 메모리 반환 완료"
+
+        return jsonify({'success': ok, 'summary': summary}), 200
+    except Exception as e:
+        logger.error(f"Ollama daemon control failed ({action}): {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@ollama_bp.route('/ollama/logs', methods=['GET'])
+def get_ollama_logs():
+    """Ollama server.log 의 실시간 200줄 데이터 뷰 조회"""
+    try:
+        lines = int(request.args.get('lines', 200))
+    except ValueError:
+        return jsonify({'error': 'lines must be an integer'}), 400
+
+    try:
+        log_file = ollama_service.get_ollama_log_path()
+        logs = ollama_service.read_ollama_logs(lines)
+        return jsonify({
+            'success': True,
+            'exists': bool(log_file),
+            'log_file': log_file or '스캔된 Ollama 설치 경로 없음',
+            'logs': logs
+        }), 200
+    except Exception as e:
+        logger.error(f"Ollama log read failed: {str(e)}")
+        return jsonify({'error': str(e)}), 500

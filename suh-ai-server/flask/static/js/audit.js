@@ -28,6 +28,10 @@
     BENCHMARK_CREATE: '벤치마크 기동',
     BENCHMARK_RESULT: '벤치마크 결과 저장',
     SERVER_UPDATE_CHECK: '팰월드 업데이트 수동 검사',
+    OLLAMA_START: 'Ollama 데몬 시작',
+    OLLAMA_STOP: 'Ollama 데몬 중지',
+    OLLAMA_RESTART: 'Ollama 데몬 재시작',
+    OLLAMA_UNLOAD: 'VRAM 모델 Unload 청소',
   };
 
   // 카테고리 선택 시 행위 셀렉트를 해당 카테고리 것만으로 좁힌다
@@ -36,7 +40,7 @@
                'BACKUP_CREATE', 'SERVER_UPDATE', 'SERVER_UPDATE_CHECK'],
     TTS: ['TTS_INSTALL', 'TTS_START', 'TTS_STOP', 'TTS_VOICE_ADD', 'TTS_VOICE_DELETE'],
     MODEL: ['MODEL_DELETE', 'MODEL_DOWNLOAD', 'MODEL_DOWNLOAD_CANCEL',
-             'BENCHMARK_CREATE', 'BENCHMARK_RESULT'],
+             'BENCHMARK_CREATE', 'BENCHMARK_RESULT', 'OLLAMA_START', 'OLLAMA_STOP', 'OLLAMA_RESTART', 'OLLAMA_UNLOAD'],
     SYSTEM: [],
   };
 

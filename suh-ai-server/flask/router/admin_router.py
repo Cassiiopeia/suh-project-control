@@ -55,6 +55,12 @@ def ollama_test():
     return render_template('admin/ollama-test.html', root='..', active='ollama-test')
 
 
+@admin_bp.route('/admin/ollama', methods=['GET'])
+def ollama():
+    """Ollama 서비스 제어 및 모니터링 페이지"""
+    return render_template('admin/ollama.html', root='..', active='ollama')
+
+
 @admin_bp.route('/admin/models', methods=['GET'])
 def models():
     """모델 관리 페이지 (HF 검색·다운로드·벤치마크)"""

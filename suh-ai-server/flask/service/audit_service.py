@@ -42,6 +42,10 @@ class AuditAction(str, Enum):
     BENCHMARK_CREATE = "BENCHMARK_CREATE"
     BENCHMARK_RESULT = "BENCHMARK_RESULT"
     SERVER_UPDATE_CHECK = "SERVER_UPDATE_CHECK"
+    OLLAMA_START = "OLLAMA_START"
+    OLLAMA_STOP = "OLLAMA_STOP"
+    OLLAMA_RESTART = "OLLAMA_RESTART"
+    OLLAMA_UNLOAD = "OLLAMA_UNLOAD"
 
 
 def record(category: AuditCategory, action: AuditAction, actor_ip: str, detail: dict = None, *,

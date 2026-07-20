@@ -194,3 +194,95 @@ CREATE INDEX IF NOT EXISTS idx_result_batch ON benchmark_result(batch_id);
 * **검토 의견**:
   - **API 결합 보안**: 조회 및 백엔드 CRUD API 등록 시 관리자 권한을 체크해야 하며, `/ollama/*` 라우트는 이미 Nginx 및 백엔드 미들웨어에서 `X-API-Key` 헤더를 검증하도록 강구되어 있으므로, 4개의 신규 API 역시 Nginx 프록시 보호막과 동일하게 `@audited` 및 `X-API-Key` 검증 데코레이터를 완벽하게 부착해야 데이터 유출 및 SQL 인젝션 공격 등의 위해 요소를 원천 제거할 수 있습니다.
   - **SQL 인젝션 방어**: 파이썬 측에서 SQL을 작성해 DB에 적재할 때, 문자열 포맷팅(`f"..."`)을 활용한 직접 바인딩을 일체 금지하고, 무조건 안전한 플레이스홀더 파라미터 맵핑 기법(`cur.execute(query, (batch_id, ...))`)만을 의무 활용하여 SQL Injection을 방어하겠습니다.
+
+---
+
+## [OLLAMA_ADMIN_AND_CONTROL_SPECIFICATION]
+
+Ollama 데몬 생사 감지, VRAM 언로드 및 실시간 로그 스트리밍을 지원하는 백엔드 신규 REST API 규격서입니다.
+
+### 1. GET `/ollama/status`
+- **설명**: 로컬 Ollama 데몬 구동 상태 및 VRAM에 현재 적재되어 있는 실시간 활성 모델 목록을 조회합니다.
+- **Response Body (JSON - 구동 중 상태)**:
+  ```json
+  {
+    "success": true,
+    "running": true,
+    "loaded_models": [
+      {
+        "model": "gemma3:4b",
+        "size": 3338801718,
+        "expires_at": "2026-07-20T12:05:00Z"
+      }
+    ]
+  }
+  ```
+- **Response Body (JSON - 정지/크래시 상태)**:
+  ```json
+  {
+    "success": true,
+    "running": false,
+    "loaded_models": []
+  }
+  ```
+
+### 2. POST `/ollama/control/<action>`
+- **설명**: Ollama 서비스 데몬 시작, 중지, 재시작 및 VRAM 강제 청소(Unload) 명령을 가동합니다.
+- **URI Parameter**: `action` = `start` | `stop` | `restart` | `unload`
+- **Request Body (unload 액션 시 선택)**:
+  ```json
+  {
+    "model": "gemma3:4b"  // 특정 모델만 선택 해제, 생략 시 VRAM 내 모든 모델 일괄 Unload
+  }
+  ```
+- **Response Body (JSON)**:
+  ```json
+  {
+    "success": true,
+    "summary": "Ollama 서비스 재시작 완료"
+  }
+  ```
+
+### 3. GET `/ollama/logs`
+- **설명**: 윈도우즈 OS 내부 `server.log` 최근 200줄의 구동 로그 및 에러 내역을 스트리밍 조회합니다.
+- **Query Parameter**: `lines` = 기본 200 (최대 500)
+- **Response Body (JSON)**:
+  ```json
+  {
+    "success": true,
+    "exists": true,
+    "log_file": "C:\\Users\\USER\\.ollama\\logs\\server.log",
+    "logs": [
+      "[2026-07-20 12:00:00] [info] [system] starting ollama...",
+      "[2026-07-20 12:01:25] [info] [compute] load model gemma3:4b onto GPU"
+    ]
+  }
+  ```
+
+---
+
+## [WINDOWS_PROCESS_CONTROL_FALLBACK_SPECIFICATION]
+
+윈도우즈 서비스 계정 권한 거부(Access Denied) 및 프로세스 먹통(Hang) 상태를 무조건 소생시키기 위한 2중 명령 래퍼 설계입니다.
+
+### 1. Ollama 데몬 재시작 (Restart) 시퀀스 (파이썬 내부 명령)
+1. 윈도우 서비스 관리 도우미를 우선 구동합니다:
+   `PowerShell.exe -Command "Restart-Service -Name Ollama"`
+2. 위 서비스 제어가 실패(Exit Code != 0)할 경우, 즉각 태스크킬 강제 프로세스 종료 방식으로 자동 폴백합니다:
+   `taskkill /F /IM ollama.exe` (모든 좀비 프로세스까지 완벽하게 강제 소멸)
+3. 프로세스 소멸 확인 후, 백그라운드 오프라인 백서 데몬(`ollama serve`) 프로세스를 일반 유저 권한으로 안전 재기동합니다:
+   `subprocess.Popen(["ollama", "serve"], creationflags=subprocess.CREATE_NO_WINDOW)` (콘솔창 노출 없이 백그라운드 기동 보증)
+
+### 2. Ollama 윈도우 Logs (`server.log`) 감지 시퀀스
+백엔드 기동 즉시 다음 3곳의 고정 경로를 스캔하여 최초로 발굴된 물리 로그 주소를 `OllamaService`의 고정 파일명으로 자동 캐시 바인딩 처리합니다:
+1. `f"C:\\Users\\{USERNAME}\\.ollama\\logs\\server.log"` (런타임에 `os.getlogin()` 이나 `os.environ`으로부터 사용자명 동적 획득)
+2. `f"C:\\Users\\{USERNAME}\\AppData\\Local\\Ollama\\server.log"`
+3. `"C:\\Windows\\System32\\config\\systemprofile\\.ollama\\logs\\server.log"` (윈도우 서비스 기동 시의 격리 시스템 권한용 경로)
+
+---
+
+## [REVIEW_LOG]
+* **검토자**: Reviewer Persona
+* **검토 의견**:
+  - **Ollama API 버전 사양**: `loaded_models` 조회 API (`GET /api/ps`)는 Ollama 0.1.41 버전 이상에서만 제공됩니다. 만약 운영 중인 Ollama 엔진 버전이 이보다 하위 구버전인 경우 API 호출 시 404가 발생합니다. 이 경우, `loaded_models` 조회가 404를 반환하면 백엔드 단에서 예외로 뻗지 않고 그냥 `loaded_models: []` 와 `running: true` 를 유연하게 복원하도록 에러 복원 설계를 마감해 두어야 안전합니다.
+  - **인코딩 가드**: 윈도우즈 로그 파일인 `server.log`를 파이썬의 `open(path, 'r')` 로 열어 읽어올 때, 윈도우 특유의 멀티바이트나 특정 특수문자가 섞여 있을 경우 `UnicodeDecodeError`가 발생해 로그 조회가 터질 우려가 다분합니다. (실제 팰월드 로그 분석 로그에서도 cp949 에러 흔적이 식별되었습니다.) 이를 완벽 차단하기 위해 반드시 **`open(path, 'r', encoding='utf-8', errors='ignore')`** 로 감싸서 열어 읽어야 치명 오류를 완벽하게 면제할 수 있습니다.
