@@ -349,7 +349,17 @@ function addBatchContainer(batchId, prompt, mode) {
     + '    </h3>'
     + '    <div class="text-xs opacity-70 font-mono break-all max-w-2xl">프롬프트: "' + escapeHtml(prompt) + '"</div>'
     + '  </div>'
-    + '  <span class="badge badge-primary badge-outline text-xs">' + modeLabel + '</span>'
+    + '  <div class="flex items-center gap-1.5 shrink-0">'
+    + '    <!-- 클립보드 복사 버튼 -->'
+    + '    <button class="btn btn-ghost btn-xs text-primary px-1.5 btn-export-copy" title="AI 보고서 클립보드 복사" data-batch-id="' + batchId + '">'
+    + '      <i data-lucide="copy" class="size-3.5"></i>'
+    + '    </button>'
+    + '    <!-- 마크다운 다운로드 버튼 -->'
+    + '    <button class="btn btn-ghost btn-xs text-primary px-1.5 btn-export-download" title="마크다운 파일 다운로드" data-batch-id="' + batchId + '">'
+    + '      <i data-lucide="download" class="size-3.5"></i>'
+    + '    </button>'
+    + '    <span class="badge badge-primary badge-outline text-xs">' + modeLabel + '</span>'
+    + '  </div>'
     + '</div>'
     + '<!-- 배치 요약 테이블 -->'
     + '<div class="overflow-x-auto border border-base-200 rounded-lg">'
@@ -379,6 +389,9 @@ function addBatchContainer(batchId, prompt, mode) {
   if (typeof lucide !== 'undefined') {
     lucide.createIcons({ attrs: { class: 'lucide' } });
   }
+
+  // 동적 생성된 내보내기 버튼 이벤트 바인딩
+  bindExportEvents(container, batchId);
 
   return container;
 }
@@ -488,6 +501,163 @@ function clearResults() {
   const list = el('result-list');
   list.innerHTML = '<p id="result-empty" class="text-sm opacity-60">아직 실행한 요청이 없습니다. 모델을 바꿔가며 실행하면 결과가 여기 쌓여 비교할 수 있습니다.</p>';
   el('result-count').textContent = '0';
+}
+
+/* ---------- 벤치마크 결과 마크다운 보고서 내보내기 (복사 및 Blob 다운로드) ---------- */
+function generateBatchMarkdownReport(batchId) {
+  const container = el('batch-run-' + batchId);
+  if (!container) return '';
+
+  const titleEl = container.querySelector('h3');
+  const promptEl = container.querySelector('.text-xs.opacity-70.font-mono');
+  const modeEl = container.querySelector('.badge-outline');
+
+  const batchTitle = titleEl ? titleEl.innerText.trim() : '배치 테스트 #' + batchId;
+  const rawPrompt = promptEl ? promptEl.innerText.replace('프롬프트:', '').trim() : '';
+  const formatModeText = modeEl ? modeEl.innerText.trim() : '알 수 없음';
+  
+  const now = new Date();
+  const dateStr = now.getFullYear() + '년 ' + (now.getMonth() + 1) + '월 ' + now.getDate() + '일 ' 
+                + now.getHours() + '시 ' + now.getMinutes() + '분 ' + now.getSeconds() + '초';
+
+  let md = '# Ollama Structured Output 벤치마크 결과 보고서 (' + batchTitle + ')\n\n';
+  md += '- **수행 일시**: ' + dateStr + '\n';
+  md += '- **포맷 모드**: ' + formatModeText + '\n';
+  md += '- **설정 온도 (Temperature)**: ' + (el('temperature') ? el('temperature').value : '0') + '\n';
+  md += '- **시스템 지침**: "' + (el('system-prompt') ? el('system-prompt').value.trim() : '없음') + '"\n';
+  md += '- **테스트 프롬프트**: ' + rawPrompt + '\n\n';
+
+  // 1. 요약 테이블 긁어오기
+  md += '## 1. 정량 지표 종합 비교\n\n';
+  md += '| 모델 | 상태 | 총 시간 | 로드 지연 | 추론 시간 | 입력 토큰 | 출력 토큰 | 추론 속도 | Schema 준수 여부 |\n';
+  md += '| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |\n';
+
+  const rows = container.querySelectorAll('tbody tr');
+  rows.forEach(tr => {
+    const cells = tr.querySelectorAll('td');
+    if (cells.length >= 9) {
+      const model = cells[0].innerText.trim();
+      const status = cells[1].innerText.trim();
+      const total = cells[2].innerText.trim();
+      const load = cells[3].innerText.trim();
+      const evalDur = cells[4].innerText.trim();
+      const inputTok = cells[5].innerText.trim();
+      const outputTok = cells[6].innerText.trim();
+      const speed = cells[7].innerText.trim();
+      const schema = cells[8].innerText.trim();
+
+      md += '| ' + model + ' | ' + status + ' | ' + total + ' | ' + load + ' | ' + evalDur + ' | ' + inputTok + ' | ' + outputTok + ' | ' + speed + ' | ' + schema + ' |\n';
+    }
+  });
+  md += '\n';
+
+  // 2. 모델별 생성 상세 응답 긁어오기
+  md += '## 2. 모델별 세부 출력 내역\n\n';
+  const detailCards = container.querySelectorAll('[id^="batch-details-"] > div');
+  detailCards.forEach(card => {
+    const modelBadge = card.querySelector('.badge-primary');
+    const modelName = modelBadge ? modelBadge.innerText.trim() : '알 수 없는 모델';
+
+    const statusBadge = card.querySelector('.badge-success, .badge-warning, .badge-error');
+    const statusText = statusBadge ? statusBadge.innerText.trim() : '';
+
+    const metricsEl = card.querySelector('.grid-cols-2');
+    const metricsText = metricsEl ? metricsEl.innerText.replace(/\s+/g, ' ').trim() : '';
+
+    const codeBlock = card.querySelector('pre');
+    const responseJson = codeBlock ? codeBlock.innerText.trim() : '';
+
+    md += '### 🤖 ' + modelName + '\n';
+    if (statusText) md += '- **상태**: ' + statusText + '\n';
+    if (metricsText) md += '- **지표 요약**: ' + metricsText + '\n';
+    md += '- **구조화 생성 결과 (JSON)**:\n';
+    md += '```json\n' + responseJson + '\n```\n\n';
+  });
+
+  md += '---\n';
+  return md;
+}
+
+function downloadMarkdownReport(batchId) {
+  const md = generateBatchMarkdownReport(batchId);
+  if (!md) { showToast('보고서 데이터를 생성할 수 없습니다.', 'error'); return; }
+
+  const todayStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const fileName = 'ollama_benchmark_batch_' + batchId + '_' + todayStr + '.md';
+
+  const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+
+  setTimeout(() => {
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 100);
+
+  showToast('보고서 파일 다운로드가 시작되었습니다.', 'success');
+}
+
+function copyReportToClipboard(batchId) {
+  const md = generateBatchMarkdownReport(batchId);
+  if (!md) { showToast('복사할 보고서 데이터가 없습니다.', 'error'); return; }
+
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(md)
+      .then(() => {
+        showToast('보고서가 클립보드에 복사되었습니다! AI 도구와 대화해 보세요.', 'success');
+      })
+      .catch(err => {
+        console.warn('Clipboard API failed, falling back...', err);
+        fallbackCopyTextToClipboard(md);
+      });
+  } else {
+    fallbackCopyTextToClipboard(md);
+  }
+}
+
+function fallbackCopyTextToClipboard(text) {
+  const textArea = document.createElement("textarea");
+  textArea.value = text;
+  
+  textArea.style.top = "0";
+  textArea.style.left = "0";
+  textArea.style.position = "fixed";
+  textArea.style.opacity = "0";
+
+  document.body.appendChild(textArea);
+  textArea.focus();
+  textArea.select();
+
+  try {
+    const successful = document.execCommand('copy');
+    if (!successful) throw new Error('copy command returned false');
+    showToast('보고서가 클립보드에 복사되었습니다! (Fallback)', 'success');
+  } catch (err) {
+    showToast('클립보드 복사에 실패했습니다.', 'error');
+  }
+
+  document.body.removeChild(textArea);
+}
+
+function bindExportEvents(cardContainer, batchId) {
+  const copyBtn = cardContainer.querySelector('.btn-export-copy');
+  const downloadBtn = cardContainer.querySelector('.btn-export-download');
+
+  if (copyBtn) {
+    copyBtn.addEventListener('click', function() {
+      copyReportToClipboard(batchId);
+    });
+  }
+  if (downloadBtn) {
+    downloadBtn.addEventListener('click', function() {
+      downloadMarkdownReport(batchId);
+    });
+  }
 }
 
 /* ---------- 초기화 ---------- */

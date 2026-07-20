@@ -47,3 +47,14 @@ def example():
 ## 테스트
 
 `suh-ai-server/flask`에서 `python3 -m pytest test/ -q`
+
+## 개발 환경 및 코드 작성 가이드라인 (중요)
+
+### 1. 프론트엔드 비동기 요청 (API Key 보존 수칙)
+- Flask Admin 템플릿의 프론트엔드 자바스크립트에서 백엔드로 비동기 API 요청(`fetch`)을 설계할 때는 절대 네이티브 `fetch`를 직접 사용하지 않는다.
+- 반드시 `admin-common.js`에 정의된 공통 인증 fetch 래퍼인 **`window.apiFetch(path, options)`**를 의무적으로 활용해야 한다.
+- `apiFetch`는 로컬 세션의 API-KEY를 추출하여 `X-API-Key` 및 `Content-Type` 헤더를 자동으로 안전 병합하므로, 호출 유실로 인한 `401 Unauthorized` 오류를 원천 차단한다.
+
+### 2. Git 브랜치 제어 및 형상 운영
+- 모든 기획, 기능 고도화, 리팩토링, 코드 개선 및 긴급 핫픽스 수정 작업은 반드시 **`develop` 브랜치**를 소스로 하여 시작하고 구현을 완료한다.
+- `main` 브랜치는 엄격한 빌드와 릴리스 노트를 포함하는 자동 배포 릴리스 PR 머지 이외의 어떠한 직접 커밋/푸시 목적의 직접 제어도 금지한다.
