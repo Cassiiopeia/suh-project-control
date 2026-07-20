@@ -20,10 +20,11 @@ def mock_service(monkeypatch):
     def fake_list_models():
         return [{'name': 'gemma3:4b', 'size': 3338801718, 'parameter_size': '4.3B', 'family': 'gemma3'}]
 
-    def fake_chat(model, prompt, system=None, temperature=0.0, format_spec=None):
+    def fake_chat(model, prompt, system=None, temperature=0.0, format_spec=None, auto_unload=False):
         calls['chat'] = {
             'model': model, 'prompt': prompt, 'system': system,
             'temperature': temperature, 'format_spec': format_spec,
+            'auto_unload': auto_unload,
         }
         return {
             'content': '{"title":"t","steps":[]}',
