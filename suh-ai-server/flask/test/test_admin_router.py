@@ -66,15 +66,20 @@ def test_api_docs_page_renders_iframe(client):
     body = resp.get_data(as_text=True)
     assert 'API 문서' in body
     assert '<iframe' in body
-    assert '../api/flask/docs/swagger/' in body  # 로컬 및 Nginx 역방향 프록시 모두 완벽 호환되는 실제 물리 상대경로와 트레일링 슬래시 보장
+    # root(`..`)는 이미 /api/flask 까지 올라간 프리픽스라 /api/flask 를 다시 붙이면
+    # /api/flask/api/flask/... 로 중복돼 nginx 공개 경로 화이트리스트에 걸리지 않아 401이 난다.
+    assert '../docs/swagger/' in body
+    assert '/api/flask/docs/swagger' not in body
 
 
 def test_dashboard_cards_cover_all_sidebar_menus(client):
     """사이드바 메뉴 전 항목이 대시보드 바로가기 카드로 존재해야 한다"""
     body = client.get('/admin').get_data(as_text=True)
-    for href in ('./admin/palworld', './admin/ollama-test', './admin/models',
-                 './admin/tts', './admin/api-docs', './admin/logs'):
-        assert href in body, f'대시보드에 {href} 카드가 없음'
+    # 대시보드 자신이 /admin 이므로 카드는 형제 경로여야 한다.
+    # './admin/X'로 두면 /admin/admin/X 가 되어 404 (실측 확인).
+    for href in ('./palworld', './ollama-test', './models',
+                 './tts', './api-docs', './logs'):
+        assert f'href="{href}"' in body, f'대시보드에 {href} 카드가 없음'
 
 
 def test_no_emoji_icons_on_any_admin_page(client):
