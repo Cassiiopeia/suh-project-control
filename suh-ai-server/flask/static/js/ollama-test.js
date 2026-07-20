@@ -340,6 +340,7 @@ async function run() {
         model: model,
         prompt: prompt,
         temperature: temperature,
+        auto_unload: el('auto-unload-toggle').checked,
       };
       if (system) reqBody.system = system;
       if (formatMode === 'json') reqBody.format = 'json';
@@ -474,7 +475,8 @@ async function retrySingleModel(batchId, modelName) {
   const reqBody = {
     model: modelName,
     prompt: prompt,
-    temperature: temperature
+    temperature: temperature,
+    auto_unload: el('auto-unload-toggle').checked,
   };
   if (system) reqBody.system = system;
   if (formatModeText === 'json') reqBody.format = 'json';

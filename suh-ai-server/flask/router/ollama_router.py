@@ -74,6 +74,7 @@ def chat():
             return jsonify({'error': "format must be null, \"json\", or a JSON Schema object"}), 400
 
         system = data.get('system') or None
+        auto_unload = bool(data.get('auto_unload', False))
 
         try:
             temperature = float(data.get('temperature', 0))
@@ -86,6 +87,7 @@ def chat():
             system=system,
             temperature=temperature,
             format_spec=format_spec,
+            auto_unload=auto_unload,
         )
 
         logger.info(f"Ollama chat completed (model={model})")

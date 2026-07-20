@@ -54,7 +54,7 @@ class OllamaService:
         return models
 
     def chat(self, model: str, prompt: str, system: str = None,
-             temperature: float = 0.0, format_spec=None) -> dict:
+             temperature: float = 0.0, format_spec=None, auto_unload: bool = False) -> dict:
         """
         Structured Outputs chat 실행 (stream=False)
 
@@ -64,6 +64,7 @@ class OllamaService:
             system: 시스템 프롬프트 (선택)
             temperature: 샘플링 온도 (구조화 출력은 0 권장)
             format_spec: None | 'json' | JSON Schema dict — Ollama format 파라미터로 전달
+            auto_unload: 실행 후 자동 Unload 여부
 
         Returns:
             {'content': str, 'metrics': {...}}
@@ -73,32 +74,37 @@ class OllamaService:
             messages.append({'role': 'system', 'content': system})
         messages.append({'role': 'user', 'content': prompt})
 
-        logger.info(f"Ollama chat (model={model}, format={'schema' if isinstance(format_spec, dict) else format_spec})")
+        logger.info(f"Ollama chat (model={model}, format={'schema' if isinstance(format_spec, dict) else format_spec}, auto_unload={auto_unload})")
 
-        response: ChatResponse = self.client.chat(
-            model=model,
-            messages=messages,
-            format=format_spec,
-            options={'temperature': temperature},
-            stream=False,
-        )
+        try:
+            response: ChatResponse = self.client.chat(
+                model=model,
+                messages=messages,
+                format=format_spec,
+                options={'temperature': temperature},
+                stream=False,
+            )
 
-        eval_duration_ms = _ns_to_ms(response.eval_duration)
-        tokens_per_second = None
-        if response.eval_count and eval_duration_ms:
-            tokens_per_second = round(response.eval_count / (eval_duration_ms / 1000), 1)
+            eval_duration_ms = _ns_to_ms(response.eval_duration)
+            tokens_per_second = None
+            if response.eval_count and eval_duration_ms:
+                tokens_per_second = round(response.eval_count / (eval_duration_ms / 1000), 1)
 
-        return {
-            'content': response.message.content,
-            'metrics': {
-                'total_duration_ms': _ns_to_ms(response.total_duration),
-                'load_duration_ms': _ns_to_ms(response.load_duration),
-                'prompt_eval_count': response.prompt_eval_count,
-                'eval_count': response.eval_count,
-                'eval_duration_ms': eval_duration_ms,
-                'tokens_per_second': tokens_per_second,
-            },
-        }
+            return {
+                'content': response.message.content,
+                'metrics': {
+                    'total_duration_ms': _ns_to_ms(response.total_duration),
+                    'load_duration_ms': _ns_to_ms(response.load_duration),
+                    'prompt_eval_count': response.prompt_eval_count,
+                    'eval_count': response.eval_count,
+                    'eval_duration_ms': eval_duration_ms,
+                    'tokens_per_second': tokens_per_second,
+                },
+            }
+        finally:
+            if auto_unload:
+                logger.info(f"Triggering auto-unload for model [{model}] inside finally block")
+                self.unload_vram_model(model)
 
     def create_benchmark_batch(self, prompt: str, system_prompt: str = None,
                                temperature: float = 0.0, format_mode: str = 'none',
