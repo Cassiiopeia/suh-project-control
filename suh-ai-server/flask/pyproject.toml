@@ -3,5 +3,5 @@
 # 의존성은 기존 requirements.txt로 관리합니다 (이 파일은 버전 관리·메타정보 용도)
 [project]
 name = "suh-ai-server"
-version = "2.0.52"
+version = "2.0.53"
 requires-python = ">=3.10"
