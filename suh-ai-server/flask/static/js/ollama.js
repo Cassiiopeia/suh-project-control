@@ -10,7 +10,7 @@
   /* ---------- 1. Ollama 데몬 생사 & VRAM 실시간 모니터링 ---------- */
   async function loadStatus() {
     try {
-      const resp = await apiFetch(OLLAMA_API + '/status');
+      const resp = await apiFetch(OLLAMA_API + '/status?t=' + Date.now());
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || '상태 조회 실패');
 
@@ -123,7 +123,7 @@
     const logContainer = el('log-container');
     const pathEl = el('log-file-path');
     try {
-      const resp = await apiFetch(OLLAMA_API + '/logs?lines=200');
+      const resp = await apiFetch(OLLAMA_API + '/logs?lines=200&t=' + Date.now());
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || '로그 조회 실패');
 

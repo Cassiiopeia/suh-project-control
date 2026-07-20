@@ -12,25 +12,15 @@ function el(id) { return document.getElementById(id); }
 /* ---------- 패밀리 그룹핑 ---------- */
 const HF_FAMILY = 'HuggingFace';
 
-/* 모델명에서 패밀리 산출 — hf.co 레포는 통째로 HuggingFace 그룹, 나머지는 ':' 앞부분 */
-function familyOf(name) {
-  if (name.indexOf('hf.co/') === 0) return HF_FAMILY;
-  return name.split(':')[0];
-}
-
-/* 패밀리 → 모델 배열 맵을 [패밀리명, 모델들] 배열로 반환. 알파벳순, HuggingFace는 맨 뒤 */
+/* 패밀리 → 모델 배열 맵을 [패밀리명, 모델들] 배열로 반환. 알파벳순 */
 function groupByFamily(models) {
   const groups = {};
   models.forEach(function (m) {
-    const fam = familyOf(m.name);
+    const fam = window.getActualFamily(m);
     (groups[fam] = groups[fam] || []).push(m);
   });
   return Object.keys(groups)
-    .sort(function (a, b) {
-      if (a === HF_FAMILY) return 1;
-      if (b === HF_FAMILY) return -1;
-      return a.localeCompare(b);
-    })
+    .sort()
     .map(function (fam) {
       groups[fam].sort(function (a, b) { return a.name.localeCompare(b.name); });
       return [fam, groups[fam]];
@@ -42,6 +32,37 @@ function fmtSize(bytes) {
   const gb = bytes / 1024 / 1024 / 1024;
   if (gb >= 1) return gb.toFixed(1) + 'GB';
   return (bytes / 1024 / 1024).toFixed(0) + 'MB';
+}
+
+/* ---------- 실시간 다차원 필터링 연산 ---------- */
+let filterTimeout = null;
+
+function applyFilters() {
+  const query = el('filter-query').value;
+  const params = el('filter-params').value;
+  const maxSizeStep = parseInt(el('filter-size-slider').value);
+  const capability = el('filter-capability').value;
+  const source = el('filter-source').value;
+
+  // 슬라이더 뱃지 텍스트 업데이트
+  const sizeLabels = ["0.5GB 이하", "1.0GB 이하", "4.0GB 이하", "8.0GB 이하", "12.0GB 이하", "16.0GB 이하", "전체"];
+  el('filter-size-badge').textContent = sizeLabels[maxSizeStep] || "전체";
+
+  const filters = {
+    query: query,
+    params: params,
+    maxSizeStep: maxSizeStep,
+    capability: capability,
+    source: source
+  };
+
+  const filtered = window.filterModelList(installedModels, filters);
+  renderInstalledTable(filtered);
+}
+
+function debounceApplyFilters() {
+  if (filterTimeout) clearTimeout(filterTimeout);
+  filterTimeout = setTimeout(applyFilters, 50);
 }
 
 /* ---------- 설치된 모델 ---------- */
@@ -65,27 +86,50 @@ async function loadInstalled() {
 }
 
 function renderInstalled() {
+  applyFilters();
+}
+
+function renderInstalledTable(filtered) {
   const body = el('installed-body');
-  el('installed-count').textContent = installedModels.length;
-  if (!installedModels.length) {
-    body.innerHTML = '<tr><td colspan="7" class="text-center opacity-60">설치된 모델이 없습니다. 아래에서 검색해 받아보세요.</td></tr>';
+  el('installed-count').textContent = filtered.length;
+  if (!filtered.length) {
+    body.innerHTML = '<tr><td colspan="7" class="text-center opacity-60">필터에 일치하는 모델이 없습니다.</td></tr>';
     return;
   }
-  /* 패밀리 → 이름순으로 묶어서 같은 계열이 붙어 보이게 렌더링 */
-  body.innerHTML = groupByFamily(installedModels).map(function (group) {
-    return group[1].map(function (m) {
-      const vision = m.vision ? ' <span class="badge badge-info badge-xs">vision</span>' : '';
-      return '<tr>'
-        + '<td class="font-mono">' + escapeHtml(m.name) + vision + '</td>'
-        + '<td>' + fmtSize(m.size) + '</td>'
-        + '<td>' + escapeHtml(m.family || '-') + '</td>'
-        + '<td>' + escapeHtml(m.parameter_size || '-') + '</td>'
-        + '<td>' + escapeHtml(m.quantization || '-') + '</td>'
-        + '<td>' + (m.modified_at ? escapeHtml(m.modified_at.slice(0, 10)) : '-') + '</td>'
-        + '<td><button class="btn btn-error btn-xs" data-delete="' + escapeHtml(m.name) + '">삭제</button></td>'
+  
+  body.innerHTML = groupByFamily(filtered).map(function (group) {
+    const famName = group[0];
+    const modelsInGroup = group[1];
+    
+    // 패밀리 헤더 행 렌더링
+    const headerRow = '<tr class="bg-base-200/50 font-semibold">'
+      + '  <td colspan="7" class="text-left pl-4 py-2 text-primary font-mono text-xs">'
+      + '    <span class="badge badge-primary badge-sm mr-1.5 font-bold">' + modelsInGroup.length + '</span>'
+      + '    ' + escapeHtml(famName)
+      + '  </td>'
+      + '</tr>';
+      
+    const rows = modelsInGroup.map(function (m) {
+      const isVision = !!m.vision || m.name.toLowerCase().includes('vision') || m.name.toLowerCase().includes('-vl') || m.name.toLowerCase().includes('ocr');
+      const visionBadge = isVision ? ' <span class="badge badge-info badge-xs shrink-0 scale-90">vision</span>' : '';
+      const isEmbedding = m.family === 'bert' || m.name.toLowerCase().includes('embedding');
+      const embedBadge = isEmbedding ? ' <span class="badge badge-success badge-xs shrink-0 scale-90">embed</span>' : '';
+      const hfBadge = m.name.toLowerCase().startsWith('hf.co/') ? ' <span class="badge badge-outline badge-xs text-xs font-semibold shrink-0 scale-90 opacity-60">HF</span>' : '';
+      
+      return '<tr class="hover:bg-base-200/20 transition-colors">'
+        + '  <td class="font-mono text-xs text-left pl-6">' + escapeHtml(m.name) + visionBadge + embedBadge + hfBadge + '</td>'
+        + '  <td class="font-mono text-xs">' + fmtSize(m.size) + '</td>'
+        + '  <td class="font-mono text-xs opacity-75">' + escapeHtml(m.family || '-') + '</td>'
+        + '  <td class="font-mono text-xs">' + escapeHtml(m.parameter_size || '-') + '</td>'
+        + '  <td class="font-mono text-xs opacity-75">' + escapeHtml(m.quantization || '-') + '</td>'
+        + '  <td class="text-xs opacity-70">' + (m.modified_at ? escapeHtml(m.modified_at.slice(0, 10)) : '-') + '</td>'
+        + '  <td><button class="btn btn-error btn-xs px-2.5" data-delete="' + escapeHtml(m.name) + '">삭제</button></td>'
         + '</tr>';
     }).join('');
+    
+    return headerRow + rows;
   }).join('');
+  
   body.querySelectorAll('[data-delete]').forEach(function (btn) {
     btn.addEventListener('click', function () { openDeleteModal(btn.dataset.delete); });
   });
@@ -516,4 +560,11 @@ document.addEventListener('DOMContentLoaded', function () {
   el('bench-run').addEventListener('click', runBenchmark);
   el('bench-file').addEventListener('change', renderBenchModels);
   el('bench-url').addEventListener('input', renderBenchModels);
+
+  // 다차원 필터링 조작 바인딩
+  el('filter-query').addEventListener('input', applyFilters);
+  el('filter-params').addEventListener('change', applyFilters);
+  el('filter-size-slider').addEventListener('input', debounceApplyFilters);
+  el('filter-capability').addEventListener('change', applyFilters);
+  el('filter-source').addEventListener('change', applyFilters);
 });
