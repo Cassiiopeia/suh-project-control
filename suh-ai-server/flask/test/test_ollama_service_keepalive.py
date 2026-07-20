@@ -35,8 +35,11 @@ class _FakeClient:
 def service(monkeypatch):
     svc = OllamaService()
     fake = _FakeClient()
+    # 벤치마크 경로는 benchmark_client를, 일반 경로는 client를 쓰므로 둘 다 교체해
+    # 어느 쪽이 호출되든 동일한 fake에 기록되게 한다 (여기 관심사는 keep_alive 파라미터).
     svc.client = fake
-    # 언로드는 실제 HTTP를 타지 않도록 무력화 (여기 관심사는 chat 파라미터)
+    svc.benchmark_client = fake
+    # 언로드는 실제 HTTP를 타지 않도록 무력화
     monkeypatch.setattr(svc, 'unload_vram_model', lambda model_name=None: True)
     return svc, fake
 
