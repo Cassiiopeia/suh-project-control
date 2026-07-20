@@ -19,6 +19,9 @@ from config.db_config import get_audit_database_url
 
 logger = logging.getLogger(__name__)
 
+# NSSM으로 등록된 실제 서비스명. 'Ollama'로 호출하면 존재하지 않아 매번 taskkill 폴백으로 샌다.
+OLLAMA_SERVICE_NAME = os.environ.get('OLLAMA_SERVICE_NAME', 'OllamaService')
+
 
 def _ns_to_ms(value):
     """나노초 → 밀리초 (Ollama 메트릭은 ns 단위, 없으면 None)"""
@@ -76,6 +79,13 @@ class OllamaService:
 
         logger.info(f"Ollama chat (model={model}, format={'schema' if isinstance(format_spec, dict) else format_spec}, auto_unload={auto_unload})")
 
+        # 벤치마크(auto_unload)에서만 keep_alive=0을 실어 추론 직후 즉시 언로드시킨다.
+        # 요청 단위 파라미터라 vision/OCR/embedding 등 다른 서비스가 올려둔 모델의
+        # 상주 정책에는 영향을 주지 않는다 — 전역 설정으로 막으면 그쪽이 서로 밀려난다.
+        chat_kwargs = {}
+        if auto_unload:
+            chat_kwargs['keep_alive'] = 0
+
         try:
             response: ChatResponse = self.client.chat(
                 model=model,
@@ -83,6 +93,7 @@ class OllamaService:
                 format=format_spec,
                 options={'temperature': temperature},
                 stream=False,
+                **chat_kwargs,
             )
 
             eval_duration_ms = _ns_to_ms(response.eval_duration)
@@ -273,6 +284,54 @@ class OllamaService:
         except Exception:
             return False
 
+    def get_gpu_vram_usage(self) -> dict:
+        """nvidia-smi 실측 VRAM 사용량 조회.
+
+        /api/ps는 Ollama가 인식하는 모델만 보고하므로, 고아 llama-server 런너나
+        데스크톱 앱(브라우저 등)이 점유한 VRAM은 드러나지 않는다. 실측값을 함께
+        노출해야 '모델은 1개인데 VRAM은 가득 찬' 유령 점유를 진단할 수 있다.
+        """
+        try:
+            res = subprocess.run(
+                ["nvidia-smi", "--query-gpu=memory.used,memory.total",
+                 "--format=csv,noheader,nounits"],
+                capture_output=True, text=True, timeout=5,
+            )
+            if res.returncode != 0 or not res.stdout.strip():
+                return {'available': False}
+
+            used_mb, total_mb = [int(v.strip()) for v in res.stdout.strip().splitlines()[0].split(',')]
+            return {
+                'available': True,
+                'used_mb': used_mb,
+                'total_mb': total_mb,
+                'usage_percent': round(used_mb / total_mb * 100, 1) if total_mb else None,
+            }
+        except Exception as e:
+            # GPU 미탑재/드라이버 부재 환경에서도 상태 조회 전체가 막히면 안 된다 (fail-open)
+            logger.warning(f"Failed to read GPU VRAM usage via nvidia-smi: {e}")
+            return {'available': False}
+
+    def get_orphan_runner_count(self) -> int:
+        """Ollama가 인식하지 못하는 고아 llama-server.exe 런너 수를 반환 (윈도우 전용).
+
+        정상 상태에서는 로드된 모델 수와 런너 수가 일치한다. 런너가 더 많으면
+        이전 종료에서 정리되지 않은 고아가 VRAM을 점유하고 있다는 신호다.
+        """
+        if platform.system() != 'Windows':
+            return 0
+        try:
+            res = subprocess.run(
+                ["tasklist", "/FI", "IMAGENAME eq llama-server.exe", "/NH"],
+                capture_output=True, text=True, timeout=5,
+            )
+            runners = sum(1 for line in res.stdout.splitlines() if 'llama-server.exe' in line)
+            loaded = len(self.get_vram_loaded_models())
+            return max(0, runners - loaded)
+        except Exception as e:
+            logger.warning(f"Failed to count orphan llama-server runners: {e}")
+            return 0
+
     def get_vram_loaded_models(self) -> list:
         """Ollama 로컬 API (GET /api/ps)를 조회하여 현재 VRAM에 로드되어 있는 모델 목록 반환"""
         if not self.is_ollama_running():
@@ -334,7 +393,9 @@ class OllamaService:
                     headers={'Content-Type': 'application/json'},
                     method="POST"
                 )
-                with urllib.request.urlopen(req, timeout=3.0) as resp:
+                # VRAM 포화로 스와핑이 걸리면 언로드 응답도 수 초~수십 초 지연된다.
+                # 3초로 끊으면 정리가 가장 필요한 순간에 언로드가 실패해 OOM에서 회복하지 못한다.
+                with urllib.request.urlopen(req, timeout=30.0) as resp:
                     resp.read() # 응답 완전 소모
             except Exception as e:
                 logger.warning(f"Failed to unload model {m} via api/generate (keep_alive: 0): {e}")
@@ -347,7 +408,7 @@ class OllamaService:
             return True
         try:
             # 윈도우즈 서비스 시작 시도
-            res = subprocess.run(["powershell", "-Command", "Start-Service -Name Ollama"], capture_output=True, text=True, timeout=5)
+            res = subprocess.run(["powershell", "-Command", f"Start-Service -Name {OLLAMA_SERVICE_NAME}"], capture_output=True, text=True, timeout=5)
             if res.returncode == 0:
                 logger.info("Ollama service started via PowerShell.")
                 return True
@@ -368,7 +429,7 @@ class OllamaService:
         """Ollama 데몬 강제 종료 (Windows Taskkill 활용으로 좀비까지 완벽 제거)"""
         try:
             # 윈도우즈 서비스 정지 시도
-            res = subprocess.run(["powershell", "-Command", "Stop-Service -Name Ollama"], capture_output=True, text=True, timeout=5)
+            res = subprocess.run(["powershell", "-Command", f"Stop-Service -Name {OLLAMA_SERVICE_NAME}"], capture_output=True, text=True, timeout=5)
             if res.returncode == 0:
                 logger.info("Ollama service stopped via PowerShell.")
                 return True
@@ -378,7 +439,10 @@ class OllamaService:
         try:
             # 일반 테스크킬 폴백
             subprocess.run(["taskkill", "/F", "/IM", "ollama.exe"], capture_output=True, timeout=3)
-            logger.info("Ollama process killed via taskkill.")
+            # ollama.exe만 죽이면 추론 런너(llama-server.exe)가 고아로 남아 VRAM을 계속 점유한다.
+            # /api/ps에는 안 잡히는 유령 점유가 되므로 런너까지 반드시 함께 정리한다.
+            subprocess.run(["taskkill", "/F", "/IM", "llama-server.exe"], capture_output=True, timeout=5)
+            logger.info("Ollama process and llama-server runners killed via taskkill.")
             return True
         except Exception as e:
             logger.error(f"Failed to stop Ollama process: {e}")

@@ -14,16 +14,58 @@
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || '상태 조회 실패');
 
-      updateStatusUI(data.running, data.loaded_models || []);
+      updateStatusUI(data.running, data.loaded_models || [], data.gpu, data.orphan_runners);
     } catch (e) {
       console.warn("Failed to load Ollama daemon status:", e);
-      updateStatusUI(false, []);
+      updateStatusUI(false, [], null, 0);
     }
   }
 
-  function updateStatusUI(running, loadedModels) {
+  // /api/ps 합계와 nvidia-smi 실측의 차이를 보여준다.
+  // 둘이 크게 벌어지면 고아 런너나 외부 앱이 VRAM을 물고 있다는 뜻이다.
+  function updateGpuUI(gpu, loadedModels, orphanRunners) {
+    const box = el('gpu-vram-summary');
+    if (!box) return;
+
+    if (!gpu || !gpu.available) {
+      box.innerHTML = '<span class="text-xs opacity-50">GPU 실측 정보를 수집할 수 없습니다 (nvidia-smi 미가용).</span>';
+      return;
+    }
+
+    const modelBytes = (loadedModels || []).reduce((sum, m) => sum + (m.size || 0), 0);
+    const modelMb = Math.round(modelBytes / (1024 * 1024));
+    const ghostMb = Math.max(0, gpu.used_mb - modelMb);
+    const barColor = gpu.usage_percent >= 90 ? 'progress-error'
+                   : gpu.usage_percent >= 75 ? 'progress-warning' : 'progress-success';
+
+    let html = ''
+      + '<div class="flex items-center justify-between text-xs mb-1">'
+      + '  <span class="font-semibold">GPU 실측 VRAM</span>'
+      + '  <span class="font-mono">' + gpu.used_mb + ' / ' + gpu.total_mb + ' MiB (' + gpu.usage_percent + '%)</span>'
+      + '</div>'
+      + '<progress class="progress ' + barColor + ' w-full h-2" value="' + gpu.used_mb + '" max="' + gpu.total_mb + '"></progress>'
+      + '<div class="flex flex-wrap gap-x-3 gap-y-1 text-xs mt-1.5 opacity-70">'
+      + '  <span>모델 점유 <span class="font-mono">' + modelMb + ' MiB</span></span>'
+      + '  <span>그 외 점유 <span class="font-mono">' + ghostMb + ' MiB</span></span>'
+      + '</div>';
+
+    if (orphanRunners > 0) {
+      html += '<div class="alert alert-warning mt-2 py-2 px-3 text-xs">'
+            + '<i data-lucide="alert-triangle" class="size-4"></i>'
+            + '<span>Ollama가 인식하지 못하는 고아 추론 런너 <b>' + orphanRunners + '개</b>가 VRAM을 점유 중입니다. '
+            + '데몬을 재시작하면 정리됩니다.</span>'
+            + '</div>';
+    }
+
+    box.innerHTML = html;
+    if (window.lucide) window.lucide.createIcons();
+  }
+
+  function updateStatusUI(running, loadedModels, gpu, orphanRunners) {
     const badge = el('daemon-status-badge');
     const tableBody = el('vram-table-body');
+
+    updateGpuUI(gpu, loadedModels, orphanRunners);
 
     // 1. 데몬 지시등 상태 전환
     if (running) {

@@ -210,14 +210,20 @@ def get_ollama_status():
     try:
         is_running = ollama_service.is_ollama_running()
         loaded = ollama_service.get_vram_loaded_models() if is_running else []
+        # 실측 VRAM과 고아 런너 수를 함께 내려 /api/ps에 안 잡히는 유령 점유를 가시화한다
+        gpu = ollama_service.get_gpu_vram_usage()
+        orphan_runners = ollama_service.get_orphan_runner_count() if is_running else 0
         return jsonify({
             'success': True,
             'running': is_running,
-            'loaded_models': loaded
+            'loaded_models': loaded,
+            'gpu': gpu,
+            'orphan_runners': orphan_runners
         }), 200
     except Exception as e:
         logger.error(f"Ollama status check failed: {str(e)}")
-        return jsonify({'success': False, 'running': False, 'loaded_models': []}), 500
+        return jsonify({'success': False, 'running': False, 'loaded_models': [],
+                        'gpu': {'available': False}, 'orphan_runners': 0}), 500
 
 
 @ollama_bp.route('/ollama/control/<action>', methods=['POST'])
