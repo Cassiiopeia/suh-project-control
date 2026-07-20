@@ -96,3 +96,9 @@ suh-ai-server/flask/.env
 
 # TTS 사용자 보이스 업로드 (서버 런타임 데이터 — 커밋 금지)
 suh-ai-server/flask/data/
+
+# Flask 런타임 로그·메트릭 히스토리 (jsonl 포함 — 커밋 금지)
+suh-ai-server/flask/logs/
+
+# 리눅스에서 Windows 절대경로 리터럴(C:\...)이 상대 디렉토리로 오생성되는 사고 방지
+suh-ai-server/flask/C:*
