@@ -25,6 +25,58 @@
     </div>
   </div>
 
+  <div class="card bg-base-100 shadow-md">
+    <div class="card-body">
+      <h2 class="card-title text-base">
+        <i data-lucide="activity" class="size-5 text-primary"></i>시스템 리소스
+        <span id="sys-updated" class="text-xs font-normal opacity-50 ml-auto"></span>
+      </h2>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+        <div>
+          <div class="flex items-baseline justify-between">
+            <span class="text-sm opacity-70 flex items-center gap-2">CPU
+              <span id="sys-cpu-temp" class="badge badge-ghost badge-sm hidden"></span>
+            </span>
+            <span><span id="sys-cpu" class="text-xl font-bold">-</span><span class="text-sm opacity-60"> %</span></span>
+          </div>
+          <div id="spark-sys-cpu" class="h-12"></div>
+          <div id="sys-cpu-desc" class="text-xs opacity-50">-</div>
+        </div>
+        <div>
+          <div class="flex items-baseline justify-between">
+            <span class="text-sm opacity-70">메모리</span>
+            <span><span id="sys-mem" class="text-xl font-bold">-</span><span class="text-sm opacity-60"> %</span></span>
+          </div>
+          <div id="spark-sys-mem" class="h-12"></div>
+          <div id="sys-mem-desc" class="text-xs opacity-50">-</div>
+        </div>
+        <div>
+          <div class="flex items-baseline justify-between">
+            <span class="text-sm opacity-70 flex items-center gap-2">GPU
+              <span id="sys-gpu-badges" class="flex gap-1"></span>
+            </span>
+            <span><span id="sys-gpu" class="text-xl font-bold">-</span><span class="text-sm opacity-60"> %</span></span>
+          </div>
+          <div id="spark-sys-gpu" class="h-12"></div>
+          <div id="sys-gpu-name" class="text-xs opacity-50">-</div>
+        </div>
+        <div>
+          <div class="flex items-baseline justify-between">
+            <span class="text-sm opacity-70">VRAM</span>
+            <span id="sys-vram" class="text-sm font-medium">-</span>
+          </div>
+          <div id="spark-sys-vram" class="h-12"></div>
+          <div class="text-xs opacity-50">사용률 추이</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-3 pt-2">
+        <span class="text-sm opacity-70 w-16 shrink-0">디스크</span>
+        <progress id="sys-disk-bar" class="progress progress-primary flex-1" value="0" max="100"></progress>
+        <span id="sys-disk-label" class="text-xs opacity-60 whitespace-nowrap">-</span>
+      </div>
+    </div>
+  </div>
+
   <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
     <a href="./admin/palworld" class="card bg-base-100 shadow-md hover:shadow-xl transition-shadow">
       <div class="card-body">
@@ -79,28 +131,5 @@
 </div>
 {% endblock %}
 {% block extra_js %}
-<script>
-  document.addEventListener('DOMContentLoaded', async function () {
-    try {
-      const resp = await apiFetch('./health');
-      document.getElementById('stat-flask').textContent = resp.ok ? '온라인' : '오류';
-    } catch (e) {
-      document.getElementById('stat-flask').textContent = '오류';
-    }
-    try {
-      const resp = await apiFetch('./palworld/status');
-      const data = await resp.json();
-      const running = data.state === 'running';
-      document.getElementById('stat-palworld').textContent = running ? '온라인' : '중지됨';
-      document.getElementById('stat-palworld-desc').textContent = data.state.toUpperCase();
-      const badge = document.getElementById('pal-badge');
-      badge.textContent = data.state.toUpperCase();
-      badge.className = 'badge badge-sm ' + (running ? 'badge-success' : 'badge-error');
-      if (data.rest_available && data.metrics) {
-        document.getElementById('stat-players').textContent = data.metrics.currentplayernum;
-        document.getElementById('stat-players-desc').textContent = '/ ' + data.metrics.maxplayernum + ' 명';
-      }
-    } catch (e) { /* 401 modal은 apiFetch가 처리 */ }
-  });
-</script>
+<script src="{{ root }}/static/js/dashboard.js?v={{ asset('js/dashboard.js') }}"></script>
 {% endblock %}

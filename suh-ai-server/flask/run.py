@@ -46,6 +46,11 @@ if __name__ == '__main__':
     PalworldEventPoller(PalworldService(), metrics_history=metrics_history).start()
     logger.info("Palworld event poller started (10s interval, metrics history on)")
 
+    # 시스템 리소스 메트릭 폴러 (daemon thread) — 대시보드 CPU/MEM/GPU 카드용
+    from service.system_metrics_service import SystemMetricsPoller
+    SystemMetricsPoller().start()
+    logger.info("System metrics poller started (10s interval)")
+
     # 팰월드 서버 바이너리 새 빌드 자동 감지 (daemon thread)
     from service import palworld_updater
     threading.Thread(target=palworld_updater.auto_check_loop, daemon=True,
