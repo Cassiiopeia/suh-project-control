@@ -1,14 +1,42 @@
 {
   "metadata": {
-    "lastUpdated": "2026-07-20T01:26:05Z",
-    "currentVersion": "2.0.53",
+    "lastUpdated": "2026-07-20T02:34:30Z",
+    "currentVersion": "2.0.54",
     "projectType": "python",
-    "totalReleases": 49,
+    "totalReleases": 50,
     "projectTypes": [
       "python"
     ]
   },
   "releases": [
+    {
+      "version": "2.0.54",
+      "project_type": "python",
+      "project_types": [
+        "python"
+      ],
+      "date": "2026-07-20",
+      "pr_number": 114,
+      "raw_summary": "## Summary by CodeRabbit\n\n## 릴리스 노트\n\n* **새 기능**\n  * Ollama Structured Output 테스트 페이지에서 여러 모델을 계열(Family)별로 묶어 다중 선택 및 벤치마킹할 수 있는 기능 추가\n  * 선택된 모델들을 순차 비동기 호출로 안전하게 실행하고, 실행 중간에 중단할 수 있는 중지(Abort) 제어 기능 추가\n\n* **개선**\n  * 총 처리 시간, 모델 로딩 지연, 추론 소요 시간, 입출력 토큰 규모 및 초당 토큰 속도(tok/s)를 한눈에 대조해 볼 수 있는 벤치마크 요약 테이블 추가\n  * 반환된 구조화 JSON 응답 결과가 기재된 JSON Schema 사양을 완벽히 충족하는지 가볍게 즉석 평가해 주는 자체 스키마 검증기 도입\n  * 사용자가 작성 중이던 프롬프트, 온도, JSON Schema 템플릿 및 모델 선택 체크 상태가 새로고침 시에도 날아가지 않도록 로컬 세션 영구 보존 정책 적용",
+      "parsed_changes": {
+        "새_기능": {
+          "title": "새 기능",
+          "items": [
+            "Ollama Structured Output 테스트 페이지에서 여러 모델을 계열(Family)별로 묶어 다중 선택 및 벤치마킹할 수 있는 기능 추가",
+            "선택된 모델들을 순차 비동기 호출로 안전하게 실행하고, 실행 중간에 중단할 수 있는 중지(Abort) 제어 기능 추가"
+          ]
+        },
+        "개선": {
+          "title": "개선",
+          "items": [
+            "총 처리 시간, 모델 로딩 지연, 추론 소요 시간, 입출력 토큰 규모 및 초당 토큰 속도(tok/s)를 한눈에 대조해 볼 수 있는 벤치마크 요약 테이블 추가",
+            "반환된 구조화 JSON 응답 결과가 기재된 JSON Schema 사양을 완벽히 충족하는지 가볍게 즉석 평가해 주는 자체 스키마 검증기 도입",
+            "사용자가 작성 중이던 프롬프트, 온도, JSON Schema 템플릿 및 모델 선택 체크 상태가 새로고침 시에도 날아가지 않도록 로컬 세션 영구 보존 정책 적용"
+          ]
+        }
+      },
+      "parse_method": "markdown"
+    },
     {
       "version": "2.0.53",
       "project_type": "python",
