@@ -315,15 +315,15 @@ class OllamaService:
         success = True
         for m in models_to_unload:
             try:
-                # Ollama 0.1.41+ keep_alive: 0 인자를 실어 보내어 메모리 즉시 반환 유도
+                # 공식 규격인 POST /api/generate 에 비어있는 prompt와 keep_alive: 0 전송
                 payload = json.dumps({
                     "model": m,
-                    "messages": [],
+                    "prompt": "",
                     "keep_alive": 0
                 }).encode('utf-8')
                 
                 req = urllib.request.Request(
-                    "http://127.0.0.1:11434/api/chat",
+                    "http://127.0.0.1:11434/api/generate",
                     data=payload,
                     headers={'Content-Type': 'application/json'},
                     method="POST"
@@ -331,7 +331,7 @@ class OllamaService:
                 with urllib.request.urlopen(req, timeout=3.0) as resp:
                     resp.read() # 응답 완전 소모
             except Exception as e:
-                logger.warning(f"Failed to unload model {m} via api/chat: {e}")
+                logger.warning(f"Failed to unload model {m} via api/generate (keep_alive: 0): {e}")
                 success = False
         return success
 
@@ -387,18 +387,33 @@ class OllamaService:
         return self.start_ollama_daemon()
 
     def get_ollama_log_path(self) -> str:
-        """로컬 윈도우 서버 내의 server.log 물리 설치 절대경로를 동적 스캔하여 반환"""
-        paths = []
-        user_name = os.environ.get('USERNAME') or os.getlogin() or 'USER'
-        
-        # 후보 경로 3개 명시
-        paths.append(f"C:\\Users\\{user_name}\\.ollama\\logs\\server.log")
-        paths.append(f"C:\\Users\\{user_name}\\AppData\\Local\\Ollama\\server.log")
-        paths.append("C:\\Windows\\System32\\config\\systemprofile\\.ollama\\logs\\server.log")
+        """윈도우 사용자 디렉토리를 전수 와일드카드 스캔하여 server.log 물리 주소를 NSSM(SYSTEM 권한) 환경에서도 완벽 추적"""
+        # 1. 시스템 프로파일 경로 우선 스캔
+        system_path = "C:\\Windows\\System32\\config\\systemprofile\\.ollama\\logs\\server.log"
+        if os.path.exists(system_path):
+            return system_path
 
-        for p in paths:
-            if os.path.exists(p):
-                return p
+        # 2. C:\Users\ 하위의 모든 사용자 폴더 전수 조사 (NSSM SYSTEM 우회 책무)
+        users_root = "C:\\Users"
+        if os.path.exists(users_root):
+            try:
+                for entry in os.listdir(users_root):
+                    user_dir = os.path.join(users_root, entry)
+                    if os.path.isdir(user_dir):
+                        p1 = os.path.join(user_dir, ".ollama", "logs", "server.log")
+                        if os.path.exists(p1):
+                            return p1
+                        p2 = os.path.join(user_dir, "AppData", "Local", "Ollama", "server.log")
+                        if os.path.exists(p2):
+                            return p2
+            except Exception:
+                pass
+
+        # 3. 환경변수 기반 기본 폴백
+        user_name = os.environ.get('USERNAME') or os.getlogin() or 'USER'
+        p_fallback = f"C:\\Users\\{user_name}\\.ollama\\logs\\server.log"
+        if os.path.exists(p_fallback):
+            return p_fallback
         return ""
 
     def read_ollama_logs(self, lines: int = 200) -> list:
