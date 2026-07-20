@@ -1,86 +1,104 @@
-/* Ollama Structured Output 테스트 페이지 로직. base: /admin/ollama-test → API는 ../ollama/* */
-const OLLAMA_API = '../ollama';
+# Ollama Structured Output Benchmark Implementation Plan
 
-const SCHEMA_PRESETS = {
-  simple: {
-    type: 'object',
-    properties: {
-      title: { type: 'string' },
-      summary: { type: 'string' },
-    },
-    required: ['title', 'summary'],
-    additionalProperties: false,
-  },
-  nested: {
-    type: 'object',
-    properties: {
-      user: {
-        type: 'object',
-        properties: {
-          name: { type: 'string' },
-          profile: {
-            type: 'object',
-            properties: {
-              age: { type: 'integer' },
-              tags: { type: 'array', items: { type: 'string' } },
-            },
-            required: ['age', 'tags'],
-            additionalProperties: false,
-          },
-        },
-        required: ['name', 'profile'],
-        additionalProperties: false,
-      },
-    },
-    required: ['user'],
-    additionalProperties: false,
-  },
-  array: {
-    type: 'object',
-    properties: {
-      title: { type: 'string' },
-      steps: {
-        type: 'array',
-        items: {
-          type: 'object',
-          properties: {
-            order: { type: 'integer' },
-            instruction: { type: 'string' },
-          },
-          required: ['order', 'instruction'],
-          additionalProperties: false,
-        },
-      },
-    },
-    required: ['title', 'steps'],
-    additionalProperties: false,
-  },
-  enum: {
-    type: 'object',
-    properties: {
-      sentiment: { type: 'string', enum: ['POSITIVE', 'NEUTRAL', 'NEGATIVE'] },
-      confidence: { type: 'number' },
-      reason: { type: 'string' },
-    },
-    required: ['sentiment', 'confidence', 'reason'],
-    additionalProperties: false,
-  },
-};
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-const MODE_LABELS = { none: 'format 없음', json: '"json"', schema: 'JSON Schema' };
-const HF_FAMILY = 'HuggingFace';
+**Goal:** Ollama Structured Output 테스트 페이지를 여러 모델을 한 번에 다중 선택하여 순차 테스트하고 상세한 입출력 토큰 규모 및 속도를 일목요연하게 상호 대조해볼 수 있는 정교한 벤치마킹 대시보드로 고도화합니다.
 
+**Architecture:** 
+- 기존의 단일 선택 드롭다운 UI를 계열(Family)별 체크박스 리스트로 개편합니다.
+- 배치 세션(Batch Session) 단위 비동기 순차 루프(`for...of`)를 실행하여 서버 자원 오염을 차단합니다.
+- 실행 중간에 중단할 수 있도록 `AbortController`를 구성하고, 결과를 다중 메트릭 테이블 및 포맷팅된 JSON 응답 카드로 상세 시각화합니다.
+- `localStorage`에 상태를 보존하여 새로고침 시에도 작업 컨텍스트가 유지되도록 합니다.
+
+**Tech Stack:** HTML5, CSS3, Tailwind CSS, DaisyUI, Vanilla JS (ES6), Flask (Backend Backend API)
+
+## Global Constraints
+- 수정 작업은 오직 프론트엔드 파일인 `suh-ai-server/flask/templates/admin/ollama-test.html`과 `suh-ai-server/flask/static/js/ollama-test.js`에 국한하며, 백엔드 라우터 및 서비스는 기존 사양을 최대한 변경 없이 그대로 연계합니다.
+- 모든 UI 문구, 주석 및 레이블은 글로벌 룰에 따라 한국어로 표기합니다.
+- 비동기 로직 내에서 메모리 회복을 위한 300ms의 안정화 sleep 인터벌을 준수합니다.
+
+---
+
+### Task 1: ollama-test.html UI 마크업 개편
+
+**Files:**
+- Modify: `suh-ai-server/flask/templates/admin/ollama-test.html`
+
+**Interfaces:**
+- Consumes: 기존 `ollama-test.html` 레이아웃 구조
+- Produces: 다중 모델 체크박스 영역, 상태 진행 프로그레스 바, 배치 요약 비교 테이블 섹션이 포함된 풍부한 마크업
+
+- [ ] **Step 1: 마크업 수정 적용**
+
+`suh-ai-server/flask/templates/admin/ollama-test.html` 파일에서 기존 단일 모델 드롭다운 섹션을 패밀리 그룹화 다중 체크박스 및 배치 비교 요약 테이블 영역으로 교체합니다.
+
+```html
+<!-- 구버전 단일 모델 select 부분을 아래와 같이 다중 체크박스로 변경 -->
+<fieldset class="fieldset w-full">
+  <legend class="fieldset-legend">모델 선택 (다중 선택 가능)</legend>
+  <div class="flex gap-2 mb-2">
+    <button id="model-select-all" class="btn btn-xs btn-outline">전체 선택</button>
+    <button id="model-select-none" class="btn btn-xs btn-outline">전체 해제</button>
+    <button id="model-refresh" class="btn btn-xs btn-outline" title="모델 목록 새로고침">
+      <i data-lucide="refresh-cw" class="size-3"></i>새로고침
+    </button>
+  </div>
+  <div id="model-checkbox-list" class="flex flex-wrap gap-2 border border-base-300 rounded-lg p-3 bg-base-200/50 max-h-60 overflow-y-auto w-full">
+    <span class="text-sm opacity-60">설치된 모델을 불러오는 중...</span>
+  </div>
+</fieldset>
+
+<!-- 실행 버튼 및 진행 인디케이터 구성 변경 -->
+<div class="card-actions items-center mt-2">
+  <button id="run-btn" class="btn btn-primary btn-sm">
+    <i data-lucide="play" class="size-4"></i>실행
+  </button>
+  <button id="stop-btn" class="btn btn-error btn-sm hidden">
+    <i data-lucide="square" class="size-4"></i>중지
+  </button>
+  <div id="run-progress-container" class="flex items-center gap-3 hidden w-full max-w-md mt-2 md:mt-0">
+    <progress id="run-progress" class="progress progress-primary w-40" value="0" max="100"></progress>
+    <span id="run-status-text" class="text-sm font-semibold opacity-80">준비 중...</span>
+    <span class="text-xs opacity-60">(경과 시간: <span id="run-elapsed">0.0</span>s)</span>
+  </div>
+</div>
+```
+
+- [ ] **Step 2: 수동 확인**
+Flask 개발서버를 기동하여 http://localhost/api/flask/admin/ollama-test 페이지를 브라우저에서 열어 수정된 마크업 UI 요소들이 깔끔하게 렌더링되는지 확인합니다.
+
+- [ ] **Step 3: Git Commit**
+
+```bash
+git add suh-ai-server/flask/templates/admin/ollama-test.html
+git commit -m "feat(ollama-test): 다중 모델 선택 및 진행바 마크업 개편"
+```
+
+---
+
+### Task 2: ollama-test.js 모델 그룹 렌더링 및 로컬 세션 캐싱 구현
+
+**Files:**
+- Modify: `suh-ai-server/flask/static/js/ollama-test.js`
+
+**Interfaces:**
+- Consumes: `GET ../ollama/models` API 응답 데이터
+- Produces: 계열별 다중 체크박스 목록 동적 렌더링, `localStorage` 영구 보존 기능
+
+- [ ] **Step 1: 자바스크립트 초기화 및 패밀리 그룹화 기능 교체**
+
+`suh-ai-server/flask/static/js/ollama-test.js`의 최상단 전역 변수 및 모델 로드 로직을 개편합니다.
+
+```javascript
+// 기존 변수 유지 및 신규 추가
 let formatMode = 'schema';
 let running = false;
 let resultSeq = 0;
 let abortController = null;
 let installedModels = []; // 설치 모델 캐시
 
-function el(id) { return document.getElementById(id); }
+const HF_FAMILY = 'HuggingFace';
 
-const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-
-/* ---------- 패밀리 분류 및 사이즈 포맷 ---------- */
 function familyOf(name) {
   if (name.indexOf('hf.co/') === 0) return HF_FAMILY;
   return name.split(':')[0];
@@ -111,7 +129,7 @@ function fmtSize(bytes) {
   return (bytes / 1024 / 1024).toFixed(0) + 'MB';
 }
 
-/* ---------- 모델 목록 체크박스 렌더링 ---------- */
+// 모델 다중 체크박스 리스트 그리기
 async function loadModels() {
   const container = el('model-checkbox-list');
   try {
@@ -120,9 +138,9 @@ async function loadModels() {
     if (!resp.ok) throw new Error(data.error || '모델 목록 조회 실패');
     installedModels = data.models;
     renderModelCheckboxes();
-    restoreState(); // 모델 로딩 후 복원 수행
+    restoreState(); // 모델 로딩 완료 후 이전 상태 복원
   } catch (e) {
-    container.innerHTML = '<span class="text-error text-sm">모델 조회 실패: ' + escapeHtml(e.message) + '</span>';
+    container.innerHTML = '<span class="text-error">모델 조회 실패: ' + escapeHtml(e.message) + '</span>';
   }
 }
 
@@ -136,8 +154,8 @@ function renderModelCheckboxes() {
     const boxes = group[1].map(function (m) {
       const sizeStr = m.size ? ' (' + fmtSize(m.size) + ')' : '';
       const isVision = m.name.includes('vision') || m.name.includes('-vl') || m.name.includes('ocr');
-      const visionBadge = isVision ? ' <span class="badge badge-info badge-[10px] scale-90 shrink-0">vision</span>' : '';
-      return '<label class="label cursor-pointer gap-2 border border-base-300 rounded-lg px-2.5 py-1 bg-base-100 hover:bg-base-200 transition-colors shrink-0">'
+      const visionBadge = isVision ? ' <span class="badge badge-info badge-xs shrink-0">vision</span>' : '';
+      return '<label class="label cursor-pointer gap-2 border border-base-300 rounded-lg px-2 py-1 bg-base-100 hover:bg-base-200 transition-colors">'
         + '<input type="checkbox" class="checkbox checkbox-xs model-check" value="' + escapeHtml(m.name) + '">'
         + '<span class="font-mono text-xs break-all">' + escapeHtml(m.name) + sizeStr + '</span>'
         + visionBadge
@@ -149,14 +167,14 @@ function renderModelCheckboxes() {
       + '<div class="flex flex-wrap gap-1.5">' + boxes + '</div>'
       + '</div>';
   }).join('');
-
-  // 체크박스 클릭 이벤트 시 상태 저장
-  document.querySelectorAll('.model-check').forEach(cb => {
-    cb.addEventListener('change', saveState);
-  });
 }
+```
 
-/* ---------- 로컬 상태 관리 (localStorage) ---------- */
+- [ ] **Step 2: localStorage 로컬 상태 캐싱 추가**
+
+작성 중이던 프롬프트 및 선택 상태를 영구적으로 저장하고 로딩하는 함수를 구현합니다.
+
+```javascript
 function saveState() {
   const selectedModels = Array.from(document.querySelectorAll('.model-check:checked')).map(cb => cb.value);
   const state = {
@@ -192,60 +210,66 @@ function restoreState() {
     console.error('State restore failed:', e);
   }
 }
+```
 
-/* ---------- format 모드 / 스키마 ---------- */
-function setFormatMode(mode) {
-  formatMode = mode;
-  document.querySelectorAll('#format-mode [data-mode]').forEach(function (btn) {
-    btn.classList.toggle('btn-active', btn.dataset.mode === mode);
-  });
-  el('schema-section').classList.toggle('hidden', mode !== 'schema');
-  validateSchema();
-}
+- [ ] **Step 3: 상태 이벤트 리스너 바인딩**
 
-function validateSchema() {
-  const errBox = el('schema-error');
-  if (formatMode !== 'schema') {
-    errBox.classList.add('hidden');
-    el('run-btn').disabled = running;
-    return true;
-  }
-  try {
-    const parsed = JSON.parse(el('schema-input').value);
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-      throw new Error('스키마는 JSON 객체여야 합니다');
-    }
-    errBox.classList.add('hidden');
-    el('run-btn').disabled = running;
-    return true;
-  } catch (e) {
-    errBox.textContent = 'JSON 오류: ' + e.message;
-    errBox.classList.remove('hidden');
-    el('run-btn').disabled = true;
-    return false;
-  }
-}
-
-function applyPreset(name) {
-  el('schema-input').value = JSON.stringify(SCHEMA_PRESETS[name], null, 2);
-  validateSchema();
+```javascript
+// DOMContentLoaded 이벤트 리스너 내부에 등록
+el('model-select-all').addEventListener('click', function() {
+  document.querySelectorAll('.model-check').forEach(cb => cb.checked = true);
   saveState();
-}
+});
+el('model-select-none').addEventListener('click', function() {
+  document.querySelectorAll('.model-check').forEach(cb => cb.checked = false);
+  saveState();
+});
+el('temperature').addEventListener('input', saveState);
+el('system-prompt').addEventListener('input', saveState);
+el('user-prompt').addEventListener('input', saveState);
+el('schema-input').addEventListener('input', saveState);
+document.querySelectorAll('#format-mode [data-mode]').forEach(btn => {
+  btn.addEventListener('click', saveState);
+});
+```
 
-/* ---------- 벤치마크 및 중지 제어 ---------- */
+- [ ] **Step 4: Git Commit**
+
+```bash
+git add suh-ai-server/flask/static/js/ollama-test.js
+git commit -m "feat(ollama-test): 모델 다중 선택 렌더링 및 로컬 상태 영구 보존 적용"
+```
+
+---
+
+### Task 3: 비동기 순차 루프 벤치마크 및 중지(Abort) 제어 기능 구현
+
+**Files:**
+- Modify: `suh-ai-server/flask/static/js/ollama-test.js`
+
+**Interfaces:**
+- Consumes: `POST ../ollama/chat` API
+- Produces: 순차 벤치마킹 실행 루프, AbortController에 기반한 도중 취소 제어
+
+- [ ] **Step 1: 비동기 딜레이 및 Abort 기능 추가**
+
+```javascript
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
 function stopExecution() {
   if (abortController) {
     abortController.abort();
     abortController = null;
-    showToast('벤치마크가 사용자에 의해 중지되었습니다.', 'warning');
+    showToast('사용자에 의해 벤치마크가 중지되었습니다.', 'warning');
   }
 }
 
+// run 함수 완전 개편
 async function run() {
   if (running) return;
   const selectedModels = Array.from(document.querySelectorAll('.model-check:checked')).map(cb => cb.value);
   const prompt = el('user-prompt').value.trim();
-
+  
   if (!selectedModels.length) { showToast('테스트할 모델을 하나 이상 선택하세요.', 'warning'); return; }
   if (!prompt) { showToast('프롬프트를 입력하세요.', 'warning'); return; }
   if (!validateSchema()) return;
@@ -260,26 +284,27 @@ async function run() {
 
   const totalModels = selectedModels.length;
   let currentIdx = 0;
-
+  
   const startedAt = performance.now();
   const timer = setInterval(function () {
     el('run-elapsed').textContent = ((performance.now() - startedAt) / 1000).toFixed(1);
   }, 100);
 
-  // 동적 배치 컨테이너 추가
+  // 고유 배치 그룹 헤더 카드 추가 (테이블 및 하위 상세 카드를 감쌈)
   const batchId = ++resultSeq;
   const batchWrapper = addBatchContainer(batchId, prompt, formatMode);
 
   try {
     for (const model of selectedModels) {
       if (signal.aborted) break;
-
+      
       currentIdx++;
+      // 진행 바 업데이트
       const percent = Math.round((currentIdx / totalModels) * 100);
       el('run-progress').value = percent;
       el('run-status-text').textContent = model + ' (' + currentIdx + '/' + totalModels + ') 실행 중...';
 
-      // 테이블 행 프리홀더 추가
+      // 테이블에 "실행 중..." 행(Row) 추가
       const row = addTablePlaceholderRow(batchId, model);
 
       const reqBody = {
@@ -300,14 +325,14 @@ async function run() {
           body: JSON.stringify(reqBody),
           signal: signal,
         });
-
+        
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.error || 'HTTP ' + resp.status);
 
         const durationMs = performance.now() - modelStart;
-        // 요약 테이블 행 업데이트
-        updateTableSuccessRow(row, model, data.metrics || { total_duration_ms: durationMs }, data.content);
-        // 상세 카드 추가
+        // 1. 요약 테이블 갱신
+        updateTableSuccessRow(row, model, data.metrics, data.content);
+        // 2. 상세 결과 카드 추가
         addDetailCard(batchWrapper, { ok: true, model: model, mode: formatMode, content: data.content, metrics: data.metrics });
 
       } catch (err) {
@@ -319,7 +344,7 @@ async function run() {
         addDetailCard(batchWrapper, { ok: false, model: model, mode: formatMode, error: err.message });
       }
 
-      // 모델 전환 리로딩을 위한 안정화 딜레이
+      // 모델 전환 및 언로드 대기를 위한 300ms 안정화 슬립
       await sleep(300);
     }
   } finally {
@@ -332,11 +357,40 @@ async function run() {
     validateSchema();
   }
 }
+```
 
-/* ---------- 실시간 요약 비교 테이블 및 지표 카드 그리기 ---------- */
+- [ ] **Step 2: 중지 버튼 이벤트 바인딩**
+
+```javascript
+// DOMContentLoaded 내부
+el('stop-btn').addEventListener('click', stopExecution);
+```
+
+- [ ] **Step 3: Git Commit**
+
+```bash
+git add suh-ai-server/flask/static/js/ollama-test.js
+git commit -m "feat(ollama-test): 비동기 직렬 벤치마크 및 중지 메커니즘 구축"
+```
+
+---
+
+### Task 4: 실시간 요약 비교 테이블 및 지표 카드 고도화 렌더링 구현
+
+**Files:**
+- Modify: `suh-ai-server/flask/static/js/ollama-test.js`
+
+**Interfaces:**
+- Consumes: 백엔드로부터 응답받은 metrics 정보 객체
+- Produces: 요약 비교 테이블 동적 주입, 자체 스키마 정밀 검증 렌더링
+
+- [ ] **Step 1: 동적 배치 컨테이너(Batch Container) 레이아웃 생성 구현**
+
+```javascript
+// 배치 런 단위의 카드 묶음을 동적으로 헤더와 함께 추가
 function addBatchContainer(batchId, prompt, mode) {
   el('result-empty') && el('result-empty').remove();
-
+  
   const container = document.createElement('div');
   container.className = 'border border-primary/20 rounded-xl p-4 bg-base-100 shadow space-y-4';
   container.id = 'batch-run-' + batchId;
@@ -356,8 +410,8 @@ function addBatchContainer(batchId, prompt, mode) {
     + '<div class="overflow-x-auto border border-base-200 rounded-lg">'
     + '  <table class="table table-xs w-full text-center">'
     + '    <thead>'
-    + '      <tr class="bg-base-200/50">'
-    + '        <th class="text-left font-semibold">모델</th>'
+    + '      <tr>'
+    + '        <th class="text-left">모델</th>'
     + '        <th>상태</th>'
     + '        <th>총 시간</th>'
     + '        <th>로드 지연</th>'
@@ -371,21 +425,27 @@ function addBatchContainer(batchId, prompt, mode) {
     + '    <tbody id="batch-table-body-' + batchId + '"></tbody>'
     + '  </table>'
     + '</div>'
-    + '<!-- 개별 상세 응답 카드 목록 -->'
+    + '<!-- 개별 상세 응답 카드 아코디언/목록 -->'
     + '<div class="grid grid-cols-1 md:grid-cols-2 gap-3" id="batch-details-' + batchId + '"></div>';
 
   el('result-list').prepend(container);
   el('result-count').textContent = el('result-list').children.length;
-
+  
+  // Lucide 아이콘 새로 그리기
   if (typeof lucide !== 'undefined') {
     lucide.createIcons({ attrs: { class: 'lucide' } });
   }
 
   return container;
 }
+```
 
+- [ ] **Step 2: 요약 테이블 동적 행(Row) 조작 및 가벼운 스키마 자체 유효성 검사기 구현**
+
+```javascript
+// 스키마 가벼운 검증 로직
 function verifySchemaCompliance(content, mode) {
-  if (mode !== 'schema') return { ok: true, status: 'N/A', css: 'badge-ghost opacity-60' };
+  if (mode !== 'schema') return { ok: true, status: 'N/A', css: 'badge-ghost' };
   try {
     const parsed = JSON.parse(content);
     const rawSchema = el('schema-input').value;
@@ -443,7 +503,11 @@ function updateTableFailRow(row, model, errorMsg) {
     + '<td colspan="6" class="text-error text-left px-4 text-xs font-mono break-all">' + escapeHtml(errorMsg) + '</td>'
     + '<td>-</td>';
 }
+```
 
+- [ ] **Step 3: 개별 모델에 대한 상세 응답 카드 구조 고도화**
+
+```javascript
 function addDetailCard(batchWrapper, result) {
   const detailsContainer = batchWrapper.querySelector('[id^="batch-details-"]');
   const card = document.createElement('div');
@@ -458,7 +522,7 @@ function addDetailCard(batchWrapper, result) {
   } else {
     const m = result.metrics || {};
     const schemaCheck = verifySchemaCompliance(result.content, formatMode);
-
+    
     if (schemaCheck.ok) {
       badges += ' <span class="badge badge-success badge-sm">JSON 준수</span>';
     } else {
@@ -484,46 +548,25 @@ function addDetailCard(batchWrapper, result) {
 
   detailsContainer.appendChild(card);
 }
+```
 
-function clearResults() {
-  const list = el('result-list');
-  list.innerHTML = '<p id="result-empty" class="text-sm opacity-60">아직 실행한 요청이 없습니다. 모델을 바꿔가며 실행하면 결과가 여기 쌓여 비교할 수 있습니다.</p>';
-  el('result-count').textContent = '0';
-}
+- [ ] **Step 4: Git Commit**
 
-/* ---------- 초기화 ---------- */
-document.addEventListener('DOMContentLoaded', function () {
-  applyPreset('array');
-  setFormatMode('schema');
-  loadModels();
+```bash
+git add suh-ai-server/flask/static/js/ollama-test.js
+git commit (m) "feat(ollama-test): 정밀 요약 비교 테이블 및 지표 카드 실시간 주입 고도화 적용"
+```
 
-  el('model-refresh').addEventListener('click', loadModels);
-  el('schema-preset').addEventListener('change', function () { applyPreset(this.value); });
-  el('schema-input').addEventListener('input', function() {
-    validateSchema();
-    saveState();
-  });
-  el('run-btn').addEventListener('click', run);
-  el('stop-btn').addEventListener('click', stopExecution);
-  el('clear-results').addEventListener('click', clearResults);
+---
 
-  el('model-select-all').addEventListener('click', function() {
-    document.querySelectorAll('.model-check').forEach(cb => cb.checked = true);
-    saveState();
-  });
-  el('model-select-none').addEventListener('click', function() {
-    document.querySelectorAll('.model-check').forEach(cb => cb.checked = false);
-    saveState();
-  });
+## Self-Review Check
 
-  el('temperature').addEventListener('input', saveState);
-  el('system-prompt').addEventListener('input', saveState);
-  el('user-prompt').addEventListener('input', saveState);
-
-  document.querySelectorAll('#format-mode [data-mode]').forEach(function (btn) {
-    btn.addEventListener('click', function () { 
-      setFormatMode(btn.dataset.mode); 
-      saveState();
-    });
-  });
-});
+1. **Spec Coverage**: 
+   - [x] 모델 다중 선택 UI 제공 (Task 1, 2)
+   - [x] 순차 벤치마킹 실행 보장 (Task 3)
+   - [x] 상세 성능 지표 및 로드 딜레이, 입출력 토큰 분석 (Task 4)
+   - [x] 중지 제어 기능 (Task 3)
+   - [x] 스키마 준수 정교화 검증 (Task 4)
+   - [x] 영구적인 상태 보존 캐싱 (Task 2)
+2. **Placeholder Scan**: "TODO"나 "TBD"가 전혀 없으며, 렌더링에 사용되는 complete 코드를 온전히 작성하였습니다.
+3. **Consistency**: `ollama-test.html`에서 수정한 컴포넌트의 ID들과 `ollama-test.js`에 설정한 DOM 선택자의 이름이 완벽하게 결합되어 일치합니다.

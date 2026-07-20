@@ -11,15 +11,17 @@
       </h2>
 
       <div class="flex flex-wrap gap-4 items-end">
-        <fieldset class="fieldset">
-          <legend class="fieldset-legend">모델</legend>
-          <div class="join">
-            <select id="model-select" class="select select-sm join-item w-52">
-              <option value="">불러오는 중...</option>
-            </select>
-            <button id="model-refresh" class="btn btn-sm join-item" title="모델 목록 새로고침">
-              <i data-lucide="refresh-cw" class="size-4"></i>
+        <fieldset class="fieldset w-full">
+          <legend class="fieldset-legend">모델 선택 (다중 선택 가능)</legend>
+          <div class="flex gap-2 mb-1">
+            <button id="model-select-all" class="btn btn-xs btn-outline">전체 선택</button>
+            <button id="model-select-none" class="btn btn-xs btn-outline">전체 해제</button>
+            <button id="model-refresh" class="btn btn-xs btn-outline" title="모델 목록 새로고침">
+              <i data-lucide="refresh-cw" class="size-3"></i>새로고침
             </button>
+          </div>
+          <div id="model-checkbox-list" class="flex flex-wrap gap-2 border border-base-300 rounded-lg p-3 bg-base-200/50 max-h-60 overflow-y-auto w-full">
+            <span class="text-sm opacity-60">설치된 모델을 불러오는 중...</span>
           </div>
         </fieldset>
         <fieldset class="fieldset">
@@ -64,10 +66,14 @@
         <button id="run-btn" class="btn btn-primary btn-sm">
           <i data-lucide="play" class="size-4"></i>실행
         </button>
-        <span id="run-status" class="text-sm opacity-70 hidden">
-          <span class="loading loading-spinner loading-xs"></span>
-          실행 중... <span id="run-elapsed">0.0</span>s
-        </span>
+        <button id="stop-btn" class="btn btn-error btn-sm hidden">
+          <i data-lucide="square" class="size-4"></i>중지
+        </button>
+        <div id="run-progress-container" class="flex flex-wrap items-center gap-3 hidden w-full max-w-xl mt-2 md:mt-0">
+          <progress id="run-progress" class="progress progress-primary w-40" value="0" max="100"></progress>
+          <span id="run-status-text" class="text-sm font-semibold opacity-80">준비 중...</span>
+          <span class="text-xs opacity-60">(경과 시간: <span id="run-elapsed">0.0</span>s)</span>
+        </div>
       </div>
     </div>
   </div>
