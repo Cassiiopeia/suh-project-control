@@ -281,6 +281,7 @@ async function run() {
 
   // 1. 백엔드 DB 마스터 배치 세션 생성
   let batchId = null;
+  let isDbBound = false;
   try {
     const batchResp = await apiFetch(OLLAMA_API + '/benchmark/batch', {
       method: 'POST',
@@ -295,6 +296,7 @@ async function run() {
     if (batchResp.ok) {
       const bData = await batchResp.json();
       batchId = bData.batch_id;
+      isDbBound = true;
     }
   } catch (e) {
     console.warn("DB master batch creation failed (fail-open target):", e);
@@ -315,6 +317,7 @@ async function run() {
   batchWrapper.dataset.systemPrompt = system;
   batchWrapper.dataset.temperature = temperature;
   batchWrapper.dataset.formatMode = formatMode;
+  batchWrapper.dataset.dbBound = isDbBound ? 'true' : 'false';
   if (schemaDefinition) batchWrapper.dataset.schemaDefinition = schemaDefinition;
 
   try {
@@ -358,19 +361,19 @@ async function run() {
         addDetailCard(batchWrapper, { ok: true, model: model, mode: formatMode, content: data.content, metrics: metrics, schemaCheck: schemaCheck });
 
         // 실시간 원격 DB UPSERT 전송 (fail-open)
-        await saveResultToDatabase(batchId, model, 'success', data.content, metrics, schemaCheck.status);
+        await saveResultToDatabase(batchId, model, 'success', data.content, metrics, schemaCheck.status, isDbBound);
 
       } catch (err) {
         if (err.name === 'AbortError') {
           updateTableFailRow(row, model, '중단됨');
-          await saveResultToDatabase(batchId, model, 'abort', '사용자 중단', null, 'N/A');
+          await saveResultToDatabase(batchId, model, 'abort', '사용자 중단', null, 'N/A', isDbBound);
           break;
         }
         updateTableFailRow(row, model, err.message);
         addDetailCard(batchWrapper, { ok: false, model: model, mode: formatMode, error: err.message });
         
         // 실시간 실패 내역 DB 전송
-        await saveResultToDatabase(batchId, model, 'fail', err.message, null, 'FAIL');
+        await saveResultToDatabase(batchId, model, 'fail', err.message, null, 'FAIL', isDbBound);
       }
 
       // 모델 전환 리로딩을 위한 안정화 딜레이
@@ -388,9 +391,8 @@ async function run() {
   }
 }
 
-async function saveResultToDatabase(batchId, modelName, status, content, metrics, schemaStatus) {
-  // batchId가 순수 브라우저 메모리 시퀀스(숫자 < 10000 등)인 폴백 상태면 DB 적재 무시
-  if (typeof batchId === 'number' && batchId < 1000) return;
+async function saveResultToDatabase(batchId, modelName, status, content, metrics, schemaStatus, isDbBound) {
+  if (!isDbBound || !batchId) return;
   try {
     await apiFetch(OLLAMA_API + '/benchmark/result', {
       method: 'POST',
@@ -434,6 +436,8 @@ async function retryFailedModels(batchId) {
 async function retrySingleModel(batchId, modelName) {
   const container = el('batch-run-' + batchId);
   if (!container) return;
+
+  const isDbBound = container.dataset.dbBound === 'true';
 
   // 카드 보존 데이터셋으로부터 당시 스펙 완벽 복원
   const prompt = container.dataset.prompt;
@@ -481,7 +485,7 @@ async function retrySingleModel(batchId, modelName) {
     addDetailCard(container, { ok: true, model: modelName, mode: formatModeText, content: data.content, metrics: metrics, schemaCheck: schemaCheck });
 
     // DB UPSERT 처리
-    await saveResultToDatabase(batchId, modelName, 'success', data.content, metrics, schemaCheck.status);
+    await saveResultToDatabase(batchId, modelName, 'success', data.content, metrics, schemaCheck.status, isDbBound);
     showToast(modelName + ' 재시도 성공!', 'success');
 
   } catch (e) {
@@ -489,7 +493,7 @@ async function retrySingleModel(batchId, modelName) {
     removeExistingDetailCard(container, modelName);
     addDetailCard(container, { ok: false, model: modelName, mode: formatModeText, error: e.message });
 
-    await saveResultToDatabase(batchId, modelName, 'fail', e.message, null, 'FAIL');
+    await saveResultToDatabase(batchId, modelName, 'fail', e.message, null, 'FAIL', isDbBound);
     showToast(modelName + ' 재시도 실패: ' + e.message, 'error');
   }
 }
@@ -962,6 +966,7 @@ async function loadBatchDetailsOnExpand(batchId) {
     detailsEl.dataset.systemPrompt = batchMaster.system_prompt || '';
     detailsEl.dataset.temperature = batchMaster.temperature;
     detailsEl.dataset.formatMode = batchMaster.format_mode;
+    detailsEl.dataset.dbBound = 'true'; // 과거 이력은 항상 DB 바운드 상태
     if (batchMaster.schema_definition) detailsEl.dataset.schemaDefinition = batchMaster.schema_definition;
 
     const modeLabel = MODE_LABELS[batchMaster.format_mode] || batchMaster.format_mode;
