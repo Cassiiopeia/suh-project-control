@@ -6,6 +6,13 @@ import logging
 import psycopg2
 from psycopg2.extras import Json
 from ollama import ChatResponse
+import socket
+import urllib.request
+import urllib.error
+import json
+import subprocess
+import os
+import platform
 
 from util.ollama_client import create_ollama_client
 from config.db_config import get_audit_database_url
@@ -251,3 +258,161 @@ class OllamaService:
         except Exception as e:
             logger.warning(f"Failed to load details for batch {batch_id}: {e}")
             return []
+
+    def is_ollama_running(self) -> bool:
+        """포트 11434 연결성 조회를 통해 로컬 Ollama 데몬의 구동 상태 체크"""
+        try:
+            with socket.create_connection(("127.0.0.1", 11434), timeout=1.5):
+                return True
+        except Exception:
+            return False
+
+    def get_vram_loaded_models(self) -> list:
+        """Ollama 로컬 API (GET /api/ps)를 조회하여 현재 VRAM에 로드되어 있는 모델 목록 반환"""
+        if not self.is_ollama_running():
+            return []
+        try:
+            req = urllib.request.Request("http://127.0.0.1:11434/api/ps", method="GET")
+            with urllib.request.urlopen(req, timeout=1.5) as resp:
+                data = json.loads(resp.read().decode('utf-8'))
+                models = data.get('models', [])
+                result = []
+                for m in models:
+                    result.append({
+                        'model': m.get('name') or m.get('model'),
+                        'size': m.get('size'),
+                        'expires_at': m.get('expires_at')
+                    })
+                return result
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                # 구버전 Ollama 등으로 인해 /api/ps 가 제공되지 않는 경우 에러 스킵
+                return []
+            logger.warning(f"Ollama ps API returned error {e.code}")
+            return []
+        except Exception as e:
+            logger.warning(f"Failed to fetch loaded models from Ollama (api/ps): {e}")
+            return []
+
+    def unload_vram_model(self, model_name: str = None) -> bool:
+        """
+        VRAM 점유 모델을 강제 해제(keep_alive: 0)시킴. 
+        model_name 미지정 시 현재 로드된 모든 모델들을 일괄 Unload 처리.
+        """
+        if not self.is_ollama_running():
+            return False
+        
+        models_to_unload = []
+        if model_name:
+            models_to_unload.append(model_name)
+        else:
+            loaded = self.get_vram_loaded_models()
+            models_to_unload = [m['model'] for m in loaded]
+
+        if not models_to_unload:
+            return True
+
+        success = True
+        for m in models_to_unload:
+            try:
+                # Ollama 0.1.41+ keep_alive: 0 인자를 실어 보내어 메모리 즉시 반환 유도
+                payload = json.dumps({
+                    "model": m,
+                    "messages": [],
+                    "keep_alive": 0
+                }).encode('utf-8')
+                
+                req = urllib.request.Request(
+                    "http://127.0.0.1:11434/api/chat",
+                    data=payload,
+                    headers={'Content-Type': 'application/json'},
+                    method="POST"
+                )
+                with urllib.request.urlopen(req, timeout=3.0) as resp:
+                    resp.read() # 응답 완전 소모
+            except Exception as e:
+                logger.warning(f"Failed to unload model {m} via api/chat: {e}")
+                success = False
+        return success
+
+    def start_ollama_daemon(self) -> bool:
+        """Ollama 데몬/앱 백그라운드 기동 (윈도우 환경 전용)"""
+        if self.is_ollama_running():
+            return True
+        try:
+            # 윈도우즈 서비스 시작 시도
+            res = subprocess.run(["powershell", "-Command", "Start-Service -Name Ollama"], capture_output=True, text=True, timeout=5)
+            if res.returncode == 0:
+                logger.info("Ollama service started via PowerShell.")
+                return True
+        except Exception:
+            pass
+
+        # 일반 백그라운드 실행으로 폴백 (서비스 권한 거부 우회)
+        try:
+            logger.info("Falling back to background ollama serve daemon start...")
+            # CREATE_NO_WINDOW 플래그를 주어 콘솔 팝업창을 완전히 가린 채 백그라운드 구동 보증
+            subprocess.Popen(["ollama", "serve"], creationflags=0x08000000)
+            return True
+        except Exception as e:
+            logger.error(f"Failed to start Ollama background process: {e}")
+            return False
+
+    def stop_ollama_daemon(self) -> bool:
+        """Ollama 데몬 강제 종료 (Windows Taskkill 활용으로 좀비까지 완벽 제거)"""
+        try:
+            # 윈도우즈 서비스 정지 시도
+            res = subprocess.run(["powershell", "-Command", "Stop-Service -Name Ollama"], capture_output=True, text=True, timeout=5)
+            if res.returncode == 0:
+                logger.info("Ollama service stopped via PowerShell.")
+                return True
+        except Exception:
+            pass
+
+        try:
+            # 일반 테스크킬 폴백
+            subprocess.run(["taskkill", "/F", "/IM", "ollama.exe"], capture_output=True, timeout=3)
+            logger.info("Ollama process killed via taskkill.")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to stop Ollama process: {e}")
+            return False
+
+    def restart_ollama_daemon(self) -> bool:
+        """Ollama 서비스 데몬 완전 리부트 기동"""
+        self.stop_ollama_daemon()
+        # 프로세스 언로드 및 소멸 안전 지연
+        import time
+        time.sleep(1.5)
+        return self.start_ollama_daemon()
+
+    def get_ollama_log_path(self) -> str:
+        """로컬 윈도우 서버 내의 server.log 물리 설치 절대경로를 동적 스캔하여 반환"""
+        paths = []
+        user_name = os.environ.get('USERNAME') or os.getlogin() or 'USER'
+        
+        # 후보 경로 3개 명시
+        paths.append(f"C:\\Users\\{user_name}\\.ollama\\logs\\server.log")
+        paths.append(f"C:\\Users\\{user_name}\\AppData\\Local\\Ollama\\server.log")
+        paths.append("C:\\Windows\\System32\\config\\systemprofile\\.ollama\\logs\\server.log")
+
+        for p in paths:
+            if os.path.exists(p):
+                return p
+        return ""
+
+    def read_ollama_logs(self, lines: int = 200) -> list:
+        """Ollama server.log의 최근 N줄 스트리밍 조회 (인코딩 가드 errors='ignore' 및 utf-8 준수)"""
+        path = self.get_ollama_log_path()
+        if not path or not os.path.exists(path):
+            return [f"Ollama server.log 파일을 찾을 수 없습니다. (스캔 대상: {self.get_ollama_log_path() or '없음'})"]
+        
+        lines = min(max(int(lines), 1), 500)
+        try:
+            # errors='ignore' 수칙을 엄수하여 cp949 인코딩 크래시를 원천 차단
+            with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.readlines()
+                return [line.rstrip('\r\n') for line in content[-lines:]]
+        except Exception as e:
+            logger.warning(f"Failed to read Ollama logs: {e}")
+            return [f"Ollama 로그 읽기 실패: {str(e)}"]

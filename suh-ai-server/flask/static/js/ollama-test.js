@@ -169,6 +169,7 @@ function saveState() {
     userPrompt: el('user-prompt').value,
     schemaInput: el('schema-input').value,
     activeScenario: activeScenario,
+    autoUnload: el('auto-unload-toggle').checked,
   };
   localStorage.setItem('ollama_structured_test_state', JSON.stringify(state));
 }
@@ -197,6 +198,9 @@ function restoreState() {
         badge.textContent = state.activeScenario;
         badge.classList.remove('hidden');
       }
+    }
+    if (state.autoUnload != null) {
+      el('auto-unload-toggle').checked = state.autoUnload;
     }
   } catch (e) {
     console.error('State restore failed:', e);
@@ -374,6 +378,18 @@ async function run() {
         
         // 실시간 실패 내역 DB 전송
         await saveResultToDatabase(batchId, model, 'fail', err.message, null, 'FAIL', isDbBound);
+      }
+
+      // [OOM 정복 핵심 장치] 실행 완료된 모델 VRAM에서 강제 Unload 해제 (토글 ON일 때만 기동)
+      if (el('auto-unload-toggle').checked) {
+        try {
+          await apiFetch(OLLAMA_API + '/control/unload', {
+            method: 'POST',
+            body: JSON.stringify({ model: model })
+          });
+        } catch (e) {
+          console.warn("Auto-unload model " + model + " failed (fail-open):", e);
+        }
       }
 
       // 모델 전환 리로딩을 위한 안정화 딜레이
@@ -1246,6 +1262,7 @@ document.addEventListener('DOMContentLoaded', function () {
   el('temperature').addEventListener('input', saveState);
   el('system-prompt').addEventListener('input', saveState);
   el('user-prompt').addEventListener('input', saveState);
+  el('auto-unload-toggle').addEventListener('change', saveState);
 
   document.querySelectorAll('#format-mode [data-mode]').forEach(function (btn) {
     btn.addEventListener('click', function () { 
