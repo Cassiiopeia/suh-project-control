@@ -1,14 +1,40 @@
 {
   "metadata": {
-    "lastUpdated": "2026-07-20T04:47:20Z",
-    "currentVersion": "2.0.59",
+    "lastUpdated": "2026-07-20T04:50:34Z",
+    "currentVersion": "2.0.60",
     "projectType": "python",
-    "totalReleases": 55,
+    "totalReleases": 56,
     "projectTypes": [
       "python"
     ]
   },
   "releases": [
+    {
+      "version": "2.0.60",
+      "project_type": "python",
+      "project_types": [
+        "python"
+      ],
+      "date": "2026-07-20",
+      "pr_number": 123,
+      "raw_summary": "## Summary by CodeRabbit\n\n## 릴리스 노트\n\n* **새 기능**\n  * AI가 설계한 테스트 시나리오를 원클릭으로 일괄 가져오고 내보내는 기능 추가\n  * 벤치마크 결과를 데이터베이스에 영구 보존하고 실패 모델을 재실행할 수 있는 이력 대시보드 구축\n\n* **개선**\n  * 시나리오 데이터 주입 시 마크다운 백틱 코드 자동 정화 처리 지원",
+      "parsed_changes": {
+        "새_기능": {
+          "title": "새 기능",
+          "items": [
+            "AI가 설계한 테스트 시나리오를 원클릭으로 일괄 가져오고 내보내는 기능 추가",
+            "벤치마크 결과를 데이터베이스에 영구 보존하고 실패 모델을 재실행할 수 있는 이력 대시보드 구축"
+          ]
+        },
+        "개선": {
+          "title": "개선",
+          "items": [
+            "시나리오 데이터 주입 시 마크다운 백틱 코드 자동 정화 처리 지원"
+          ]
+        }
+      },
+      "parse_method": "markdown"
+    },
     {
       "version": "2.0.59",
       "project_type": "python",

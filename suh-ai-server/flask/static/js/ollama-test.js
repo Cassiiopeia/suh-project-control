@@ -159,6 +159,8 @@ function renderModelCheckboxes() {
 /* ---------- 로컬 상태 관리 (localStorage) ---------- */
 function saveState() {
   const selectedModels = Array.from(document.querySelectorAll('.model-check:checked')).map(cb => cb.value);
+  const badge = el('active-scenario-badge');
+  const activeScenario = badge && !badge.classList.contains('hidden') ? badge.textContent : null;
   const state = {
     selectedModels: selectedModels,
     temperature: el('temperature').value,
@@ -166,6 +168,7 @@ function saveState() {
     systemPrompt: el('system-prompt').value,
     userPrompt: el('user-prompt').value,
     schemaInput: el('schema-input').value,
+    activeScenario: activeScenario,
   };
   localStorage.setItem('ollama_structured_test_state', JSON.stringify(state));
 }
@@ -187,6 +190,13 @@ function restoreState() {
     if (state.schemaInput != null) {
       el('schema-input').value = state.schemaInput;
       validateSchema();
+    }
+    if (state.activeScenario) {
+      const badge = el('active-scenario-badge');
+      if (badge) {
+        badge.textContent = state.activeScenario;
+        badge.classList.remove('hidden');
+      }
     }
   } catch (e) {
     console.error('State restore failed:', e);
@@ -1053,8 +1063,156 @@ function reuseHistoryConfig(batchId) {
   showToast('과거 실험 설정으로 편집기 입력을 로드 복원하였습니다.', 'success');
 }
 
+/* ---------- AI 시나리오 설계 및 임포트 ---------- */
+const GUIDELINE_TEMPLATE = `귀하는 최고의 구조화 데이터(Structured Output) 설계 전문가입니다.
+사용자가 테스트하고 싶어 하는 시나리오를 주면, 해당 시나리오를 로컬 LLM(Ollama)에서 테스트할 수 있도록 완벽한 JSON 형식으로 기획 및 작성해 주세요.
+
+[포맷(format)별 출력 규격]
+1. format이 "schema"인 경우:
+   - 엄격한 구조 데이터 필요 시 적용.
+   - "schema" 필드에 최상위 "type": "object" 형태의 유효한 JSON Schema를 필수로 기입해야 함.
+2. format이 "json"인 경우:
+   - 자유로운 JSON 형식이 필요하나 엄격한 규격을 제어하지 않을 때 적용.
+   - "schema" 필드는 null 처리.
+3. format이 "none"인 경우:
+   - 일반 줄글 텍스트 답변이 필요할 때 적용.
+   - "schema" 필드는 null 처리.
+
+[반환 형식 규격]
+반드시 아래 JSON 형식으로 작성해야 하며, 다른 부가 설명 없이 마크다운 코드 블록(\`\`\`json ... \`\`\`)만 깔끔하게 출력해야 합니다.
+
+{
+  "title": "[설계하려는 시나리오의 직관적인 제목]",
+  "temperature": 0.2, // 0.0 ~ 2.0 사이의 정밀도 선택
+  "format": "schema", // "schema", "json", "none" 중 하나
+  "system_prompt": "[AI가 가져야 할 구체적인 역할 및 지침]",
+  "user_prompt": "[테스트를 위해 AI에게 전달할 유저 메시지 또는 원본 데이터]",
+  "schema": { ...JSON Schema 객체 또는 format이 schema가 아니면 null... }
+}
+
+내가 요청하는 시나리오 주제는 다음과 같습니다:
+" 여기에 원하는 테스트 주제(예: 영수증 파싱, 뉴스 요약 등)를 적은 뒤 이 프롬프트 전체를 AI에 보내세요! "`;
+
+function initScenarioModal() {
+  const guidelineArea = el('guideline-prompt-text');
+  if (guidelineArea) {
+    guidelineArea.value = GUIDELINE_TEMPLATE;
+  }
+
+  const copyBtn = el('copy-guideline-btn');
+  if (copyBtn) {
+    copyBtn.addEventListener('click', () => {
+      navigator.clipboard.writeText(guidelineArea.value).then(() => {
+        showToast('AI 가이드라인 프롬프트가 복사되었습니다. 외부 AI 창에 붙여넣으세요!', 'success');
+      });
+    });
+  }
+
+  const applyBtn = el('apply-scenario-btn');
+  if (applyBtn) {
+    applyBtn.addEventListener('click', applyScenarioJson);
+  }
+  
+  const exportBtn = el('export-scenario-btn');
+  if (exportBtn) {
+    exportBtn.addEventListener('click', exportCurrentToScenarioJson);
+  }
+}
+
+function applyScenarioJson() {
+  const inputEl = el('scenario-import-input');
+  if (!inputEl) return;
+  const rawInput = inputEl.value.trim();
+  const errBox = el('scenario-import-error');
+  if (!errBox) return;
+  errBox.classList.add('hidden');
+
+  try {
+    if (!rawInput) {
+      throw new Error('입력된 시나리오가 없습니다.');
+    }
+    // 마크다운 백틱 코드 블록이 섞여 있을 경우를 대비한 가드 클렌징
+    let cleanJson = rawInput;
+    if (cleanJson.startsWith('```')) {
+      cleanJson = cleanJson.replace(/^```json\s*/, '').replace(/```$/, '').trim();
+    }
+
+    const data = JSON.parse(cleanJson);
+
+    // 필수 필드 무결성 검증
+    if (!data.format || !data.user_prompt) {
+      throw new Error('필수 속성(format, user_prompt)이 누락되었습니다.');
+    }
+
+    // 1) 포맷 모드 설정
+    setFormatMode(data.format);
+
+    // 2) 시스템 및 유저 프롬프트 주입
+    el('system-prompt').value = data.system_prompt || '';
+    el('user-prompt').value = data.user_prompt;
+
+    // 3) temperature 주입
+    if (data.temperature != null) {
+      el('temperature').value = data.temperature;
+    }
+
+    // 4) JSON Schema 주입
+    if (data.format === 'schema' && data.schema) {
+      el('schema-input').value = JSON.stringify(data.schema, null, 2);
+    } else if (data.format !== 'schema') {
+      el('schema-input').value = '';
+    }
+
+    // 5) 제목 배지 동적 적용
+    const badge = el('active-scenario-badge');
+    if (badge) {
+      if (data.title) {
+        badge.textContent = '시나리오: ' + data.title;
+        badge.classList.remove('hidden');
+      } else {
+        badge.classList.add('hidden');
+      }
+    }
+
+    // 검증 후 상태 저장 및 모달 닫기
+    validateSchema();
+    saveState();
+    const modal = el('scenario-modal');
+    if (modal) modal.close();
+    showToast(`시나리오 "${data.title || '테스트 구성'}"가 정상적으로 주입되었습니다!`, 'success');
+
+  } catch (e) {
+    errBox.textContent = 'JSON 파싱 오류: ' + e.message;
+    errBox.classList.remove('hidden');
+  }
+}
+
+function exportCurrentToScenarioJson() {
+  try {
+    const badge = el('active-scenario-badge');
+    const titleText = badge && !badge.classList.contains('hidden') ? badge.textContent.replace('시나리오: ', '') : "내보낸 시나리오";
+    const currentScenario = {
+      title: titleText,
+      temperature: parseFloat(el('temperature').value) || 0.0,
+      format: formatMode,
+      system_prompt: el('system-prompt').value,
+      user_prompt: el('user-prompt').value,
+      schema: formatMode === 'schema' ? JSON.parse(el('schema-input').value || '{}') : null
+    };
+
+    const inputEl = el('scenario-import-input');
+    if (inputEl) {
+      inputEl.value = JSON.stringify(currentScenario, null, 2);
+    }
+    showToast('현재 입력값이 JSON 포맷으로 생성되어 입력창에 노출되었습니다!', 'success');
+  } catch (e) {
+    showToast('내보내기 중 오류 발생: ' + e.message, 'error');
+  }
+}
+
 /* ---------- 초기화 ---------- */
 document.addEventListener('DOMContentLoaded', function () {
+  initScenarioModal();
   applyPreset('array');
   setFormatMode('schema');
   loadModels();
