@@ -1,14 +1,39 @@
 {
   "metadata": {
-    "lastUpdated": "2026-07-20T04:29:25Z",
-    "currentVersion": "2.0.57",
+    "lastUpdated": "2026-07-20T04:39:48Z",
+    "currentVersion": "2.0.58",
     "projectType": "python",
-    "totalReleases": 53,
+    "totalReleases": 54,
     "projectTypes": [
       "python"
     ]
   },
   "releases": [
+    {
+      "version": "2.0.58",
+      "project_type": "python",
+      "project_types": [
+        "python"
+      ],
+      "date": "2026-07-20",
+      "pr_number": 119,
+      "raw_summary": "## Summary by CodeRabbit\n\n## 릴리스 노트\n\n* **새 기능**\n  * 테스트 결과를 마크다운 보고서로 간편하게 내보내는 기능 추가\n\n* **개선**\n  * 관리자 화면 가로폭을 넓혀 더 쾌적하게 정보를 볼 수 있도록 개선",
+      "parsed_changes": {
+        "새_기능": {
+          "title": "새 기능",
+          "items": [
+            "테스트 결과를 마크다운 보고서로 간편하게 내보내는 기능 추가"
+          ]
+        },
+        "개선": {
+          "title": "개선",
+          "items": [
+            "관리자 화면 가로폭을 넓혀 더 쾌적하게 정보를 볼 수 있도록 개선"
+          ]
+        }
+      },
+      "parse_method": "markdown"
+    },
     {
       "version": "2.0.57",
       "project_type": "python",
