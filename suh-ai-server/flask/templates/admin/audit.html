@@ -1,0 +1,62 @@
+{% extends "admin/base.html" %}
+{% block title %}감사로그 | SUH AI Server{% endblock %}
+{% block page_title %}감사로그{% endblock %}
+{% block content %}
+<div class="card bg-base-100 shadow max-w-6xl mx-auto">
+  <div class="card-body">
+    <h2 class="card-title text-base">
+      <i data-lucide="shield-check" class="size-5"></i>관리 행위 감사로그
+    </h2>
+    <div class="flex flex-wrap items-center gap-2 mb-2">
+      <select id="audit-category" class="select select-sm w-32">
+        <option value="">전체 서비스</option>
+        <option value="PALWORLD">팰월드</option>
+        <option value="TTS">TTS</option>
+        <option value="MODEL">모델</option>
+        <option value="SYSTEM">시스템</option>
+      </select>
+      <select id="audit-action" class="select select-sm w-48">
+        <option value="">전체 행위</option>
+      </select>
+      <select id="audit-success" class="select select-sm w-28">
+        <option value="">전체 결과</option>
+        <option value="true">성공</option>
+        <option value="false">실패</option>
+      </select>
+      <label class="input input-sm flex items-center gap-1 w-52">
+        <i data-lucide="search" class="size-4 opacity-60"></i>
+        <input type="text" id="audit-search" class="grow" placeholder="IP·상세 검색"
+               autocomplete="off" spellcheck="false">
+      </label>
+      <label class="label cursor-pointer gap-2 text-sm">
+        <input type="checkbox" id="audit-auto" class="toggle toggle-sm toggle-primary" checked>
+        <span>자동 새로고침</span>
+      </label>
+      <button type="button" id="audit-refresh" class="btn btn-ghost btn-sm">
+        <i data-lucide="refresh-cw" class="size-4"></i>새로고침
+      </button>
+    </div>
+    <div class="flex items-center justify-between text-xs opacity-60 mb-2 gap-2">
+      <span class="font-mono break-all" id="audit-meta"></span>
+      <span id="audit-count" class="shrink-0"></span>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="table table-sm table-zebra">
+        <thead>
+          <tr>
+            <th>시간 (KST)</th><th>서비스</th><th>행위</th>
+            <th>실행 IP</th><th>결과</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="audit-rows"></tbody>
+      </table>
+    </div>
+    <div class="text-center mt-2">
+      <button type="button" id="audit-more" class="btn btn-ghost btn-sm hidden">더 보기</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script src="{{ root }}/static/js/audit.js?v={{ asset('js/audit.js') }}"></script>
+{% endblock %}

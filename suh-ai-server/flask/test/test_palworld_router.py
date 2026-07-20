@@ -48,7 +48,7 @@ def test_put_settings_while_running_saves_pending_returns_200(client):
     after = {'settings': {'ServerName': '"Old"'}, 'pending': {'ServerName': 'New'}, 'applied': False}
     with patch('router.palworld_router.palworld_service.get_settings', return_value=before), \
          patch('router.palworld_router.palworld_service.update_settings', return_value=after), \
-         patch('router.palworld_router.audit_service.record') as mock_record:
+         patch('util.audit_helper.audit_service.record') as mock_record:
         resp = client.put('/palworld/settings', json={'ServerName': 'New'})
     assert resp.status_code == 200
     data = resp.get_json()
@@ -120,20 +120,24 @@ def test_guide_returns_info(client):
 
 def test_control_success_records_audit(client):
     with patch('router.palworld_router.palworld_service.start'), \
-         patch('router.palworld_router.audit_service.record') as mock_record:
+         patch('util.audit_helper.audit_service.record') as mock_record:
         resp = client.post('/palworld/start', headers={'X-Forwarded-For': '9.9.9.9, 10.0.0.1'})
     assert resp.status_code == 200
-    args = mock_record.call_args[0]
+    args, kwargs = mock_record.call_args
     assert args[1].value == 'SERVER_START'
-    assert args[2] == '9.9.9.9'  # XFF 첫 값
+    assert args[2] == '9.9.9.9, 10.0.0.1'          # actor_ip는 XFF 원문 체인
+    assert kwargs['client_ip'] == '9.9.9.9'         # 실제 클라이언트는 첫 항목
+    assert kwargs['proxy_chain'] == ['10.0.0.1']
+    assert kwargs['success'] is True
 
 
-def test_control_failure_does_not_record_audit(client):
+def test_control_failure_records_failed_audit(client):
+    """실패한 제어 시도도 success=False로 감사에 남는다 (기존: 미기록 → 변경)"""
     with patch('router.palworld_router.palworld_service.start', side_effect=RuntimeError('boom')), \
-         patch('router.palworld_router.audit_service.record') as mock_record:
+         patch('util.audit_helper.audit_service.record') as mock_record:
         resp = client.post('/palworld/start')
     assert resp.status_code == 500
-    mock_record.assert_not_called()
+    assert mock_record.call_args.kwargs['success'] is False
 
 
 def test_put_settings_records_changed_diff_only(client):
@@ -141,7 +145,7 @@ def test_put_settings_records_changed_diff_only(client):
     after = {'settings': {'ServerName': '"Old"', 'ExpRate': '3.0'}, 'editable_keys': [], 'applied': True}
     with patch('router.palworld_router.palworld_service.get_settings', return_value=before), \
          patch('router.palworld_router.palworld_service.update_settings', return_value=after), \
-         patch('router.palworld_router.audit_service.record') as mock_record:
+         patch('util.audit_helper.audit_service.record') as mock_record:
         resp = client.put('/palworld/settings', json={'ExpRate': '3.0', 'ServerName': 'Old'})
     assert resp.status_code == 200
     detail = mock_record.call_args[0][3]
@@ -152,7 +156,7 @@ def test_put_settings_no_change_skips_audit(client):
     same = {'settings': {'ExpRate': '2.0'}, 'editable_keys': [], 'applied': True}
     with patch('router.palworld_router.palworld_service.get_settings', return_value=same), \
          patch('router.palworld_router.palworld_service.update_settings', return_value=same), \
-         patch('router.palworld_router.audit_service.record') as mock_record:
+         patch('util.audit_helper.audit_service.record') as mock_record:
         resp = client.put('/palworld/settings', json={'ExpRate': '2.0'})
     assert resp.status_code == 200
     mock_record.assert_not_called()
@@ -160,7 +164,7 @@ def test_put_settings_no_change_skips_audit(client):
 
 def test_create_backup_records_audit(client):
     with patch('router.palworld_router.palworld_service.create_backup', return_value={'name': '20260714_1'}), \
-         patch('router.palworld_router.audit_service.record') as mock_record:
+         patch('util.audit_helper.audit_service.record') as mock_record:
         resp = client.post('/palworld/backups')
     assert resp.status_code == 200
     assert mock_record.call_args[0][1].value == 'BACKUP_CREATE'
@@ -183,7 +187,7 @@ def test_put_settings_masks_sensitive_values(client):
     after = {'settings': {'ServerPassword': '"5678"'}, 'editable_keys': [], 'applied': True}
     with patch('router.palworld_router.palworld_service.get_settings', return_value=before), \
          patch('router.palworld_router.palworld_service.update_settings', return_value=after), \
-         patch('router.palworld_router.audit_service.record') as mock_record:
+         patch('util.audit_helper.audit_service.record') as mock_record:
         resp = client.put('/palworld/settings', json={'ServerPassword': '5678'})
     assert resp.status_code == 200
     detail = mock_record.call_args[0][3]
@@ -195,21 +199,11 @@ def test_put_settings_while_running_masks_sensitive_pending(client):
     after = {'settings': {'ServerPassword': '"1234"'}, 'pending': {'ServerPassword': '5678'}, 'applied': False}
     with patch('router.palworld_router.palworld_service.get_settings', return_value=before), \
          patch('router.palworld_router.palworld_service.update_settings', return_value=after), \
-         patch('router.palworld_router.audit_service.record') as mock_record:
+         patch('util.audit_helper.audit_service.record') as mock_record:
         resp = client.put('/palworld/settings', json={'ServerPassword': '5678'})
     assert resp.status_code == 200
     detail = mock_record.call_args[0][3]
     assert detail == {'changed': {'ServerPassword': {'from': '***', 'to': '***'}}, 'applied': False}
-
-
-def test_control_unmapped_action_skips_audit_and_succeeds(client):
-    with patch('router.palworld_router.palworld_service.start'), \
-         patch('router.palworld_router.audit_service.record') as mock_record, \
-         patch.dict('router.palworld_router._CONTROL_AUDIT_ACTIONS', {}, clear=True):
-        resp = client.post('/palworld/start')
-    assert resp.status_code == 200
-    assert resp.get_json()['success'] is True
-    mock_record.assert_not_called()
 
 
 # --- 서버 바이너리 업데이트 ---

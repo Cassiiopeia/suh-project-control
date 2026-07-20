@@ -126,6 +126,11 @@
   <div role="tablist" class="tabs tabs-lift">
     <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="로그" checked>
     <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-6">
+      <div class="text-xs mb-2">
+        <a href="{{ root }}/admin/audit" class="link link-primary inline-flex items-center gap-1">
+          <i data-lucide="shield-check" class="size-3.5"></i>관리 행위 감사로그는 전용 페이지에서 확인
+        </a>
+      </div>
       <div id="palworld-log-viewer"></div>
     </div>
 
