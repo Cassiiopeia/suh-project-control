@@ -74,11 +74,24 @@
         <progress id="sys-disk-bar" class="progress progress-primary flex-1" value="0" max="100"></progress>
         <span id="sys-disk-label" class="text-xs opacity-60 whitespace-nowrap">-</span>
       </div>
+
+      {# VRAM을 지금 무엇이 먹고 있는지 — 모델 점유와 그 외(고아 런너·데스크톱 앱) 분해 #}
+      <div id="vram-breakdown" class="pt-3 border-t border-base-200"></div>
+    </div>
+  </div>
+
+  {# 서비스 제어 — 상세 페이지로 넘어가지 않고 대시보드에서 바로 시작/중지 #}
+  <div class="card bg-base-100 shadow-md">
+    <div class="card-body">
+      <h2 class="card-title text-base">
+        <i data-lucide="sliders-horizontal" class="size-5 text-primary"></i>서비스 제어
+      </h2>
+      <div id="service-control" class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2"></div>
     </div>
   </div>
 
   <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-    <a href="./admin/palworld" class="card bg-base-100 shadow-md hover:shadow-xl transition-shadow">
+    <a href="./palworld" class="card bg-base-100 shadow-md hover:shadow-xl transition-shadow">
       <div class="card-body">
         <h2 class="card-title text-base">
           <i data-lucide="gamepad-2" class="size-5 text-primary"></i>팰월드 서버 관리
@@ -87,7 +100,7 @@
         <p class="text-sm opacity-70">서버 제어 · 접속 가이드 · 설정 · 로그 · 백업</p>
       </div>
     </a>
-    <a href="./admin/ollama-test" class="card bg-base-100 shadow-md hover:shadow-xl transition-shadow">
+    <a href="./ollama-test" class="card bg-base-100 shadow-md hover:shadow-xl transition-shadow">
       <div class="card-body">
         <h2 class="card-title text-base">
           <i data-lucide="braces" class="size-5 text-primary"></i>Ollama 테스트
@@ -95,7 +108,7 @@
         <p class="text-sm opacity-70">Structured Output(JSON Schema) 모델별 테스트</p>
       </div>
     </a>
-    <a href="./admin/models" class="card bg-base-100 shadow-md hover:shadow-xl transition-shadow">
+    <a href="./models" class="card bg-base-100 shadow-md hover:shadow-xl transition-shadow">
       <div class="card-body">
         <h2 class="card-title text-base">
           <i data-lucide="package" class="size-5 text-primary"></i>모델 관리
@@ -103,7 +116,7 @@
         <p class="text-sm opacity-70">HF GGUF 검색 · 다운로드 · 모델 벤치마크</p>
       </div>
     </a>
-    <a href="./admin/tts" class="card bg-base-100 shadow-md hover:shadow-xl transition-shadow">
+    <a href="./tts" class="card bg-base-100 shadow-md hover:shadow-xl transition-shadow">
       <div class="card-body">
         <h2 class="card-title text-base">
           <i data-lucide="audio-lines" class="size-5 text-primary"></i>TTS 관리
@@ -111,7 +124,7 @@
         <p class="text-sm opacity-70">TTS 엔진 관리 · 보이스 등록 · 음성 합성</p>
       </div>
     </a>
-    <a href="./admin/api-docs" class="card bg-base-100 shadow-md hover:shadow-xl transition-shadow">
+    <a href="./api-docs" class="card bg-base-100 shadow-md hover:shadow-xl transition-shadow">
       <div class="card-body">
         <h2 class="card-title text-base">
           <i data-lucide="file-code" class="size-5 text-primary"></i>API 문서
@@ -119,7 +132,7 @@
         <p class="text-sm opacity-70">OCR · Vision API Swagger 문서</p>
       </div>
     </a>
-    <a href="./admin/logs" class="card bg-base-100 shadow-md hover:shadow-xl transition-shadow">
+    <a href="./logs" class="card bg-base-100 shadow-md hover:shadow-xl transition-shadow">
       <div class="card-body">
         <h2 class="card-title text-base">
           <i data-lucide="scroll-text" class="size-5 text-primary"></i>Flask 로그
