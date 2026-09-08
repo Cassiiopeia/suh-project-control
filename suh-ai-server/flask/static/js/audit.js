@@ -8,6 +8,7 @@
     TTS: { label: 'TTS', badge: 'badge-secondary' },
     MODEL: { label: '모델', badge: 'badge-accent' },
     SYSTEM: { label: '시스템', badge: 'badge-neutral' },
+    SUNSHINE: { label: 'Sunshine', badge: 'badge-info' },
   };
 
   var ACTION_LABELS = {
@@ -32,6 +33,12 @@
     OLLAMA_STOP: 'Ollama 데몬 중지',
     OLLAMA_RESTART: 'Ollama 데몬 재시작',
     OLLAMA_UNLOAD: 'VRAM 모델 Unload 청소',
+    SUNSHINE_START: 'Sunshine 서비스 시작',
+    SUNSHINE_STOP: 'Sunshine 서비스 중지',
+    SUNSHINE_RESTART: 'Sunshine 서비스 재시작',
+    SUNSHINE_PAIR: 'Moonlight 기기 페어링 승인',
+    SUNSHINE_UNPAIR: 'Moonlight 기기 페어링 해제',
+    SUNSHINE_SESSION_CLOSE: 'Sunshine 스트리밍 세션 종료',
   };
 
   // 카테고리 선택 시 행위 셀렉트를 해당 카테고리 것만으로 좁힌다
@@ -42,6 +49,8 @@
     MODEL: ['MODEL_DELETE', 'MODEL_DOWNLOAD', 'MODEL_DOWNLOAD_CANCEL',
              'BENCHMARK_CREATE', 'BENCHMARK_RESULT', 'OLLAMA_START', 'OLLAMA_STOP', 'OLLAMA_RESTART', 'OLLAMA_UNLOAD'],
     SYSTEM: [],
+    SUNSHINE: ['SUNSHINE_START', 'SUNSHINE_STOP', 'SUNSHINE_RESTART',
+               'SUNSHINE_PAIR', 'SUNSHINE_UNPAIR', 'SUNSHINE_SESSION_CLOSE'],
   };
 
   var KST_FMT = new Intl.DateTimeFormat('ko-KR', {

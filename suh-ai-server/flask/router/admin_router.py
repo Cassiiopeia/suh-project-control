@@ -61,6 +61,12 @@ def ollama():
     return render_template('admin/ollama.html', root='..', active='ollama')
 
 
+@admin_bp.route('/admin/sunshine', methods=['GET'])
+def sunshine():
+    """Sunshine(Moonlight) 원격 스트리밍 제어 페이지"""
+    return render_template('admin/sunshine.html', root='..', active='sunshine')
+
+
 @admin_bp.route('/admin/models', methods=['GET'])
 def models():
     """모델 관리 페이지 (HF 검색·다운로드·벤치마크)"""

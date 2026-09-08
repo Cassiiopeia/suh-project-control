@@ -60,6 +60,17 @@ def test_tts_page_renders(client):
     assert 'logs-modal' in body
 
 
+def test_sunshine_page_renders(client):
+    resp = client.get('/admin/sunshine')
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert 'Sunshine' in body
+    assert 'pin-submit' in body
+    assert 'clients-body' in body
+    assert 'unpair-modal' in body
+    assert 'session-close' in body
+
+
 def test_api_docs_page_renders_iframe(client):
     resp = client.get('/admin/api-docs')
     assert resp.status_code == 200
@@ -84,7 +95,7 @@ def test_dashboard_cards_cover_all_sidebar_menus(client):
 
 def test_no_emoji_icons_on_any_admin_page(client):
     for path in ('/admin', '/admin/palworld', '/admin/logs', '/admin/models', '/admin/tts',
-                 '/admin/api-docs'):
+                 '/admin/api-docs', '/admin/sunshine'):
         body = client.get(path).get_data(as_text=True)
         match = EMOJI_RE.search(body)
         assert not match, f'{path} 에 이모지가 남아있음: {match.group() if match else ""}'

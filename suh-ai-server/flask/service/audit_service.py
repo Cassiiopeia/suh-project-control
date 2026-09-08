@@ -22,6 +22,7 @@ class AuditCategory(str, Enum):
     TTS = "TTS"
     MODEL = "MODEL"
     SYSTEM = "SYSTEM"  # 향후 확장용
+    SUNSHINE = "SUNSHINE"
 
 
 class AuditAction(str, Enum):
@@ -46,6 +47,12 @@ class AuditAction(str, Enum):
     OLLAMA_STOP = "OLLAMA_STOP"
     OLLAMA_RESTART = "OLLAMA_RESTART"
     OLLAMA_UNLOAD = "OLLAMA_UNLOAD"
+    SUNSHINE_START = "SUNSHINE_START"
+    SUNSHINE_STOP = "SUNSHINE_STOP"
+    SUNSHINE_RESTART = "SUNSHINE_RESTART"
+    SUNSHINE_PAIR = "SUNSHINE_PAIR"
+    SUNSHINE_UNPAIR = "SUNSHINE_UNPAIR"
+    SUNSHINE_SESSION_CLOSE = "SUNSHINE_SESSION_CLOSE"
 
 
 def record(category: AuditCategory, action: AuditAction, actor_ip: str, detail: dict = None, *,

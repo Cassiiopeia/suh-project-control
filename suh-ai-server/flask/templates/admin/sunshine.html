@@ -1,0 +1,186 @@
+{% extends "admin/base.html" %}
+{% block title %}Sunshine 관리 | SUH AI Server{% endblock %}
+{% block page_title %}Sunshine (Moonlight) 원격 스트리밍 제어{% endblock %}
+{% block content %}
+<div class="space-y-6 max-w-6xl mx-auto">
+
+  <!-- 자격증명 미설정 안내: 서비스 제어와 상태 조회는 되지만 PIN/기기/로그 API 는 막힌다 -->
+  <div id="cred-warning" class="alert alert-warning text-sm" hidden>
+    <i data-lucide="alert-triangle" class="size-5"></i>
+    <span>Sunshine 웹 자격증명이 설정되지 않아 페어링·기기 목록·로그 기능을 쓸 수 없습니다.
+      서버의 <span class="font-mono">flask/.env</span> 에 <span class="font-mono">SUNSHINE_WEB_USER</span> /
+      <span class="font-mono">SUNSHINE_WEB_PASSWORD</span> 를 추가하세요.</span>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- 카드 1: 서비스/스트림 상태 및 제어 -->
+    <div class="card bg-base-100 shadow border border-base-300">
+      <div class="card-body">
+        <h2 class="card-title text-base flex justify-between items-center">
+          <span class="flex items-center gap-2">
+            <i data-lucide="monitor-play" class="size-5 text-primary"></i>Sunshine 서비스 상태
+          </span>
+          <span id="svc-status-badge" class="badge badge-ghost gap-1 text-xs py-2 px-2.5">확인 중</span>
+        </h2>
+        <p class="text-xs opacity-60 mt-1">
+          Moonlight 클라이언트가 접속하는 스트리밍 호스트입니다. 외부 접속은 항상 켜져 있어야 하므로
+          서비스가 멈추면 여기서 바로 재기동합니다.
+        </p>
+
+        <div class="grid grid-cols-2 gap-x-4 gap-y-2 mt-4 text-sm">
+          <div class="opacity-60">스트림 상태</div>
+          <div><span id="stream-state-badge" class="badge badge-ghost badge-sm">-</span></div>
+          <div class="opacity-60">실행 중 앱</div>
+          <div id="current-app" class="font-mono text-xs">-</div>
+          <div class="opacity-60">호스트 이름</div>
+          <div id="host-name" class="font-mono text-xs">-</div>
+          <div class="opacity-60">외부 접속 주소</div>
+          <div id="public-host" class="font-mono text-xs break-all">-</div>
+        </div>
+
+        <div class="flex flex-wrap gap-2.5 mt-4">
+          <button id="svc-start" class="btn btn-primary btn-sm flex-1 min-w-24">
+            <i data-lucide="play" class="size-4"></i>서비스 시작
+          </button>
+          <button id="svc-stop" class="btn btn-error btn-sm flex-1 min-w-24">
+            <i data-lucide="square" class="size-4"></i>서비스 중지
+          </button>
+          <button id="svc-restart" class="btn btn-warning btn-sm flex-1 min-w-24">
+            <i data-lucide="rotate-ccw" class="size-4"></i>재시작
+          </button>
+        </div>
+        <!-- BUSY 로 굳은 세션 해제용. 접속 중인 클라이언트도 끊기므로 확인 모달을 거친다 -->
+        <button id="session-close" class="btn btn-outline btn-sm mt-2 w-full" disabled>
+          <i data-lucide="x-circle" class="size-4"></i>실행 중 세션 강제 종료
+        </button>
+      </div>
+    </div>
+
+    <!-- 카드 2: PIN 페어링 승인 -->
+    <div class="card bg-base-100 shadow border border-base-300">
+      <div class="card-body">
+        <h2 class="card-title text-base flex items-center gap-2">
+          <i data-lucide="key-round" class="size-5 text-primary"></i>새 기기 PIN 페어링
+        </h2>
+        <p class="text-xs opacity-60 mt-1">
+          새 기기의 Moonlight 에서 이 서버를 선택하면 4자리 PIN 이 표시됩니다. 서버 화면의 알림 대신
+          여기에 PIN 과 기기 이름을 입력하면 페어링이 완료됩니다.
+        </p>
+        <form id="pin-form" class="mt-4 space-y-3">
+          <label class="block w-full">
+            <span class="block text-xs opacity-70 mb-1">PIN (숫자 4자리)</span>
+            <input id="pin-input" type="text" inputmode="numeric" pattern="\d{4}" maxlength="4" autocomplete="off"
+                   placeholder="1234" class="input input-sm w-full font-mono tracking-widest" required>
+          </label>
+          <label class="block w-full">
+            <span class="block text-xs opacity-70 mb-1">기기 이름</span>
+            <input id="pin-name" type="text" maxlength="64" autocomplete="off"
+                   placeholder="예: SUH-MAC-PC" class="input input-sm w-full" required>
+          </label>
+          <button id="pin-submit" type="submit" class="btn btn-primary btn-sm w-full">
+            <i data-lucide="link-2" class="size-4"></i>페어링 승인
+          </button>
+        </form>
+        <p class="text-xs opacity-50 mt-2">
+          PIN 은 Moonlight 화면에 떠 있는 동안만 유효합니다. 시간이 지나면 기기에서 다시 연결을 시도하세요.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 카드 3: 페어링된 기기 목록 -->
+  <div class="card bg-base-100 shadow border border-base-300">
+    <div class="card-body">
+      <div class="flex items-center justify-between">
+        <h2 class="card-title text-base flex items-center gap-2">
+          <i data-lucide="smartphone" class="size-5 text-primary"></i>페어링된 기기
+          <span id="clients-count" class="badge badge-ghost badge-sm">0</span>
+        </h2>
+        <button id="clients-refresh" class="btn btn-ghost btn-sm" title="목록 새로고침">
+          <i data-lucide="refresh-cw" class="size-4"></i>
+        </button>
+      </div>
+      <p class="text-xs opacity-60 mt-1">
+        같은 기기를 여러 번 페어링하면 이름이 중복 등록됩니다. 해제하면 그 기기는 다시 PIN 페어링을 해야 합니다.
+      </p>
+      <div class="overflow-x-auto mt-3 border border-base-200 rounded-lg max-h-72 overflow-y-auto w-full">
+        <table class="table table-xs w-full">
+          <thead>
+            <tr class="bg-base-200/50">
+              <th class="text-left font-semibold">기기 이름</th>
+              <th class="text-left">UUID</th>
+              <th class="text-center">조작</th>
+            </tr>
+          </thead>
+          <tbody id="clients-body">
+            <tr><td colspan="3" class="text-center py-4 opacity-50 text-xs">불러오는 중...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 카드 4: Sunshine 로그 -->
+  <div class="card bg-base-100 shadow border border-base-300">
+    <div class="card-body space-y-3">
+      <div class="flex items-center justify-between border-b border-base-300 pb-2">
+        <h2 class="card-title text-base">
+          <i data-lucide="scroll-text" class="size-5 text-primary"></i>Sunshine 로그
+        </h2>
+        <div class="flex items-center gap-2.5">
+          <label class="label cursor-pointer gap-2 py-0">
+            <input type="checkbox" id="log-auto" class="checkbox checkbox-xs" checked>
+            <span class="text-xs opacity-70">자동 새로고침 (5초)</span>
+          </label>
+          <button id="log-refresh" class="btn btn-ghost btn-sm" title="로그 새로고침">
+            <i data-lucide="refresh-cw" class="size-4"></i>
+          </button>
+        </div>
+      </div>
+      <div class="relative bg-base-300 rounded-xl p-3 border border-base-200 font-mono">
+        <div id="log-container" class="overflow-y-auto text-xs space-y-1 h-[420px] scrollbar-thin text-base-content whitespace-pre-wrap select-text selection:bg-primary/20">
+          <div class="opacity-50 text-center py-10">Sunshine 로그를 불러오는 중...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 페어링 해제 확인 모달 -->
+<dialog id="unpair-modal" class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg flex items-center gap-2">
+      <i data-lucide="unlink" class="size-5 text-error"></i>페어링 해제
+    </h3>
+    <p class="py-3 text-sm">
+      <span id="unpair-target" class="font-semibold"></span> 의 페어링을 해제합니다.
+      이 기기는 다시 PIN 페어링을 해야 접속할 수 있습니다.
+    </p>
+    <div class="modal-action">
+      <form method="dialog"><button class="btn btn-sm">취소</button></form>
+      <button id="unpair-confirm" class="btn btn-error btn-sm">해제</button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+<!-- 세션 강제 종료 확인 모달 -->
+<dialog id="session-close-modal" class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg flex items-center gap-2">
+      <i data-lucide="x-circle" class="size-5 text-warning"></i>스트리밍 세션 종료
+    </h3>
+    <p class="py-3 text-sm">
+      실행 중인 앱을 종료하고 세션을 FREE 상태로 되돌립니다. 현재 접속 중인 Moonlight 클라이언트가 있으면 연결이 끊깁니다.
+    </p>
+    <div class="modal-action">
+      <form method="dialog"><button class="btn btn-sm">취소</button></form>
+      <button id="session-close-confirm" class="btn btn-warning btn-sm">종료</button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+{% endblock %}
+{% block extra_js %}
+<script src="{{ root }}/static/js/sunshine.js?v={{ asset('js/sunshine.js') }}"></script>
+{% endblock %}
