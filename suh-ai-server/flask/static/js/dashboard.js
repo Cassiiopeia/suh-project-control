@@ -150,6 +150,15 @@ const DESTRUCTIVE_WARN = {
               restart: '팰월드 서버를 재시작하면 접속 중인 플레이어가 모두 튕깁니다.' },
   ollama:   { stop: 'Ollama를 중지하면 진행 중인 추론·벤치마크가 중단됩니다.',
               restart: 'Ollama를 재시작하면 진행 중인 추론·벤치마크가 중단됩니다.' },
+  sunshine: { stop: 'Sunshine을 중지하면 원격 스트리밍 접속이 끊기고 새 연결도 받지 못합니다.',
+              restart: 'Sunshine을 재시작하면 스트리밍 중인 접속이 끊깁니다.' },
+};
+
+// 서비스마다 제어 엔드포인트 모양이 달라 한 곳에 모아 둔다.
+const CONTROL_PATH = {
+  palworld: function (action) { return './palworld/' + action; },
+  ollama: function (action) { return './ollama/control/' + action; },
+  sunshine: function (action) { return './sunshine/control/' + action; },
 };
 
 async function controlService(kind, action, btn) {
@@ -160,8 +169,9 @@ async function controlService(kind, action, btn) {
   if (card) card.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
 
   try {
-    const path = kind === 'palworld' ? './palworld/' + action : './ollama/control/' + action;
-    const resp = await apiFetch(path, { method: 'POST', body: JSON.stringify({}) });
+    const buildPath = CONTROL_PATH[kind];
+    if (!buildPath) throw new Error('알 수 없는 서비스: ' + kind);
+    const resp = await apiFetch(buildPath(action), { method: 'POST', body: JSON.stringify({}) });
     if (!resp.ok) {
       const d = await resp.json().catch(function () { return {}; });
       throw new Error(d.error || ('HTTP ' + resp.status));
@@ -177,17 +187,20 @@ async function controlService(kind, action, btn) {
 
 function serviceCard(kind, title, icon, running, stateText, extra) {
   const badge = running ? 'badge-success' : 'badge-error';
-  return '<div class="border border-base-200 rounded-lg p-3" data-service="' + kind + '">'
+  // 테두리는 base-300을 쓴다 — base-200은 어두운 테마에서 카드 배경보다 어두워 선이 사라진다.
+  // 버튼 크기(btn-sm)와 상태 줄 유지는 팰월드·Sunshine 등 상세 페이지 제어부와 맞춘 값이다.
+  return '<div class="border border-base-300 rounded-lg p-3" data-service="' + kind + '">'
     + '<div class="flex items-center gap-2">'
     + '  <i data-lucide="' + icon + '" class="size-4 text-primary"></i>'
     + '  <span class="font-semibold text-sm">' + title + '</span>'
     + '  <span class="badge badge-sm ' + badge + '">' + esc(stateText) + '</span>'
     + '</div>'
-    + (extra ? '<div class="text-xs opacity-60 mt-1">' + extra + '</div>' : '')
-    + '<div class="flex gap-1 mt-2">'
-    + '  <button class="btn btn-xs btn-success" data-act="start"' + (running ? ' disabled' : '') + '>시작</button>'
-    + '  <button class="btn btn-xs btn-error" data-act="stop"' + (running ? '' : ' disabled') + '>중지</button>'
-    + '  <button class="btn btn-xs btn-warning" data-act="restart">재시작</button>'
+    // 상태 줄은 내용이 없어도 자리를 지킨다 — 카드마다 높이가 달라지면 버튼 줄이 어긋난다.
+    + '<div class="text-xs opacity-60 mt-1">' + (extra || '&nbsp;') + '</div>'
+    + '<div class="flex flex-wrap gap-2 mt-3">'
+    + '  <button class="btn btn-sm btn-success" data-act="start"' + (running ? ' disabled' : '') + '>시작</button>'
+    + '  <button class="btn btn-sm btn-error" data-act="stop"' + (running ? '' : ' disabled') + '>중지</button>'
+    + '  <button class="btn btn-sm btn-warning" data-act="restart">재시작</button>'
     + '</div></div>';
 }
 
@@ -195,7 +208,7 @@ async function refreshServiceControl() {
   const box = document.getElementById('service-control');
   if (!box) return;
 
-  let palHtml = '', ollamaHtml = '';
+  let palHtml = '', ollamaHtml = '', sunshineHtml = '';
 
   try {
     const r = await apiFetch('./palworld/status');
@@ -219,7 +232,18 @@ async function refreshServiceControl() {
     renderVramBreakdown(d);
   } catch (e) { /* 401 modal은 apiFetch가 처리 */ }
 
-  box.innerHTML = palHtml + ollamaHtml;
+  try {
+    const r = await apiFetch('./sunshine/status');
+    const d = await r.json();
+    // 스트림 상태는 자격증명 없이도 읽히므로 카드는 항상 채워진다.
+    const extra = d.stream_state === 'BUSY'
+      ? '스트리밍 중' + (d.current_app_name ? ' · ' + d.current_app_name : '')
+      : (d.stream_state === 'FREE' ? '대기 중' : '상태 확인 불가');
+    sunshineHtml = serviceCard('sunshine', 'Sunshine', 'monitor-play', !!d.service_running,
+                               d.service_running ? '구동 중' : '정지됨', extra);
+  } catch (e) { /* 401 modal은 apiFetch가 처리 */ }
+
+  box.innerHTML = palHtml + ollamaHtml + sunshineHtml;
   if (window.lucide) window.lucide.createIcons();
 }
 

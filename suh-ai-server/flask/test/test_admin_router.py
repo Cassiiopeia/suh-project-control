@@ -6,6 +6,14 @@ from flask import Flask
 
 EMOJI_RE = re.compile('[\U0001F300-\U0001FAFF☀-➿]')
 
+TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), '..', 'templates', 'admin')
+
+
+def sidebar_slugs():
+    """base.html 사이드바의 /admin/<slug> 링크 목록 (대시보드 자신은 제외)"""
+    with open(os.path.join(TEMPLATE_DIR, 'base.html'), encoding='utf-8') as f:
+        return sorted(set(re.findall(r'\{\{ root \}\}/admin/([a-z-]+)', f.read())))
+
 
 @pytest.fixture
 def client():
@@ -84,18 +92,20 @@ def test_api_docs_page_renders_iframe(client):
 
 
 def test_dashboard_cards_cover_all_sidebar_menus(client):
-    """사이드바 메뉴 전 항목이 대시보드 바로가기 카드로 존재해야 한다"""
+    """사이드바 메뉴 전 항목이 대시보드 바로가기 카드로 존재해야 한다.
+
+    목록을 여기 하드코딩하면 메뉴가 늘어날 때 테스트가 같이 낡아 누락을 못 잡는다
+    (실제로 Ollama 관리·감사로그 카드가 빠진 채 오래 통과했다). 사이드바에서 직접 읽는다.
+    """
     body = client.get('/admin').get_data(as_text=True)
     # 대시보드 자신이 /admin 이므로 카드는 형제 경로여야 한다.
     # './admin/X'로 두면 /admin/admin/X 가 되어 404 (실측 확인).
-    for href in ('./palworld', './ollama-test', './models',
-                 './tts', './api-docs', './logs'):
-        assert f'href="{href}"' in body, f'대시보드에 {href} 카드가 없음'
+    for slug in sidebar_slugs():
+        assert f'href="./{slug}"' in body, f'대시보드에 ./{slug} 카드가 없음'
 
 
 def test_no_emoji_icons_on_any_admin_page(client):
-    for path in ('/admin', '/admin/palworld', '/admin/logs', '/admin/models', '/admin/tts',
-                 '/admin/api-docs', '/admin/sunshine'):
+    for path in ['/admin'] + [f'/admin/{s}' for s in sidebar_slugs()]:
         body = client.get(path).get_data(as_text=True)
         match = EMOJI_RE.search(body)
         assert not match, f'{path} 에 이모지가 남아있음: {match.group() if match else ""}'

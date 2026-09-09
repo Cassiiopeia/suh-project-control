@@ -35,10 +35,27 @@ def test_dashboard_cards_do_not_duplicate_admin_segment():
 
 
 def test_dashboard_cards_point_at_sibling_pages():
-    """카드 링크는 형제 경로(./palworld 등)여야 한다"""
+    """카드 링크는 형제 경로(./palworld 등)여야 하며, 사이드바 메뉴를 모두 덮어야 한다"""
     text = _read('dashboard.html')
-    for page in ('palworld', 'ollama-test', 'models', 'tts', 'api-docs', 'logs'):
+    sidebar = set(re.findall(r'\{\{ root \}\}/admin/([a-z-]+)', _read('base.html')))
+    assert sidebar, "사이드바 링크를 하나도 찾지 못했다 — 파싱 규칙 확인 필요"
+    for page in sorted(sidebar):
         assert f'href="./{page}"' in text, f"카드 링크 누락/오류: {page}"
+
+
+def test_dashboard_service_control_covers_all_controllable_services():
+    """서비스 제어 카드는 제어 API가 있는 서비스를 모두 다뤄야 한다"""
+    js = (Path(__file__).resolve().parent.parent / 'static' / 'js' / 'dashboard.js').read_text(encoding='utf-8')
+    for kind in ('palworld', 'ollama', 'sunshine'):
+        assert f"{kind}: function (action)" in js, f"CONTROL_PATH에 {kind} 없음"
+        assert f"serviceCard('{kind}'" in js, f"서비스 카드 렌더에 {kind} 없음"
+
+
+def test_service_control_card_style_matches_other_pages():
+    """대시보드 제어부만 작은 버튼·안 보이는 테두리를 쓰면 UI가 어긋난다 (실측 확인)"""
+    js = (Path(__file__).resolve().parent.parent / 'static' / 'js' / 'dashboard.js').read_text(encoding='utf-8')
+    assert 'btn btn-xs' not in js, "제어 버튼은 다른 페이지와 같은 btn-sm를 쓴다"
+    assert 'border border-base-200' not in js, "base-200 테두리는 어두운 테마에서 배경에 묻힌다"
 
 
 def test_api_docs_iframe_uses_docs_swagger():
