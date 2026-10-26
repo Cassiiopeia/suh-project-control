@@ -84,6 +84,18 @@ try {
         exit 1
     }
 
+    # Claude 로그인 코드 조회용 Chromium (경로는 config/claude_login_config.py PLAYWRIGHT_BROWSERS_DIRECTORY 와 동일)
+    # 실패해도 배포는 계속 (해당 화면만 browser_error)
+    Write-Host "[INFO] Installing Playwright Chromium..."
+    $env:PLAYWRIGHT_BROWSERS_PATH = "C:\AI\playwright-browsers"
+    & $pythonExe -m playwright install chromium
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "[SUCCESS] Playwright Chromium ready: $env:PLAYWRIGHT_BROWSERS_PATH"
+    }
+    else {
+        Write-Host "[WARN] Playwright Chromium install failed (exit $LASTEXITCODE) - Claude login code page will not work"
+    }
+
     # Check if NSSM is installed
     Write-Host "[INFO] Checking NSSM installation..."
     $nssmPath = (Get-Command nssm -ErrorAction SilentlyContinue).Source
