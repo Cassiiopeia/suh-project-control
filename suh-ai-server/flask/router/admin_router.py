@@ -67,6 +67,12 @@ def sunshine():
     return render_template('admin/sunshine.html', root='..', active='sunshine')
 
 
+@admin_bp.route('/admin/claude-login', methods=['GET'])
+def claude_login():
+    """Claude 로그인 6자리 코드 조회 페이지"""
+    return render_template('admin/claude_login.html', root='..', active='claude-login')
+
+
 @admin_bp.route('/admin/models', methods=['GET'])
 def models():
     """모델 관리 페이지 (HF 검색·다운로드·벤치마크)"""

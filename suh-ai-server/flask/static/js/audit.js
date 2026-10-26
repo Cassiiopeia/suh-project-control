@@ -9,6 +9,7 @@
     MODEL: { label: '모델', badge: 'badge-accent' },
     SYSTEM: { label: '시스템', badge: 'badge-neutral' },
     SUNSHINE: { label: 'Sunshine', badge: 'badge-info' },
+    CLAUDE_LOGIN: { label: 'Claude 로그인', badge: 'badge-warning' },
   };
 
   var ACTION_LABELS = {
@@ -39,6 +40,9 @@
     SUNSHINE_PAIR: 'Moonlight 기기 페어링 승인',
     SUNSHINE_UNPAIR: 'Moonlight 기기 페어링 해제',
     SUNSHINE_SESSION_CLOSE: 'Sunshine 스트리밍 세션 종료',
+    CLAUDE_CODE_REQUEST: 'Claude 코드 요청',
+    CLAUDE_CODE_ISSUED: 'Claude 코드 발급',
+    CLAUDE_CODE_VIEW: 'Claude 코드 열람',
   };
 
   // 카테고리 선택 시 행위 셀렉트를 해당 카테고리 것만으로 좁힌다
@@ -51,6 +55,7 @@
     SYSTEM: [],
     SUNSHINE: ['SUNSHINE_START', 'SUNSHINE_STOP', 'SUNSHINE_RESTART',
                'SUNSHINE_PAIR', 'SUNSHINE_UNPAIR', 'SUNSHINE_SESSION_CLOSE'],
+    CLAUDE_LOGIN: ['CLAUDE_CODE_REQUEST', 'CLAUDE_CODE_ISSUED', 'CLAUDE_CODE_VIEW'],
   };
 
   var KST_FMT = new Intl.DateTimeFormat('ko-KR', {

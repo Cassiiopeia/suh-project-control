@@ -1,0 +1,80 @@
+{% extends "admin/base.html" %}
+{% block title %}Claude 로그인 | SUH AI Server{% endblock %}
+{% block page_title %}Claude 로그인 인증 코드{% endblock %}
+{% block content %}
+<div class="space-y-6 max-w-4xl mx-auto">
+
+  <!-- 미설정 안내: Gmail 주소·앱 비밀번호 환경변수 없으면 대기 불가 -->
+  <div id="config-warning" class="alert alert-warning text-sm" hidden>
+    <i data-lucide="alert-triangle" class="size-5"></i>
+    <span>Gmail 접속 정보가 설정되지 않았습니다. 서버의 <span class="font-mono">flask/.env</span> 에
+      <span class="font-mono">CLAUDE_LOGIN_GMAIL_ADDRESS</span> /
+      <span class="font-mono">CLAUDE_LOGIN_GMAIL_APP_PASSWORD</span> 를 추가하세요.</span>
+  </div>
+
+  <div class="alert text-sm">
+    <i data-lucide="info" class="size-5"></i>
+    <span>Claude 로그인 화면에서 이메일(<span id="account" class="font-mono">-</span>)을 입력한 뒤 이 화면에서 기다리세요.
+      메일이 오면 서버가 자동으로 열어 6자리 코드를 보여줍니다.</span>
+  </div>
+
+  <!-- 코드 카드: 6자리 + 복사 + 메일 수신 시각 -->
+  <div class="card bg-base-100 shadow border border-base-300">
+    <div class="card-body items-center text-center gap-3">
+      <div class="flex items-center gap-2">
+        <span id="job-badge" class="badge badge-ghost gap-1 text-xs py-2 px-2.5">대기 전</span>
+        <span id="expires-in" class="badge badge-outline badge-sm" hidden></span>
+      </div>
+      <div id="login-code" class="font-mono text-6xl font-bold tracking-[0.3em] py-2 select-all">------</div>
+      <div class="text-sm">
+        <i data-lucide="mail" class="size-4 inline-block align-[-2px] opacity-60"></i>
+        <span id="mail-received" class="opacity-80">메일을 기다리는 중</span>
+      </div>
+      <div class="flex flex-wrap justify-center gap-2.5 mt-1">
+        <button id="code-copy" class="btn btn-primary" disabled>
+          <i data-lucide="copy" class="size-4"></i><span id="code-copy-label">코드 복사</span>
+        </button>
+        <button id="wait-again" class="btn btn-outline" hidden>
+          <i data-lucide="rotate-ccw" class="size-4"></i>다시 기다리기
+        </button>
+      </div>
+      <p id="failure-message" class="text-sm text-error" hidden></p>
+      <img id="failure-screenshot" class="rounded-box border border-base-300 max-w-full mt-2" alt="코드 화면 캡처" hidden>
+    </div>
+  </div>
+
+  <!-- 진행 단계: 메일 대기 > 메일 수신 > 링크 열기 > 코드 획득 -->
+  <div class="card bg-base-100 shadow border border-base-300">
+    <div class="card-body">
+      <h2 class="card-title text-base">
+        <i data-lucide="list-checks" class="size-5 text-primary"></i>진행 단계
+      </h2>
+      <ul id="steps" class="steps steps-vertical lg:steps-horizontal w-full mt-2">
+        <li class="step" data-step="waiting">메일 대기<span class="block text-xs opacity-60 step-time"></span></li>
+        <li class="step" data-step="received">메일 수신<span class="block text-xs opacity-60 step-time"></span></li>
+        <li class="step" data-step="opening">링크 열기<span class="block text-xs opacity-60 step-time"></span></li>
+        <li class="step" data-step="issued">코드 획득<span class="block text-xs opacity-60 step-time"></span></li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 최근 감사로그: 요청·발급·열람 (IP·브라우저) -->
+  <div class="card bg-base-100 shadow border border-base-300">
+    <div class="card-body">
+      <h2 class="card-title text-base flex justify-between">
+        <span class="flex items-center gap-2"><i data-lucide="shield-check" class="size-5 text-primary"></i>최근 기록</span>
+        <a href="./audit" class="link text-xs font-normal opacity-70">감사로그 전체 보기</a>
+      </h2>
+      <div class="overflow-x-auto">
+        <table class="table table-sm">
+          <thead><tr><th>시각</th><th>행위</th><th>IP</th><th>브라우저</th><th>결과</th></tr></thead>
+          <tbody id="recent-logs"><tr><td colspan="5" class="opacity-60">불러오는 중</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script src="{{ root }}/static/js/claude-login.js?v={{ asset('js/claude-login.js') }}"></script>
+{% endblock %}

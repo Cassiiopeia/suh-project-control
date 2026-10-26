@@ -109,3 +109,19 @@ def test_no_emoji_icons_on_any_admin_page(client):
         body = client.get(path).get_data(as_text=True)
         match = EMOJI_RE.search(body)
         assert not match, f'{path} 에 이모지가 남아있음: {match.group() if match else ""}'
+
+
+def test_claude_login_page_renders(client):
+    resp = client.get('/admin/claude-login')
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert 'Claude 로그인' in body
+    assert 'claude-login.js' in body
+    assert 'code-copy' in body
+    assert 'mail-received' in body
+    assert not EMOJI_RE.search(body)
+
+
+def test_menu_has_claude_login_link(client):
+    body = client.get('/admin').get_data(as_text=True)
+    assert 'admin/claude-login' in body
