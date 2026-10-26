@@ -16,6 +16,7 @@ from router.tts_router import tts_bp
 from router.system_router import system_bp
 from router.audit_router import audit_bp
 from router.sunshine_router import sunshine_bp
+from router.claude_login_router import claude_login_bp
 from config.app_config import SWAGGER_URL, API_URL
 from config.logging_config import setup_logging
 
@@ -48,6 +49,7 @@ app.register_blueprint(tts_bp)
 app.register_blueprint(system_bp)
 app.register_blueprint(audit_bp)
 app.register_blueprint(sunshine_bp)
+app.register_blueprint(claude_login_bp)
 
 
 @app.route('/health', methods=['GET'])
