@@ -23,6 +23,7 @@ class AuditCategory(str, Enum):
     MODEL = "MODEL"
     SYSTEM = "SYSTEM"  # 향후 확장용
     SUNSHINE = "SUNSHINE"
+    CLAUDE_LOGIN = "CLAUDE_LOGIN"
 
 
 class AuditAction(str, Enum):
@@ -53,6 +54,10 @@ class AuditAction(str, Enum):
     SUNSHINE_PAIR = "SUNSHINE_PAIR"
     SUNSHINE_UNPAIR = "SUNSHINE_UNPAIR"
     SUNSHINE_SESSION_CLOSE = "SUNSHINE_SESSION_CLOSE"
+    # Claude 로그인 6자리 코드: 대기 시작 / 발급(성공·실패) / 클라이언트별 첫 열람
+    CLAUDE_CODE_REQUEST = "CLAUDE_CODE_REQUEST"
+    CLAUDE_CODE_ISSUED = "CLAUDE_CODE_ISSUED"
+    CLAUDE_CODE_VIEW = "CLAUDE_CODE_VIEW"
 
 
 def record(category: AuditCategory, action: AuditAction, actor_ip: str, detail: dict = None, *,
