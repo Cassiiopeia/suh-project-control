@@ -84,3 +84,12 @@ def test_screenshot_404_when_missing(client, tmp_path):
     with patch('router.claude_login_router.code_service.SCREENSHOT_PATH', str(tmp_path / 'none.png')):
         resp = client.get('/claude-login/code/screenshot')
     assert resp.status_code == 404
+
+
+def test_request_response_never_contains_code(client):
+    # 코드는 열람 감사가 붙는 status 로만 전달
+    with patch('router.claude_login_router.code_service.start_request', return_value=(ISSUED_STATE, False)), \
+            patch('util.audit_helper.audit_service.record'):
+        resp = client.post('/claude-login/code/request', json={'trigger': 'auto'})
+    assert resp.get_json()['code'] is None
+    assert resp.get_json()['status'] == 'issued'

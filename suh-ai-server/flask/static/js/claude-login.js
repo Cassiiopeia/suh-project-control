@@ -54,6 +54,8 @@
         return;
       }
       render(data);
+      // request 응답엔 코드가 없음 > 바로 status 조회 (열람 감사 경로)
+      loadStatus();
       startPolling();
     } catch (e) {
       console.warn('claude login request failed:', e);
@@ -205,8 +207,15 @@
   document.addEventListener('DOMContentLoaded', () => {
     el('code-copy').addEventListener('click', copyCode);
     el('wait-again').addEventListener('click', () => requestCode('manual'));
-    // 남은 시간·"n분 전" 표시는 1초마다 갱신 (폴링 중단 후에도)
-    setInterval(() => { if (currentState) { renderCode(currentState); } }, 1000);
+    // 남은 시간·"n분 전" 표시는 1초마다 갱신 (폴링 중단 후에도), 유효시간 지나면 코드 숨김
+    setInterval(() => {
+      if (!currentState) return;
+      if (currentState.code && currentState.expires_at && new Date(currentState.expires_at) <= Date.now()) {
+        render(Object.assign({}, currentState, { code: null, status: 'expired' }));
+        return;
+      }
+      renderCode(currentState);
+    }, 1000);
     requestCode('auto');
     loadRecentLogs();
   });

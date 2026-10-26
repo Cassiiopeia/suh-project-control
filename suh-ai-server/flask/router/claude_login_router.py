@@ -31,7 +31,8 @@ def request_code():
     if is_new_job:
         set_audit_action(AuditAction.CLAUDE_CODE_REQUEST)
         set_audit_detail({'job_id': state['job_id'], 'trigger': trigger, 'account': state.get('account')})
-    return jsonify(state), 200
+    # 코드는 열람 감사가 붙는 status 로만 전달
+    return jsonify({**state, 'code': None}), 200
 
 
 @claude_login_bp.route('/claude-login/code/status', methods=['GET'])

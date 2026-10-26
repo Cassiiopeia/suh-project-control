@@ -7,7 +7,7 @@ import email.utils
 import imaplib
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
 GMAIL_IMAP_HOST = "imap.gmail.com"
 # Anthropic 로그인 메일 발신 도메인
@@ -15,6 +15,8 @@ ANTHROPIC_SENDER_DOMAIN = "mail.anthropic.com"
 MAGIC_LINK_PATTERN = re.compile(r'href="(https://claude\.ai/magic-link#[^"]+)"')
 # 최신 메일부터 확인할 개수
 RECENT_MAIL_COUNT = 3
+# IMAP 소켓 타임아웃 (초, 반쯤 끊긴 연결에서 작업이 running 에 갇히지 않게)
+IMAP_TIMEOUT_SECONDS = 30
 
 
 class MailClientError(Exception):
@@ -38,13 +40,14 @@ def find_new_magic_link_mail(address, app_password, accept_after: datetime,
                              processed_message_ids: set, imap_factory=imaplib.IMAP4_SSL):
     """accept_after 이후 수신 + 미처리 메일 중 최신 1건 (없으면 None)"""
     try:
-        mailbox = imap_factory(GMAIL_IMAP_HOST)
+        mailbox = imap_factory(GMAIL_IMAP_HOST, timeout=IMAP_TIMEOUT_SECONDS)
         mailbox.login(address, app_password)
     except (imaplib.IMAP4.error, OSError) as error:
         raise MailClientError(f"imap login failed: {type(error).__name__}") from error
     try:
         mailbox.select("INBOX", readonly=True)
-        since_date = accept_after.strftime("%d-%b-%Y")
+        # SINCE 는 날짜 단위·시간대 불확실 > 하루 앞당김 (정확한 비교는 received_at)
+        since_date = (accept_after - timedelta(days=1)).strftime("%d-%b-%Y")
         mail_ids = mailbox.search(None, "FROM", ANTHROPIC_SENDER_DOMAIN, "SINCE", since_date)[1][0].split()
         for mail_id in reversed(mail_ids[-RECENT_MAIL_COUNT:]):
             mail = _to_magic_link_mail(mail_id, mailbox.fetch(mail_id, "(BODY.PEEK[])")[1][0][1])

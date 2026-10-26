@@ -38,8 +38,8 @@ class FakeImap:
         self.is_login_failing = is_login_failing
         self.calls = []
 
-    def __call__(self, host):
-        self.calls.append(('connect', host))
+    def __call__(self, host, timeout=None):
+        self.calls.append(('connect', host, timeout))
         return self
 
     def login(self, address, password):
@@ -116,3 +116,18 @@ def test_imap_login_failure_raises_mail_client_error():
     fake = FakeImap([], is_login_failing=True)
     with pytest.raises(MailClientError):
         find_with(fake)
+
+
+def test_imap_connection_has_timeout():
+    fake = FakeImap([])
+    find_with(fake)
+    connect_call = next(call for call in fake.calls if call[0] == 'connect')
+    assert connect_call[2] == 30
+
+
+def test_since_date_is_one_day_before_accept_after():
+    # Gmail SINCE 날짜 비교 시간대 불확실 > 하루 앞당겨 검색, 정확한 비교는 received_at
+    fake = FakeImap([])
+    find_with(fake, accept_after=datetime(2026, 10, 26, 0, 10, tzinfo=timezone.utc))
+    search_call = next(call for call in fake.calls if call[0] == 'search')
+    assert '25-Oct-2026' in search_call
