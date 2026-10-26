@@ -144,3 +144,19 @@ def test_start_without_config_raises_not_configured(monkeypatch):
     with pytest.raises(code_service.NotConfiguredError):
         code_service.start_request('auto', CLIENT, run_in_thread=False)
     assert code_service.get_state()['is_configured'] is False
+
+
+def test_auto_request_keeps_valid_issued_code():
+    run_job()
+    with patch.object(code_service, '_now', return_value=MAIL_TIME + timedelta(seconds=60)):
+        state, is_new_job = code_service.start_request('auto', CLIENT, run_in_thread=False)
+    assert is_new_job is False
+    assert state['code'] == '027696'
+
+
+def test_manual_request_replaces_issued_code():
+    run_job()
+    with patch.object(code_service.threading, 'Thread'):
+        state, is_new_job = code_service.start_request('manual', CLIENT)
+    assert is_new_job is True
+    assert state['status'] == 'running'

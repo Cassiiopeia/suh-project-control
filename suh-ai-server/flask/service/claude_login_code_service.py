@@ -55,8 +55,10 @@ def start_request(trigger: str, client: dict, *, run_in_thread=True):
     if not config.is_configured():
         raise NotConfiguredError('gmail address or app password not set')
     with _lock:
-        if _state.get('status') == 'running':
-            return _snapshot(_now()), False
+        current = _snapshot(_now())
+        # 진행 중이거나, 화면 재진입(auto)인데 유효한 코드가 있으면 기존 작업 유지
+        if current['status'] == 'running' or (trigger == 'auto' and current['status'] == 'issued'):
+            return current, False
         started_at = _now()
         job_id = uuid.uuid4().hex[:12]
         _state.clear()
