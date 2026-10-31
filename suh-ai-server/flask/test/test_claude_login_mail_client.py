@@ -73,6 +73,12 @@ def test_extract_magic_link_ignores_tracking_links():
     assert extract_magic_link(SAMPLE_HTML) == MAGIC_LINK
 
 
+def test_extract_magic_link_accepts_client_query_before_fragment():
+    # 2026-10-31 메일 형식 변경: magic-link?client=... #토큰
+    link = 'https://claude.ai/magic-link?client=abc123#abc:ZGVm'
+    assert extract_magic_link(f'<a href="{link}">로그인</a>') == link
+
+
 def test_extract_magic_link_returns_none_without_link():
     assert extract_magic_link('<a href="https://example.com">x</a>') is None
 
