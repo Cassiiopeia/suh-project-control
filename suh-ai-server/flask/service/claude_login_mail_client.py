@@ -12,7 +12,8 @@ from datetime import datetime, timedelta
 GMAIL_IMAP_HOST = "imap.gmail.com"
 # Anthropic 로그인 메일 발신 도메인
 ANTHROPIC_SENDER_DOMAIN = "mail.anthropic.com"
-MAGIC_LINK_PATTERN = re.compile(r'href="(https://claude\.ai/magic-link#[^"]+)"')
+# 링크 형태 2종: magic-link#토큰 / magic-link?client=...#토큰 (2026-10-31 변경)
+MAGIC_LINK_PATTERN = re.compile(r'href="(https://claude\.ai/magic-link(?:\?[^"#]*)?#[^"]+)"')
 # 최신 메일부터 확인할 개수
 RECENT_MAIL_COUNT = 3
 # IMAP 소켓 타임아웃 (초, 반쯤 끊긴 연결에서 작업이 running 에 갇히지 않게)
