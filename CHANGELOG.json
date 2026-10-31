@@ -1,14 +1,39 @@
 {
   "metadata": {
-    "lastUpdated": "2026-10-26T05:58:58Z",
-    "currentVersion": "2.0.74",
+    "lastUpdated": "2026-10-31T12:21:37Z",
+    "currentVersion": "2.0.75",
     "projectType": "python",
-    "totalReleases": 70,
+    "totalReleases": 71,
     "projectTypes": [
       "python"
     ]
   },
   "releases": [
+    {
+      "version": "2.0.75",
+      "project_type": "python",
+      "project_types": [
+        "python"
+      ],
+      "date": "2026-10-31",
+      "pr_number": 147,
+      "raw_summary": "## Summary by CodeRabbit\n\n## 릴리스 노트\n\n* **버그 수정**\n  * 관리 페이지의 Claude 로그인 인증코드가 \"메일 기다리는 중\"에서 멈추던 문제 수정 (메일 링크 형식 변경 대응)\n\n* **문서**\n  * Claude 로그인 인증코드 대시보드 구현 보고서 추가",
+      "parsed_changes": {
+        "버그_수정": {
+          "title": "버그 수정",
+          "items": [
+            "관리 페이지의 Claude 로그인 인증코드가 \"메일 기다리는 중\"에서 멈추던 문제 수정 (메일 링크 형식 변경 대응)"
+          ]
+        },
+        "문서": {
+          "title": "문서",
+          "items": [
+            "Claude 로그인 인증코드 대시보드 구현 보고서 추가"
+          ]
+        }
+      },
+      "parse_method": "markdown"
+    },
     {
       "version": "2.0.74",
       "project_type": "python",
