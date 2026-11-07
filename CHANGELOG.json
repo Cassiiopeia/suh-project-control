@@ -1,14 +1,33 @@
 {
   "metadata": {
-    "lastUpdated": "2026-11-07T13:08:48Z",
-    "currentVersion": "2.0.82",
+    "lastUpdated": "2026-11-07T13:44:30Z",
+    "currentVersion": "2.0.83",
     "projectType": "python",
-    "totalReleases": 78,
+    "totalReleases": 79,
     "projectTypes": [
       "python"
     ]
   },
   "releases": [
+    {
+      "version": "2.0.83",
+      "project_type": "python",
+      "project_types": [
+        "python"
+      ],
+      "date": "2026-11-07",
+      "pr_number": 169,
+      "raw_summary": "## Summary by CodeRabbit\n\n## 릴리스 노트\n\n* **버그 수정**\n  * 관제소 진행 중 장애 목록에 감시만 서비스가 섞여 보이던 문제",
+      "parsed_changes": {
+        "버그_수정": {
+          "title": "버그 수정",
+          "items": [
+            "관제소 진행 중 장애 목록에 감시만 서비스가 섞여 보이던 문제"
+          ]
+        }
+      },
+      "parse_method": "markdown"
+    },
     {
       "version": "2.0.82",
       "project_type": "python",
