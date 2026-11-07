@@ -1,5 +1,5 @@
 /**
- * D1 접근 공통: meta 키값 읽기·묶음 쓰기, check_run 기록·최신 1행·정리, daily_rollup 기록
+ * D1 접근 공통: meta 키값 읽기·묶음 쓰기, check_run 기록·최신 1행·정리, daily_rollup 기록·기간 조회
  * 여러 행 쓰기는 batch 1회 (D1 batch = 트랜잭션)
  */
 
@@ -49,6 +49,13 @@ export function buildCheckRunInsertStatement(database, checkedAt, results) {
 
 export function buildDailyRollupUpsertStatement(database, day, serviceId, total, okCount) {
   return database.prepare(UPSERT_DAILY_ROLLUP_SQL).bind(day, serviceId, total, okCount);
+}
+
+/** 시작 날짜(KST, 포함) 이후 daily_rollup 행 > [{day, service_id, total, ok}] */
+export async function getDailyRollupsSince(database, firstDay) {
+  const { results } = await database.prepare('SELECT day, service_id, total, ok FROM daily_rollup WHERE day >= ?')
+    .bind(firstDay).all();
+  return results;
 }
 
 /** 최신 check_run 1행 > {checked_at, results} | null (results 손상 시 빈 객체) */

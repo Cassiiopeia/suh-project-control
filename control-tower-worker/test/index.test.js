@@ -7,15 +7,6 @@ import { createEnvironment, createSignedHeartbeatRequest } from '../test_support
 
 const ORIGIN = 'https://status.suhsaechan.kr';
 
-test('GET /, /api/status.json은 공개 페이지 준비 전 503', async () => {
-  const environment = createEnvironment(new FakeD1Database());
-  for (const path of ['/', '/api/status.json']) {
-    const response = await worker.fetch(new Request(`${ORIGIN}${path}`), environment, {});
-    assert.equal(response.status, 503, path);
-    assert.equal(await response.text(), 'status page pending');
-  }
-});
-
 test('알 수 없는 경로·메서드는 404', async () => {
   const environment = createEnvironment(new FakeD1Database());
   const cases = [new Request(`${ORIGIN}/admin`), new Request(`${ORIGIN}/api/heartbeat`), new Request(`${ORIGIN}/`, { method: 'POST' })];

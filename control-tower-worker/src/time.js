@@ -1,5 +1,5 @@
 /**
- * 시각 변환 공통: 밀리초 > ISO UTC, KST 날짜(YYYY-MM-DD), KST 시(YYYY-MM-DDTHH), KST HH:MM, ISO > 밀리초
+ * 시각 변환 공통: 밀리초 > ISO UTC, KST 날짜(YYYY-MM-DD), KST 시(YYYY-MM-DDTHH), KST HH:MM, KST 날짜 시:분, ISO > 밀리초
  */
 
 export const MILLISECONDS_PER_SECOND = 1000;
@@ -28,6 +28,11 @@ export function toKstHourKey(milliseconds) {
 export function toKstHourMinute(milliseconds) {
   if (!Number.isFinite(milliseconds)) return UNKNOWN_HOUR_MINUTE;
   return new Date(milliseconds + KST_OFFSET_MILLISECONDS).toISOString().slice(11, 16);
+}
+
+/** 밀리초 > KST 날짜 시:분 (예: 2026-11-04 09:05) */
+export function toKstDateTime(milliseconds) {
+  return new Date(milliseconds + KST_OFFSET_MILLISECONDS).toISOString().slice(0, 16).replace('T', ' ');
 }
 
 /** ISO 문자열 > 밀리초, 잘못되면 null */
