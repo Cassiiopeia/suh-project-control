@@ -15,3 +15,5 @@ META_KEY_ONBOARDING_HASH = "discord_onboarding_hash"
 META_KEY_STATUS_PAGE_TITLE = "status_page_title"
 META_KEY_STATUS_PAGE_NOTICE_TEXT = "status_page_notice_text"
 META_KEY_STATUS_PAGE_NOTICE_LEVEL = "status_page_notice_level"
+# 초대 귀속 마지막 확인 시각 (UTC ISO, 이후 가입한 멤버만 귀속 대상)
+META_KEY_INVITE_LAST_CHECKED_AT = "discord_invite_last_checked_at"

@@ -61,10 +61,12 @@ def sync_discord(registry: Registry, client, store, guild_id: str) -> SyncReport
 
 def build_onboarding_payload(registry: Registry, role_ids_by_project: dict[str, str],
                              notice_channel_id: str | None = None) -> dict:
-    """온보딩 질문: 프로젝트마다 옵션 1개(member 역할 부여), 질문당 최대 12개씩 나눔, 역할 없는 프로젝트·인프라 제외"""
+    """온보딩 질문: 프로젝트마다 옵션 1개(member 역할 부여), 질문당 최대 12개씩 나눔
+    제외 3종: 역할 없는 프로젝트, 인프라, 숨긴 프로젝트 (채널·역할은 유지, 초대 링크로만 참여)"""
     listed_projects = [
         project for project in registry.projects
-        if project.id not in ONBOARDING_EXCLUDED_PROJECT_IDS and role_ids_by_project.get(project.id)
+        if project.id not in ONBOARDING_EXCLUDED_PROJECT_IDS and not project.is_hidden
+        and role_ids_by_project.get(project.id)
     ]
     options = [
         {

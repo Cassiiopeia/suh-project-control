@@ -73,7 +73,7 @@
     return card;
   }
 
-  // 프로젝트 머리: 이름 수정, 숨김, 순서, 출처
+  // 프로젝트 머리: 이름 수정, 숨김, 초대 링크, 순서, 출처
   function createProjectHeader(project, projectIndex) {
     const header = createElement('div', 'flex flex-wrap items-center gap-2');
     header.appendChild(createNameInput(project.name, project.original_name, function (name) {
@@ -86,6 +86,7 @@
     });
     hiddenToggle.classList.add('ml-auto');
     header.appendChild(hiddenToggle);
+    header.appendChild(window.ControlManageInvite.createInviteControl(project));
     header.appendChild(createMoveButtons(function (direction) {
       actions.moveItem('projects', manageData.projects, projectIndex, direction);
     }));

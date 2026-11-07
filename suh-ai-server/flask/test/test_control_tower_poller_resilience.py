@@ -184,3 +184,19 @@ def test_루프는_틱_소요_시간을_뺀_만큼만_기다린다(registry_path
     poller._run_loop()
 
     assert len(stop_event.wait_seconds) == 1 and abs(stop_event.wait_seconds[0] - 0.6) < 1e-9
+
+
+def test_틱마다_초대_귀속_단계를_틱_시작_시각으로_1회_실행한다(registry_path, store, dispatcher, check_runner, clock):
+    class RecordingInviteStep:
+        def __init__(self):
+            self.run_times: list[datetime] = []
+
+        def run(self, now: datetime) -> None:
+            self.run_times.append(now)
+
+    invite_step = RecordingInviteStep()
+    poller = poller_module.ControlTowerPoller(str(registry_path), store, dispatcher, None, check_runner=check_runner,
+                                              now=clock, environ={}, invite_attribution=invite_step)
+    run_ticks(poller, clock, 2)
+
+    assert len(invite_step.run_times) == 2 and invite_step.run_times[0] < invite_step.run_times[1]

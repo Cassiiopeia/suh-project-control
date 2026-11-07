@@ -1,4 +1,4 @@
-"""디스코드 REST 클라이언트: 알림 발송(실패해도 예외 없음), 채널·역할·온보딩 관리(실패 시 DiscordError)
+"""디스코드 REST 클라이언트: 알림 발송(실패해도 예외 없음), 채널·역할·온보딩·초대·멤버 관리(실패 시 DiscordError)
 공통 요청 1곳: 429 > retry_after 대기 후 1회, 5xx·네트워크 오류 > 1초 후 1회, 그 외 4xx > 재시도 없음
 """
 from __future__ import annotations
@@ -26,6 +26,8 @@ STATUS_TOO_MANY_REQUESTS = 429
 STATUS_SERVER_ERROR_MIN = 500
 # 네트워크 오류로 응답이 없을 때 DiscordError.status_code
 STATUS_NO_RESPONSE = 0
+# 멤버 목록 한 번에 받는 최대 수 (디스코드 상한 1000)
+MEMBER_PAGE_MAXIMUM_LIMIT = 1000
 
 
 class DiscordError(Exception):
@@ -81,6 +83,26 @@ class DiscordClient:
             logger.warning("[control-tower discord] onboarding failed : status %s", error.status_code)
             return False
         return True
+
+    def create_invite(self, channel_id: str, max_age: int = 0, max_uses: int = 0, unique: bool = True) -> dict:
+        """채널 초대 생성 (max_age 초, 0 = 만료 없음 / max_uses 0 = 무제한) > {code, ...}"""
+        payload = {"max_age": max_age, "max_uses": max_uses, "unique": unique}
+        return self._request("POST", f"/channels/{channel_id}/invites", json=payload, is_mutation=True)
+
+    def list_guild_invites(self) -> list[dict]:
+        """서버 초대 전체 (code, uses 포함, Manage Guild 권한 필요)"""
+        return self._request("GET", f"/guilds/{self._guild_id}/invites")
+
+    def delete_invite(self, code: str) -> None:
+        self._request("DELETE", f"/invites/{code}", is_mutation=True)
+
+    def list_members(self, after: str | None = None, limit: int = MEMBER_PAGE_MAXIMUM_LIMIT) -> list[dict]:
+        """멤버 1쪽: user id 오름차순, after 다음부터 (Server Members Intent 필요)"""
+        query = f"?limit={min(limit, MEMBER_PAGE_MAXIMUM_LIMIT)}" + (f"&after={after}" if after else "")
+        return self._request("GET", f"/guilds/{self._guild_id}/members{query}")
+
+    def add_member_role(self, user_id: str, role_id: str) -> None:
+        self._request("PUT", f"/guilds/{self._guild_id}/members/{user_id}/roles/{role_id}", is_mutation=True)
 
     def _request(self, method: str, path: str, json: dict | None = None, is_mutation: bool = False):
         """요청 1건 (최대 2회 시도): 성공 응답 JSON 반환, 최종 실패는 DiscordError"""
