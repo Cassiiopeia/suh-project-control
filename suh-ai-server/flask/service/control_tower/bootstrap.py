@@ -12,7 +12,7 @@ from config.control_tower_config import (
     DATABASE_PATH, DISCORD_BOT_TOKEN_ENV, DISCORD_GUILD_ID_ENV, HMAC_SECRET_ENV, REGISTRY_PATH, WORKER_URL_ENV,
 )
 from service.control_tower.discord_client import DiscordClient
-from service.control_tower.discord_sync import sync_discord
+from service.control_tower.discord_sync import DISCORD_SYNC_LOCK, sync_discord
 from service.control_tower.event_dispatcher import EventDispatcher
 from service.control_tower.heartbeat_client import HeartbeatClient
 from service.control_tower.poller import ControlTowerPoller
@@ -81,6 +81,7 @@ def _sync_discord_once(registry_path: str, environ: Mapping[str, str], discord_c
     """기동 시 디스코드 구조 동기화 1회 (실패는 기록만)"""
     try:
         registry = load_registry(registry_path, environ)
-        sync_discord(registry, discord_client, store, environ[DISCORD_GUILD_ID_ENV])
+        with DISCORD_SYNC_LOCK:  # 관리자 화면 버튼과 동시 실행 방지
+            sync_discord(registry, discord_client, store, environ[DISCORD_GUILD_ID_ENV])
     except Exception as error:
         logger.warning("[control-tower discord sync] startup sync failed : %s", type(error).__name__)

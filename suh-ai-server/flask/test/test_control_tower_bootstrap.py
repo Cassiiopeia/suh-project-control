@@ -73,3 +73,19 @@ def test_env가_있으면_심박_클라이언트와_기동_디스코드_동기�
     _wait_until(lambda: sync_calls != [])
     registry, _, _, guild_id = sync_calls[0]
     assert [project.id for project in registry.projects] == ["elum"] and guild_id == "9000"
+
+
+def test_기동_동기화는_관리자_버튼과_같은_잠금을_기다린다(paths, monkeypatch):
+    from service.control_tower.discord_sync import DISCORD_SYNC_LOCK
+    database_path, registry_path = paths
+    sync_calls = []
+    monkeypatch.setattr(bootstrap, "sync_discord", lambda *arguments: sync_calls.append(arguments))
+    monkeypatch.setattr(HeartbeatClient, "send", lambda self, registry, public_incidents, now: None)
+    environ = {"DISCORD_BOT_TOKEN": "bot-token", "DISCORD_GUILD_ID": "9000"}
+
+    with DISCORD_SYNC_LOCK:
+        bootstrap.start_control_tower(environ, database_path, registry_path)
+        time.sleep(0.5)
+        assert sync_calls == []
+    _wait_until(lambda: sync_calls != [])
+    assert len(sync_calls) == 1

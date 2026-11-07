@@ -10,12 +10,12 @@
 
   // runtime 상태 + lifecycle + 점검 창 > 배지 문구와 색
   const STATUS_BADGES = {
-    needs_attention: { label: '확인 필요', css: 'badge-warning' },
-    maintenance: { label: '점검 중', css: 'badge-info' },
-    down: { label: '장애', css: 'badge-error' },
-    degraded: { label: '지연', css: 'badge-warning' },
-    up: { label: '정상', css: 'badge-success' },
-    unknown: { label: '대기', css: 'badge-ghost' },
+    needs_attention: { label: '확인 필요', cssClass: 'badge-warning' },
+    maintenance: { label: '점검 중', cssClass: 'badge-info' },
+    down: { label: '장애', cssClass: 'badge-error' },
+    degraded: { label: '지연', cssClass: 'badge-warning' },
+    up: { label: '정상', cssClass: 'badge-success' },
+    unknown: { label: '대기', cssClass: 'badge-ghost' },
   };
   // 장애 원인 코드 > 문구
   const CAUSE_LABELS = {
@@ -56,7 +56,7 @@
 
   function createStatusBadge(service) {
     const badge = STATUS_BADGES[badgeKeyOf(service)];
-    return createElement('span', 'badge badge-sm ' + badge.css, badge.label);
+    return createElement('span', 'badge badge-sm ' + badge.cssClass, badge.label);
   }
 
   function describeCause(cause) {

@@ -54,8 +54,18 @@ def test_overview는_등록_파일_점검_창과_관리자_점검_창을_합쳐_
     services = _services_by_id(client.get("/control/overview").get_json())
 
     assert services["elum-web"]["maintenance"]["reason"] == "정기 점검"
+    assert services["elum-web"]["maintenance"]["source"] == "registry"
     assert services["nas"]["maintenance"]["reason"] == "디스크 교체"
+    assert services["nas"]["maintenance"]["source"] == "admin"
     assert services["elum-api"]["maintenance"] is None
+
+
+def test_관리자_점검_창이_등록_파일_창을_덮으면_source는_admin이다(client, store):
+    store.set_maintenance("elum-web", NOW + timedelta(hours=3), "연장")
+
+    maintenance = _services_by_id(client.get("/control/overview").get_json())["elum-web"]["maintenance"]
+
+    assert maintenance["source"] == "admin" and maintenance["reason"] == "연장"
 
 
 def test_overview_요약_개수는_확인필요_점검_장애_정상_순으로_센다(client):

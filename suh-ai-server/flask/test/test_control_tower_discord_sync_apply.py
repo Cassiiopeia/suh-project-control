@@ -155,3 +155,14 @@ def test_온보딩은_내용이_바뀌었거나_마지막_PUT이_실패했을_�
     assert len(client.onboarding_payloads) == 3
     assert [option["title"] for option in client.onboarding_payloads[-1]["prompts"][0]["options"]] == [
         "이룸", "샘플", "롬롬"]
+
+
+def test_프로젝트가_없는_등록_정보는_디스코드를_건드리지_않고_오류만_돌려준다(store):
+    client = FakeDiscordClient()
+    client.channels = [{"id": "5", "name": "이룸", "type": 4, "parent_id": None, "permission_overwrites": []}]
+
+    report = sync_discord(make_registry(), client, store, GUILD_ID)
+
+    assert report.errors == ["registry: no projects"]
+    assert (report.created, report.updated, report.archived, report.is_onboarding_applied) == (0, 0, 0, False)
+    assert client.calls == []

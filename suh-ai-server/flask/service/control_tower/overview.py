@@ -17,6 +17,9 @@ INCIDENT_WINDOW = timedelta(days=14)
 INCIDENT_LIMIT = 50
 # 최근 이벤트 최대 건수
 EVENT_LIMIT = 50
+# 점검 창 출처: 관리자 화면(해제 가능) / 등록 파일(파일에서만 변경)
+MAINTENANCE_SOURCE_ADMIN = "admin"
+MAINTENANCE_SOURCE_REGISTRY = "registry"
 # meta: 직전 심박 성공 여부 ('1' 성공, '0' 실패) / 마지막 심박 성공 시각 / 등록 파일 오류 / 온보딩 적용 해시
 META_HEARTBEAT_IS_OK = "heartbeat_is_ok"
 META_HEARTBEAT_LAST_OK_AT = "heartbeat_last_ok_at"
@@ -31,10 +34,11 @@ def build_overview(runtime, now: datetime) -> dict:
     registry = runtime.registry_provider()
     states = snapshot.states if snapshot is not None else {}
     observations = snapshot.observations if snapshot is not None else {}
-    maintenance = merge_maintenance(registry, store.active_maintenance(now))
+    admin_windows = store.active_maintenance(now)
+    maintenance = merge_maintenance(registry, admin_windows)
 
     services = [
-        _service_entry(service, states.get(service.id), observations.get(service.id), maintenance.get(service.id), now)
+        _service_entry(service, states.get(service.id), observations.get(service.id), maintenance.get(service.id), service.id in admin_windows, now)
         for service in _listed_services(registry)
     ]
     return {
@@ -56,7 +60,8 @@ def _listed_services(registry: Registry) -> list[ServiceSpec]:
             if service.status != SERVICE_STATUS_RETIRED]
 
 
-def _service_entry(service: ServiceSpec, state, observation, window: MaintenanceWindow | None, now: datetime) -> dict:
+def _service_entry(service: ServiceSpec, state, observation, window: MaintenanceWindow | None,
+                   is_admin_window: bool, now: datetime) -> dict:
     is_external_known = observation is not None and observation.is_external_known
     return {
         "id": service.id,
@@ -69,7 +74,7 @@ def _service_entry(service: ServiceSpec, state, observation, window: Maintenance
         "internal": _check_entry(observation.internal if observation is not None else None),
         "external": _check_entry(observation.external if is_external_known else None),
         "is_public": service.is_public,
-        "maintenance": _maintenance_entry(window, now),
+        "maintenance": _maintenance_entry(window, is_admin_window, now),
     }
 
 
@@ -81,11 +86,12 @@ def _check_entry(check: CheckResult | None) -> dict | None:
             "checked_at": _iso(check.checked_at)}
 
 
-def _maintenance_entry(window: MaintenanceWindow | None, now: datetime) -> dict | None:
-    """진행 중인 점검 창만 (만료는 null)"""
+def _maintenance_entry(window: MaintenanceWindow | None, is_admin_window: bool, now: datetime) -> dict | None:
+    """진행 중인 점검 창만 (만료는 null), source: admin 관리자 화면 창(해제 가능) / registry 등록 파일 창"""
     if window is None or window.until <= now:
         return None
-    return {"until": _iso(window.until), "reason": window.reason}
+    return {"until": _iso(window.until), "reason": window.reason,
+            "source": MAINTENANCE_SOURCE_ADMIN if is_admin_window else MAINTENANCE_SOURCE_REGISTRY}
 
 
 def _summarize(services: list[dict]) -> dict:

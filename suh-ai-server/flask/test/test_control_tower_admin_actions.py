@@ -8,7 +8,10 @@ import pytest
 from control_tower_admin_fixtures import (  # noqa: F401 (pytest 픽스처 재노출)
     KST_OFFSET, NOW, REGISTRY, FakeDispatcher, FakePoller, client, discord_client, dispatcher, make_app, store,
 )
+from types import MappingProxyType
+
 from service.control_tower import runtime as runtime_module
+from service.control_tower.registry import Registry
 from service.control_tower.runtime import ControlTowerRuntime
 
 
@@ -66,11 +69,43 @@ def test_sync_중_예외는_500_sync_failed이다(client, monkeypatch):
 
 
 def test_동기화가_이미_진행_중이면_409이다(client):
-    from router.control_tower_admin_api import _sync_lock
-    with _sync_lock:
+    from service.control_tower.discord_sync import DISCORD_SYNC_LOCK
+    with DISCORD_SYNC_LOCK:
         response = client.post("/control/discord/sync")
 
     assert response.status_code == 409 and response.get_json() == {"error": "sync_in_progress"}
+
+
+def test_등록_정보를_못_읽었으면_동기화를_거절하고_호출하지_않는다(store, dispatcher, discord_client, monkeypatch):
+    from service.control_tower.poller_snapshot import PollerSnapshot
+    calls = []
+    monkeypatch.setattr("router.control_tower_admin_api.sync_discord", lambda *arguments: calls.append(arguments))
+    unloaded_snapshot = PollerSnapshot(None, MappingProxyType({}), MappingProxyType({}), None)
+    runtime_module.set_runtime(ControlTowerRuntime(
+        lambda: Registry(projects=(), services=()), store, dispatcher, poller=FakePoller(unloaded_snapshot),
+        discord_client_provider=lambda: discord_client, guild_id="9000"))
+    try:
+        response = make_app().test_client().post("/control/discord/sync")
+    finally:
+        runtime_module.set_runtime(None)
+
+    assert response.status_code == 409 and response.get_json() == {"error": "registry_unavailable"}
+    assert calls == []
+
+
+def test_프로젝트가_0개인_등록_정보도_동기화를_거절한다(store, dispatcher, discord_client, monkeypatch):
+    calls = []
+    monkeypatch.setattr("router.control_tower_admin_api.sync_discord", lambda *arguments: calls.append(arguments))
+    runtime_module.set_runtime(ControlTowerRuntime(
+        lambda: Registry(projects=(), services=()), store, dispatcher,
+        discord_client_provider=lambda: discord_client, guild_id="9000"))
+    try:
+        response = make_app().test_client().post("/control/discord/sync")
+    finally:
+        runtime_module.set_runtime(None)
+
+    assert response.status_code == 409 and response.get_json() == {"error": "registry_unavailable"}
+    assert calls == []
 
 
 # ---- POST /control/test-alert ----
@@ -157,6 +192,21 @@ def test_잘못된_until은_400이다(client, store, until):
 
     assert response.status_code == 400 and response.get_json() == {"error": "invalid", "fields": ["until"]}
     assert store.active_maintenance(datetime.now(timezone.utc)) == {}
+
+
+@pytest.mark.parametrize("until", ["9999-12-31T23:59:59-12:00", "9999-12-31T23:59:59+14:00", "0001-01-01T00:00:00+14:00"])
+def test_범위를_벗어난_until은_500이_아니라_400이다(client, until):
+    response = client.post("/control/maintenance", json={"service_id": "nas", "until": until})
+
+    assert response.status_code == 400 and response.get_json() == {"error": "invalid", "fields": ["until"]}
+
+
+def test_until은_최대_30일_뒤까지만_허용한다(client):
+    within_limit = client.post("/control/maintenance", json={"service_id": "nas", "until": _future(24 * 29)})
+    beyond_limit = client.post("/control/maintenance", json={"service_id": "nas", "until": _future(24 * 31)})
+
+    assert within_limit.status_code == 200
+    assert beyond_limit.status_code == 400 and beyond_limit.get_json()["fields"] == ["until"]
 
 
 def test_사유가_200자를_넘거나_문자열이_아니면_400이다(client):

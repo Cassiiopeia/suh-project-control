@@ -4,14 +4,13 @@
 from __future__ import annotations
 
 import logging
-import threading
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from flask import Blueprint, jsonify, request
 
 from service.control_tower.alert_planner import GLOBAL_SCOPE, Notification
-from service.control_tower.discord_sync import sync_discord
+from service.control_tower.discord_sync import DISCORD_SYNC_LOCK, sync_discord
 from service.control_tower.overview import build_overview
 from service.control_tower.registry import SERVICE_STATUS_RETIRED
 from service.control_tower.runtime import get_runtime
@@ -26,8 +25,8 @@ TEST_ALERT_TITLE = "[테스트] 관제소 알림"
 TEST_ALERT_BODY = "관제소 알림 경로 확인용 메시지"
 # 점검 사유 최대 길이 (글자 수)
 MAINTENANCE_REASON_MAX_LENGTH = 200
-# 동기화 동시 실행 방지 (관리자 화면 연타)
-_sync_lock = threading.Lock()
+# 점검 창 종료 시각 상한 (지금부터)
+MAINTENANCE_MAX_DURATION = timedelta(days=30)
 
 
 def register_admin_api(blueprint: Blueprint) -> None:
@@ -56,22 +55,26 @@ def _overview():
 
 
 def _sync():
-    """디스코드 동기화 1회 (동기 실행): 설정 확인 > 동시 실행 차단 > 동기화 > 리포트"""
+    """디스코드 동기화 1회 (동기 실행): 설정 확인 > 등록 정보 확인 > 동시 실행 차단 > 동기화 > 리포트"""
     runtime = get_runtime()
     if runtime is None:
         return _unavailable()
     discord_client = runtime.discord_client_provider() if runtime.discord_client_provider else None
     if discord_client is None or not runtime.guild_id:
         return jsonify({"error": "discord_not_configured"}), 503
-    if not _sync_lock.acquire(blocking=False):
+    registry = runtime.registry_provider()
+    # 등록 파일을 못 읽은 빈 등록 정보로 동기화하면 기존 프로젝트 카테고리를 전부 보관 처리함
+    if (runtime.poller is not None and runtime.poller.snapshot().registry is None) or not registry.projects:
+        return jsonify({"error": "registry_unavailable"}), 409
+    if not DISCORD_SYNC_LOCK.acquire(blocking=False):
         return jsonify({"error": "sync_in_progress"}), 409
     try:
-        report = sync_discord(runtime.registry_provider(), discord_client, runtime.store, runtime.guild_id)
+        report = sync_discord(registry, discord_client, runtime.store, runtime.guild_id)
     except Exception as error:  # 외부 예외 문구는 응답·로그에 싣지 않음
         logger.warning("[control-tower admin] discord sync failed : %s", type(error).__name__)
         return jsonify({"error": "sync_failed"}), 500
     finally:
-        _sync_lock.release()
+        DISCORD_SYNC_LOCK.release()
     return jsonify(asdict(report))
 
 
@@ -134,13 +137,14 @@ def _clear_maintenance(service_id: str):
 
 
 def _parse_future_moment(value) -> datetime | None:
-    """시간대 포함 ISO 8601이고 지금보다 미래일 때만 aware datetime, 그 외 None ('Z' 접미사 허용)"""
+    """시간대 포함 ISO 8601이고 (지금, 지금+30일] 범위일 때만 aware datetime, 그 외 None ('Z' 접미사 허용)"""
     if not isinstance(value, str) or not value:
         return None
+    now = datetime.now(timezone.utc)
     try:
         moment = datetime.fromisoformat(value[:-1] + "+00:00" if value.endswith("Z") else value)
-    except ValueError:
-        return None
-    if moment.tzinfo is None or moment <= datetime.now(timezone.utc):
+        if moment.tzinfo is None or moment <= now or moment > now + MAINTENANCE_MAX_DURATION:
+            return None
+    except (ValueError, OverflowError):  # 형식 오류, 연도 범위 밖(UTC 변환 중 넘침)
         return None
     return moment

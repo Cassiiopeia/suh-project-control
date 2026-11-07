@@ -6,6 +6,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import threading
 
 from service.control_tower.discord_client import DiscordError
 from service.control_tower.discord_sync_apply import apply_sync
@@ -29,10 +30,16 @@ ONBOARDING_MODE_DEFAULT = 0
 NOTICE_CHANNEL_KIND = "notice"
 # meta: 마지막으로 성공한 온보딩 PUT payload의 sha256 (같으면 PUT 생략)
 META_KEY_ONBOARDING_HASH = "discord_onboarding_hash"
+# 동기화 동시 실행 방지: 기동 동기화와 관리자 화면 버튼이 같은 잠금을 씀
+DISCORD_SYNC_LOCK = threading.Lock()
 
 
 def sync_discord(registry: Registry, client, store, guild_id: str) -> SyncReport:
-    """동기화 1회: 현재 채널·역할 조회 > 계획 > 실행 > 온보딩 (조회 실패 시 오류만 담아 반환)"""
+    """동기화 1회: 프로젝트 확인 > 현재 채널·역할 조회 > 계획 > 실행 > 온보딩 (거절·조회 실패 시 오류만 담아 반환)"""
+    # 프로젝트 0개 = 등록 정보 미로드로 보고 중단 (진행하면 기존 프로젝트 카테고리를 전부 보관 처리)
+    if not registry.projects:
+        logger.warning("[control-tower discord sync] refused : registry has no projects")
+        return SyncReport(errors=["registry: no projects"])
     try:
         current_channels = client.list_channels()
         current_roles = client.list_roles()
