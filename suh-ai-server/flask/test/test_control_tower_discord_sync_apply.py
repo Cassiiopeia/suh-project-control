@@ -166,3 +166,21 @@ def test_프로젝트가_없는_등록_정보는_디스코드를_건드리지_�
     assert report.errors == ["registry: no projects"]
     assert (report.created, report.updated, report.archived, report.is_onboarding_applied) == (0, 0, 0, False)
     assert client.calls == []
+
+
+def test_온보딩_프로젝트가_12개를_넘으면_질문을_12개씩_나눈다():
+    from dataclasses import replace
+    from service.control_tower.registry import ProjectSpec
+
+    projects = tuple(ProjectSpec(f"project-{number:02d}", f"프로젝트 {number}") for number in range(16))
+    registry = replace(REGISTRY, projects=projects)
+    role_ids = {project.id: f"role-{project.id}" for project in projects}
+
+    payload = build_onboarding_payload(registry, role_ids)
+
+    assert [len(prompt["options"]) for prompt in payload["prompts"]] == [12, 4]
+    assert [prompt["title"] for prompt in payload["prompts"]] == [
+        "어떤 프로젝트 알림을 받을까요? (1/2)", "어떤 프로젝트 알림을 받을까요? (2/2)"]
+    assert len({prompt["id"] for prompt in payload["prompts"]}) == 2
+    option_ids = [option["id"] for prompt in payload["prompts"] for option in prompt["options"]]
+    assert len(set(option_ids)) == 16
