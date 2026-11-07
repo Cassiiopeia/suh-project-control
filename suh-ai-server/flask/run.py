@@ -59,11 +59,12 @@ if __name__ == '__main__':
 
     # 관제소 서비스 감시 폴러 + 디스코드 동기화 1회 (daemon thread, 실패해도 서버 기동 계속)
     try:
+        from config.control_tower_config import POLL_INTERVAL_SECONDS
         from service.control_tower.bootstrap import start_control_tower
         start_control_tower()
-        logger.info("Control tower poller started (60s interval)")
+        logger.info(f"[control-tower bootstrap] poller started ({POLL_INTERVAL_SECONDS}s interval)")
     except Exception as e:
-        logger.warning(f"Control tower start failed: {type(e).__name__}")
+        logger.warning(f"[control-tower bootstrap] start failed : {type(e).__name__}")
 
     # Start production server
     serve(

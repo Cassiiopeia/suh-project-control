@@ -12,8 +12,8 @@ from service.control_tower.check_runner import CheckResult
 from service.control_tower.registry import MaintenanceWindow
 from service.control_tower.state_machine import Observation, ServiceState
 from service.control_tower.store_schema import SCHEMA_STATEMENTS
+from service.control_tower.time_zones import KST
 
-KST = timezone(timedelta(hours=9))
 CONNECTION_TIMEOUT_SECONDS = 10  # 쓰기 잠금 대기
 BUSY_TIMEOUT_MILLISECONDS = 10000
 EVENT_DEDUPE_WINDOW = timedelta(minutes=10)

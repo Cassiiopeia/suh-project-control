@@ -6,13 +6,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from service.control_tower.registry import MaintenanceWindow, Registry, ServiceSpec
+from service.control_tower.registry import SERVICE_STATUS_ACTIVE, MaintenanceWindow, Registry, ServiceSpec
 from service.control_tower.state_machine import (
     CAUSE_EXTERNAL_PATH, CAUSE_UNREACHABLE, STATUS_DEGRADED, STATUS_DOWN, STATUS_UP, ServiceState, Transition,
 )
 
-# 생명주기 active만 알림 대상이자 억제 주체 (paused·retired 조상은 사슬에서 건너뜀)
-ACTIVE_STATUS = "active"
 # 집 인터넷 인프라 id (Worker 심박 끊김으로 down 판정)
 HOME_NETWORK_ID = "home-network"
 # 집 인터넷 장애 중 억제할 원인 (외부에서만 보이는 실패)
@@ -47,7 +45,7 @@ INDIVIDUAL = DownHandling(HANDLING_INDIVIDUAL)
 
 def decide_down_handling(context: AlertContext, service: ServiceSpec, state: ServiceState) -> DownHandling:
     """down 서비스 처리: 비활성·점검 중 > 막는 조상 > 집 인터넷(외부 원인) > 알림 완료면 개별 > 묶음 기준 > 개별"""
-    if service.status != ACTIVE_STATUS or is_in_maintenance(context, service.id):
+    if service.status != SERVICE_STATUS_ACTIVE or is_in_maintenance(context, service.id):
         return SILENT
     anchors = active_ancestors(context.registry, service)
     if any(_is_blocking(context, ancestor, state) for ancestor in anchors):
@@ -56,7 +54,7 @@ def decide_down_handling(context: AlertContext, service: ServiceSpec, state: Ser
     # 집 인터넷: 외부 원인만 막고 묶음 기준 후보로 추가 (자기 자신 제외)
     home_network = context.registry.service_by_id(HOME_NETWORK_ID)
     is_external_cause = state.cause in EXTERNAL_CAUSES and service.id != HOME_NETWORK_ID
-    if is_external_cause and home_network is not None and home_network.status == ACTIVE_STATUS:
+    if is_external_cause and home_network is not None and home_network.status == SERVICE_STATUS_ACTIVE:
         if _is_blocking(context, home_network, state):
             return SILENT
         anchors = [*anchors, home_network]
@@ -82,7 +80,7 @@ def active_ancestors(registry: Registry, service: ServiceSpec) -> list[ServiceSp
         parent = registry.service_by_id(parent_id)
         if parent is None:
             break
-        if parent.status == ACTIVE_STATUS:
+        if parent.status == SERVICE_STATUS_ACTIVE:
             ancestors.append(parent)
         parent_id = parent.depends_on
     return ancestors

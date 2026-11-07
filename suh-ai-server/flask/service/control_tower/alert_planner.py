@@ -8,10 +8,10 @@ from datetime import datetime, timedelta
 
 from service.control_tower import alert_texts
 from service.control_tower.alert_suppression import (
-    ACTIVE_STATUS, HANDLING_BUNDLE, HANDLING_INDIVIDUAL, AlertContext, decide_down_handling, is_in_maintenance,
+    HANDLING_BUNDLE, HANDLING_INDIVIDUAL, AlertContext, decide_down_handling, is_in_maintenance,
     recovery_alerted_at,
 )
-from service.control_tower.registry import MaintenanceWindow, Registry, ServiceSpec
+from service.control_tower.registry import SERVICE_STATUS_ACTIVE, MaintenanceWindow, Registry, ServiceSpec
 from service.control_tower.state_machine import STATUS_DOWN, ServiceState, Transition
 
 SEVERITY_CRITICAL = "critical"
@@ -120,7 +120,7 @@ def _plan_still_down_bundle(context: AlertContext, anchor_id: str, children: lis
 def _plan_recovery(context: AlertContext, transition: Transition) -> Notification | None:
     """복구 알림: 활성·점검 외·이번 장애를 알린 서비스만 > 다운 시간 + 함께 복구된 하위 서비스"""
     service = context.registry.service_by_id(transition.service_id)
-    if service is None or service.status != ACTIVE_STATUS or is_in_maintenance(context, service.id):
+    if service is None or service.status != SERVICE_STATUS_ACTIVE or is_in_maintenance(context, service.id):
         return None
     if not _was_outage_notified(context, transition):
         return None
@@ -162,7 +162,7 @@ def _active_descendants(registry: Registry, service: ServiceSpec) -> list[Servic
         if child.id in visited:
             continue
         visited.add(child.id)
-        if child.status == ACTIVE_STATUS:
+        if child.status == SERVICE_STATUS_ACTIVE:
             descendants.append(child)
         pending[:0] = registry.children_of(child.id)
     return descendants

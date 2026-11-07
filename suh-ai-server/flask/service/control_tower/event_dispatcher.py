@@ -38,6 +38,10 @@ class EventDispatcher:
         self._discord_client_provider = discord_client_provider
         self._status_page_url = status_page_url
 
+    def is_delivery_configured(self) -> bool:
+        """디스코드 클라이언트 설정 여부 (미설정이면 발송 실패를 재시도하지 않음)"""
+        return self._discord_client_provider() is not None
+
     def dispatch(self, notification: Notification) -> bool:
         """알림 1건 발송: 클라이언트 확인 > 채널 선택(없으면 global alert) > 임베드 전송"""
         discord_client = self._discord_client_provider()

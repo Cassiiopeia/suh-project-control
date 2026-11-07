@@ -5,8 +5,8 @@ from datetime import date, datetime, time, timedelta
 
 from service.control_tower import alert_texts
 from service.control_tower.alert_planner import GLOBAL_SCOPE, Notification
-from service.control_tower.alert_suppression import ACTIVE_STATUS
-from service.control_tower.registry import Registry, ServiceSpec
+from service.control_tower.registry import SERVICE_STATUS_ACTIVE, Registry, ServiceSpec
+from service.control_tower.time_zones import KST
 
 DIGEST_KIND = "digest"
 SEVERITY_INFO = "info"
@@ -21,7 +21,7 @@ def build_daily_digest(registry: Registry, store, day_kst: date) -> Notification
     """요약 1건: 활성 서비스 가동률 줄 > 장애 줄 > 전역 digest 알림"""
     day_text = day_kst.strftime(DAY_FORMAT)
     active_services = [
-        service for service in registry.infrastructure + registry.services if service.status == ACTIVE_STATUS
+        service for service in registry.infrastructure + registry.services if service.status == SERVICE_STATUS_ACTIVE
     ]
     body = "\n".join([
         _uptime_section(active_services, store.rollups_on_day(day_text)),
@@ -45,7 +45,7 @@ def _uptime_section(services: list[ServiceSpec], rollup_by_service_id: dict[str,
 
 def _incident_line(services: list[ServiceSpec], store, day_kst: date) -> str:
     """그날과 겹친 장애 'N건, 총 다운 시간' (다운 시간은 그날 안으로 자른 합계)"""
-    day_start = datetime.combine(day_kst, time.min, tzinfo=alert_texts.KST)
+    day_start = datetime.combine(day_kst, time.min, tzinfo=KST)
     day_end = day_start + timedelta(days=1)
     active_service_ids = {service.id for service in services}
     incidents = [incident for incident in store.incidents_overlapping(day_start, day_end)

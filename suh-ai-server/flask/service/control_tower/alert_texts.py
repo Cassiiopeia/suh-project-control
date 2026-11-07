@@ -1,11 +1,11 @@
 """관제소 알림 문구: 제목, 본문(원인·시작 시각·다운 시간·영향 서비스), 기간 한국어 표기"""
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 
 from service.control_tower.state_machine import CAUSE_EXTERNAL_PATH, CAUSE_SERVICE_DOWN, CAUSE_UNREACHABLE
+from service.control_tower.time_zones import KST
 
-KST = timezone(timedelta(hours=9))
 KST_TIME_FORMAT = "%Y-%m-%d %H:%M KST"
 
 SECONDS_PER_MINUTE = 60

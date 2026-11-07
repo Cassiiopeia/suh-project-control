@@ -15,7 +15,7 @@ import yaml
 from config import control_tower_config
 from service.control_tower.registry_discord_parser import parse_discord, parse_visibility
 from service.control_tower.registry_models import (
-    PROJECT_CHANNEL_KINDS, RESERVED_ROLE_KEYS, SERVICE_STATUSES,
+    PROJECT_CHANNEL_KINDS, RESERVED_ROLE_KEYS, SERVICE_STATUS_ACTIVE, SERVICE_STATUS_RETIRED, SERVICE_STATUSES,
     AlertPolicy, CheckSpec, DiscordPolicy, MaintenanceWindow, ProjectSpec, Registry, ServiceSpec,
 )
 from service.control_tower.registry_parse_helpers import (
@@ -161,7 +161,7 @@ def _parse_service(raw: Any, project_id: str | None, problems: list[str], where:
     service_id = read_string(raw_service, "id", where, problems) or ""
     where = f"{where}({service_id})" if service_id else where
     report_unknown_keys(raw_service, SERVICE_KEYS, where, problems)
-    status = str(raw_service.get("status", "active"))
+    status = str(raw_service.get("status", SERVICE_STATUS_ACTIVE))
     if status not in SERVICE_STATUSES:
         problems.append(f"{where}: invalid status '{status}' (allowed: {', '.join(SERVICE_STATUSES)})")
     depends_on = read_string(raw_service, "depends_on", where, problems, False)
@@ -255,7 +255,7 @@ def _check_references(projects: tuple[ProjectSpec, ...], services: tuple[Service
         if window.service_id not in known_ids:
             problems.append(f"maintenance: unknown service '{window.service_id}'")
 
-    external_count = sum(1 for service in services if service.external and service.status != "retired")
+    external_count = sum(1 for service in services if service.external and service.status != SERVICE_STATUS_RETIRED)
     if external_count > control_tower_config.MAX_EXTERNAL_CHECKS:
         problems.append(f"registry: {external_count} external checks exceed the limit of "
                         f"{control_tower_config.MAX_EXTERNAL_CHECKS}")

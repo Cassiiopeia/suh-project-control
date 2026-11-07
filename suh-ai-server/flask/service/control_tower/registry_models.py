@@ -9,7 +9,10 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 # 서비스 생명주기: active 감시·알림·공개 / paused 감시만 / retired 감시 안 함
-SERVICE_STATUSES = ("active", "paused", "retired")
+SERVICE_STATUS_ACTIVE = "active"
+SERVICE_STATUS_PAUSED = "paused"
+SERVICE_STATUS_RETIRED = "retired"
+SERVICE_STATUSES = (SERVICE_STATUS_ACTIVE, SERVICE_STATUS_PAUSED, SERVICE_STATUS_RETIRED)
 # 프로젝트 디스코드 채널 종류 (미지정 시 전부)
 PROJECT_CHANNEL_KINDS = ("status", "error", "report", "deploy")
 # 전역 디스코드 채널 종류
@@ -41,7 +44,7 @@ class ServiceSpec:
     id: str
     name: str
     project_id: str | None  # 인프라 항목은 None
-    status: str = "active"
+    status: str = SERVICE_STATUS_ACTIVE
     is_public: bool = False
     depends_on: str | None = None
     internal: CheckSpec | None = None
@@ -121,7 +124,7 @@ class Registry:
             "services": [
                 _service_to_snapshot(service)
                 for service in sorted(self.services, key=lambda service: service.id)
-                if service.status != "retired"
+                if service.status != SERVICE_STATUS_RETIRED
             ],
             "maintenance": [
                 {"service_id": window.service_id, "until": window.until.isoformat()}
