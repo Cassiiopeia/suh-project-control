@@ -3,6 +3,8 @@
 """
 from __future__ import annotations
 
+import re
+
 from service.control_tower.discord_sync_models import (
     ACTION_ARCHIVE_CATEGORY, ACTION_ARCHIVE_CHANNEL, ACTION_BIND, ACTION_CREATE_CATEGORY, ACTION_CREATE_CHANNEL,
     ACTION_CREATE_ROLE, ACTION_UPDATE_CHANNEL, ADMIN_ROLE_KEY, ADMIN_ROLE_REFERENCE, ARCHIVE_NAME_PREFIX,
@@ -34,6 +36,8 @@ class _SyncPlanner:
         self._role_id_by_reference: dict[str, str] = {}
         self._category_id_by_project: dict[str, str] = {}
         self._managed_overwrite_ids: set[str] = set()
+        # 등록된 프로젝트·전역 키가 이미 쓰는 채널 id (다른 키의 이름 매칭·보관 대상에서 제외)
+        self._claimed_channel_ids = self._collect_live_bound_channel_ids()
         self._operations: list[SyncOperation] = []
 
     def plan(self) -> list[SyncOperation]:
@@ -84,6 +88,12 @@ class _SyncPlanner:
                           if kind.startswith(ROLE_KIND_PREFIX)}
         return {self._guild_id} | set(self._role_id_by_reference.values()) | bound_role_ids
 
+    def _collect_live_bound_channel_ids(self) -> set[str]:
+        """등록된 프로젝트·전역 scope에 바인딩된 카테고리·채널 id (보관 대상 프로젝트 바인딩 제외)"""
+        live_scopes = {project.id for project in self._registry.projects} | {GLOBAL_SCOPE}
+        return {discord_id for (scope, kind), discord_id in self._bindings.items()
+                if scope in live_scopes and not kind.startswith(ROLE_KIND_PREFIX)}
+
     # ---- 카테고리·채널 ----
 
     def _plan_category(self, project: ProjectSpec) -> None:
@@ -102,7 +112,7 @@ class _SyncPlanner:
 
     def _plan_channel(self, scope: str, kind: str, visible_role_keys: tuple[str, ...], parent_scope: str | None) -> None:
         """채널 매칭 (바인딩 id > 같은 부모 안 같은 이름), 없으면 생성, 다르면 수정"""
-        name = self._policy.channel_names.get(kind, kind)
+        name = _text_channel_name(self._policy.channel_names.get(kind, kind))
         parent_id = self._category_id_by_project.get(parent_scope) if parent_scope else None
         is_parent_pending = parent_scope is not None and parent_id is None
         candidates = [] if is_parent_pending else [
@@ -119,22 +129,28 @@ class _SyncPlanner:
                           self._managed_overwrites(channel, scope, visible_role_keys))
 
     def _find_existing(self, scope: str, kind: str, name: str, name_candidates: list[dict]) -> dict | None:
-        """바인딩 id가 아직 있으면 그것, 없으면 같은 이름 (이름 매칭 시 바인딩 작업 추가)"""
+        """바인딩 id가 아직 있으면 그것, 없으면 다른 키가 안 쓰는 같은 이름 (이름 매칭 시 바인딩 작업 추가)"""
         bound_id = self._bindings.get((scope, kind))
         if bound_id in self._channel_by_id:
+            self._claimed_channel_ids.add(bound_id)
             return self._channel_by_id[bound_id]
-        named_channel = next((channel for channel in name_candidates if channel.get("name") == name), None)
+        named_channel = next((channel for channel in name_candidates
+                              if str(channel["id"]) not in self._claimed_channel_ids and _is_same_name(channel, name)),
+                             None)
         if named_channel is not None:
+            self._claimed_channel_ids.add(str(named_channel["id"]))
             self._operations.append(SyncOperation(ACTION_BIND, scope, kind, name, target_id=str(named_channel["id"])))
         return named_channel
 
     # ---- 보관 ----
 
     def _plan_archives(self) -> None:
-        """등록에서 빠진 프로젝트 카테고리 + 하위 채널 > 보관 이름, 관리자만"""
+        """등록에서 빠진 프로젝트 카테고리 + 하위 채널 > 보관 이름, 관리자만 (등록 프로젝트가 쓰는 카테고리·채널 제외)"""
         project_ids = {project.id for project in self._registry.projects}
         for (scope, kind), category_id in sorted(self._bindings.items()):
             if kind != CATEGORY_KIND or scope in project_ids or scope == GLOBAL_SCOPE:
+                continue
+            if category_id in self._claimed_channel_ids:
                 continue
             category = self._channel_by_id.get(category_id)
             if category is None:
@@ -142,7 +158,7 @@ class _SyncPlanner:
             self._plan_update(ACTION_ARCHIVE_CATEGORY, scope, CATEGORY_KIND, _archived_name(category["name"]),
                               category, self._managed_overwrites(category, scope, ()))
             for channel in self._channels:
-                if _parent_id_of(channel) != category_id:
+                if _parent_id_of(channel) != category_id or str(channel["id"]) in self._claimed_channel_ids:
                     continue
                 self._plan_update(ACTION_ARCHIVE_CHANNEL, scope, self._bound_kind(scope, str(channel["id"])),
                                   str(channel.get("name", "")), channel, self._managed_overwrites(channel, scope, ()))
@@ -203,7 +219,7 @@ class _SyncPlanner:
     def _plan_update(self, action: str, scope: str, kind: str | None, name: str, channel: dict,
                      desired_overwrites: tuple[dict, ...]) -> None:
         """이름 또는 관리 덮어쓰기가 다를 때만 수정 작업 (개인·비관리 역할 덮어쓰기는 보존 목록으로)"""
-        if channel.get("name") == name and self._is_overwrites_equal(channel, desired_overwrites):
+        if _is_same_name(channel, name) and self._is_overwrites_equal(channel, desired_overwrites):
             return
         preserved = tuple(overwrite for overwrite in channel.get("permission_overwrites") or []
                           if not self._is_managed(overwrite))
@@ -229,6 +245,19 @@ class _SyncPlanner:
 def _parent_id_of(channel: dict) -> str | None:
     parent_id = channel.get("parent_id")
     return str(parent_id) if parent_id else None
+
+
+def _text_channel_name(name: str) -> str:
+    """디스코드 텍스트 채널 저장 형태: 소문자, 공백 > '-' ('Server Status' > 'server-status', 한글 그대로)"""
+    return re.sub(r"\s+", "-", name.strip().lower())
+
+
+def _is_same_name(channel: dict, name: str) -> bool:
+    """이름 비교 (카테고리는 그대로, 텍스트 채널은 디스코드 저장 형태로)"""
+    current_name = str(channel.get("name", ""))
+    if channel.get("type") == CATEGORY_CHANNEL_TYPE:
+        return current_name == name
+    return _text_channel_name(current_name) == _text_channel_name(name)
 
 
 def _archived_name(name: str) -> str:

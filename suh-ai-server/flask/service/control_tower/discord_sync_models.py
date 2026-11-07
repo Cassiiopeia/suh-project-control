@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+# 전역 채널·관리자 역할 바인딩 scope (그 외 scope는 프로젝트 id)
 GLOBAL_SCOPE = "global"
 # 프로젝트 카테고리 바인딩 kind
 CATEGORY_KIND = "_category"
 # 역할 바인딩 kind 접두사: role:member, role:dev, role:admin
 ROLE_KIND_PREFIX = "role:"
+# 공개 대상 예약 역할 키: admin 관리자 역할(항상 허용), everyone 서버 전체(@everyone 차단 안 함)
 ADMIN_ROLE_KEY = "admin"
 EVERYONE_ROLE_KEY = "everyone"
 # 관리자 역할 참조 (scope:role_key)
@@ -18,18 +20,20 @@ TEXT_CHANNEL_TYPE = 0
 CATEGORY_CHANNEL_TYPE = 4
 # 권한 덮어쓰기 대상 타입: 0 역할, 1 개인
 ROLE_OVERWRITE_TYPE = 0
-# VIEW_CHANNEL 권한 비트
+# 채널 보기 권한 비트 (VIEW_CHANNEL, 1 << 10)
 VIEW_CHANNEL_PERMISSION = 1024
+# 보관 카테고리 이름 접두사 ('샘플' > '[보관] 샘플', 1회만)
 ARCHIVE_NAME_PREFIX = "[보관] "
+# role_names 템플릿의 프로젝트 id 자리 ('{project}-dev' > 'elum-dev')
 PROJECT_NAME_PLACEHOLDER = "{project}"
 
 # 작업 종류 (실행 순서: 역할 > 카테고리 > 채널 > 보관)
-ACTION_CREATE_ROLE = "create_role"
+ACTION_CREATE_ROLE = "create_role"  # 역할 생성 + 바인딩
 ACTION_BIND = "bind"  # 이름으로 찾은 기존 객체 바인딩 기록만
-ACTION_CREATE_CATEGORY = "create_category"
-ACTION_CREATE_CHANNEL = "create_channel"
+ACTION_CREATE_CATEGORY = "create_category"  # 프로젝트 카테고리 생성 + 바인딩
+ACTION_CREATE_CHANNEL = "create_channel"  # 텍스트 채널 생성 (parent_scope 카테고리 아래) + 바인딩
 ACTION_UPDATE_CHANNEL = "update_channel"  # 카테고리 포함, 이름·관리 덮어쓰기 맞춤
-ACTION_ARCHIVE_CATEGORY = "archive_category"
+ACTION_ARCHIVE_CATEGORY = "archive_category"  # 등록에서 빠진 프로젝트 카테고리 > 보관 이름, 관리자만
 ACTION_ARCHIVE_CHANNEL = "archive_channel"  # 보관 카테고리 아래 채널 관리자만으로
 
 

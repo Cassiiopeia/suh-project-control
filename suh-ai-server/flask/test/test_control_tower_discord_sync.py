@@ -1,11 +1,12 @@
-"""관제소 디스코드 동기화: 빈 서버 생성 계획, 멱등, 공개 대상 덮어쓰기, 이름 매칭, 이름 변경, 개인 권한 보존, 보관"""
+"""관제소 디스코드 동기화: 빈 서버 생성 계획, 멱등, 공개 대상 덮어쓰기, 이름 매칭, 이름 변경·정규화, 개인 권한 보존, 보관, id 변경"""
 from __future__ import annotations
 
 from dataclasses import replace
 
 import pytest
 from control_tower_discord_fakes import (
-    ELUM, GUILD_ID, REGISTRY, SEND_MESSAGES, VIEW_CHANNEL, FakeDiscordClient, make_registry, overwrite_map,
+    ELUM, GUILD_ID, REGISTRY, SEND_MESSAGES, VIEW_CHANNEL, FakeDiscordClient, make_project, make_registry,
+    overwrite_map,
 )
 
 from service.control_tower.discord_sync import plan_sync, sync_discord
@@ -182,3 +183,48 @@ def test_등록에서_빠진_프로젝트_카테고리는_보관_이름과_관�
     sync_discord(REGISTRY, client, store, GUILD_ID)
     assert client.channel_by_id(sample_category_id)["name"] == "샘플"
     assert client.role_id("sample") in overwrite_map(client.channel_by_id(sample_category_id))
+
+
+def test_프로젝트_id만_바뀌고_표시_이름이_같으면_기존_카테고리를_이어_쓰고_보관을_반복하지_않는다(store):
+    client = FakeDiscordClient()
+    sync_discord(make_registry(ELUM), client, store, GUILD_ID)
+    category_id = store.get_binding("elum", "_category")
+    status_channel_id = store.get_binding("elum", "status")
+    renamed_registry = make_registry(make_project("elum2", "이룸"))
+
+    reports = [sync_discord(renamed_registry, client, store, GUILD_ID) for _ in range(3)]
+
+    assert [report.archived for report in reports] == [0, 0, 0]
+    assert all(report.errors == [] for report in reports)
+    assert (reports[2].created, reports[2].updated) == (0, 0)
+    assert [channel["name"] for channel in client.channels if channel["type"] == 4] == ["이룸"]
+    assert store.get_binding("elum2", "_category") == category_id
+    assert store.get_binding("elum2", "status") == status_channel_id
+    assert client.role_id("elum2") in overwrite_map(client.channel_by_id(category_id))
+    assert client.role_id("elum") not in overwrite_map(client.channel_by_id(category_id))
+    assert _plan(client, store, renamed_registry) == []
+
+
+def test_표시_이름이_같은_새_프로젝트는_다른_프로젝트가_쓰는_카테고리를_가져가지_않는다(store):
+    first_project = make_project("alpha", "같은이름")
+    client = FakeDiscordClient()
+    sync_discord(make_registry(first_project), client, store, GUILD_ID)
+    both_registry = make_registry(first_project, make_project("beta", "같은이름"))
+
+    report = sync_discord(both_registry, client, store, GUILD_ID)
+
+    assert report.archived == 0
+    assert store.get_binding("beta", "_category") not in (None, store.get_binding("alpha", "_category"))
+    assert len([channel for channel in client.channels if channel["type"] == 4]) == 2
+    assert _plan(client, store, both_registry) == []
+
+
+def test_공백_대문자가_있는_채널_이름은_디스코드_저장_형태로_비교해_이름_변경을_반복하지_않는다(store):
+    spaced_policy = replace(REGISTRY.discord, channel_names={**REGISTRY.discord.channel_names, "status": "Server Status"})
+    spaced_registry = replace(REGISTRY, discord=spaced_policy)
+    client = FakeDiscordClient()
+
+    sync_discord(spaced_registry, client, store, GUILD_ID)
+
+    assert client.channel_by_id(store.get_binding("elum", "status"))["name"] == "server-status"
+    assert _plan(client, store, spaced_registry) == []

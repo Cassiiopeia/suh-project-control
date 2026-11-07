@@ -3,6 +3,8 @@
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 
 from service.control_tower.discord_client import DiscordError
@@ -25,6 +27,8 @@ ONBOARDING_EXCLUDED_PROJECT_IDS = ("infra",)
 ONBOARDING_PROMPT_TYPE_MULTIPLE_CHOICE = 0
 ONBOARDING_MODE_DEFAULT = 0
 NOTICE_CHANNEL_KIND = "notice"
+# meta: 마지막으로 성공한 온보딩 PUT payload의 sha256 (같으면 PUT 생략)
+META_KEY_ONBOARDING_HASH = "discord_onboarding_hash"
 
 
 def sync_discord(registry: Registry, client, store, guild_id: str) -> SyncReport:
@@ -73,7 +77,8 @@ def build_onboarding_payload(registry: Registry, role_ids_by_project: dict[str, 
 
 
 def _apply_onboarding(registry: Registry, client, store) -> bool:
-    """바인딩된 member 역할·공지 채널로 온보딩 PUT (옵션이 없으면 보내지 않음, 실패는 False)"""
+    """바인딩된 member 역할·공지 채널로 온보딩 PUT: 마지막 성공과 같으면 생략(True), 옵션 없으면 생략(False)
+    성공 시에만 해시 기록 > 실패 뒤 다음 동기화에서 재시도"""
     bindings = store.all_bindings()
     role_ids_by_project = {
         project.id: bindings[(project.id, ROLE_KIND_PREFIX + ONBOARDING_ROLE_KEY)]
@@ -83,4 +88,16 @@ def _apply_onboarding(registry: Registry, client, store) -> bool:
     payload = build_onboarding_payload(registry, role_ids_by_project, bindings.get((GLOBAL_SCOPE, NOTICE_CHANNEL_KIND)))
     if not payload["prompts"][0]["options"]:
         return False
-    return client.put_onboarding(payload)
+    payload_hash = _onboarding_payload_hash(payload)
+    if store.get_meta(META_KEY_ONBOARDING_HASH) == payload_hash:
+        return True
+    if not client.put_onboarding(payload):
+        return False
+    store.set_meta(META_KEY_ONBOARDING_HASH, payload_hash)
+    return True
+
+
+def _onboarding_payload_hash(payload: dict) -> str:
+    """정규화 JSON(키 정렬)의 sha256"""
+    canonical_json = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import copy
+import re
 
 from service.control_tower.discord_client import DiscordError
 from service.control_tower.registry import DiscordPolicy, ProjectSpec, Registry
@@ -26,8 +27,13 @@ SAMPLE = make_project("sample", "샘플")
 REGISTRY = make_registry(ELUM, SAMPLE)
 
 
+def to_discord_text_channel_name(name: str) -> str:
+    """디스코드가 텍스트 채널 이름을 저장하는 형태 흉내 (소문자, 공백 > '-')"""
+    return re.sub(r"\s+", "-", name.strip().lower())
+
+
 class FakeDiscordClient:
-    """메모리 디스코드 서버: 생성·수정 반영, 변경 호출 기록, 이름 지정 실패 주입"""
+    """메모리 디스코드 서버: 생성·수정 반영(텍스트 채널 이름 정규화), 변경 호출 기록, 이름 지정 실패 주입"""
 
     def __init__(self, failing_names: tuple[str, ...] = (), is_onboarding_accepted: bool = True):
         self.channels: list[dict] = []
@@ -65,7 +71,8 @@ class FakeDiscordClient:
     def create_channel(self, name: str, channel_type: int, parent_id: str | None, overwrites: list[dict]) -> dict:
         self.calls.append(("create_channel", name, channel_type, parent_id))
         self._fail_if_requested(name)
-        channel = {"id": self._new_id(), "name": name, "type": channel_type, "parent_id": parent_id,
+        stored_name = to_discord_text_channel_name(name) if channel_type == 0 else name
+        channel = {"id": self._new_id(), "name": stored_name, "type": channel_type, "parent_id": parent_id,
                    "permission_overwrites": copy.deepcopy(overwrites)}
         self.channels.append(channel)
         return copy.deepcopy(channel)
@@ -75,6 +82,8 @@ class FakeDiscordClient:
         channel = self.channel_by_id(channel_id)
         self._fail_if_requested(channel["name"])
         channel.update(copy.deepcopy(fields))
+        if channel["type"] == 0:
+            channel["name"] = to_discord_text_channel_name(channel["name"])
         return copy.deepcopy(channel)
 
     def put_onboarding(self, payload: dict) -> bool:
@@ -106,6 +115,12 @@ class FakeDiscordClient:
                    "permission_overwrites": overwrites or []}
         self.channels.append(channel)
         return channel
+
+    def remove_channel(self, channel_id: str) -> None:
+        self.channels = [channel for channel in self.channels if channel["id"] != channel_id]
+
+    def remove_role(self, name: str) -> None:
+        self.roles = [role for role in self.roles if role["name"] != name]
 
     def add_role(self, name: str) -> dict:
         role = {"id": self._new_id(), "name": name}

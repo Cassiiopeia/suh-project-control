@@ -14,6 +14,8 @@ from service.control_tower.discord_sync_models import (
 
 logger = logging.getLogger(__name__)
 
+# 실패·건너뜀 시 의존 작업을 막는 생성 작업 (수정 실패는 객체가 그대로 있어 막지 않음)
+CREATE_ACTIONS = (ACTION_CREATE_ROLE, ACTION_CREATE_CATEGORY, ACTION_CREATE_CHANNEL)
 # 실행 단계: 0 역할, 1 카테고리, 2 채널, 3 보관
 ROLE_PHASE = 0
 CATEGORY_PHASE = 1
@@ -62,12 +64,11 @@ class _SyncApplier:
         try:
             self._apply_operation(operation)
         except _DependencyUnavailable as error:
-            self._mark_unavailable(operation)
+            self._mark_unavailable_if_create(operation)
             detail = f"skipped (dependency unavailable: {error.reference})"
             self._record_error(operation, detail, detail)
         except DiscordError as error:
-            if operation.action in (ACTION_CREATE_ROLE, ACTION_CREATE_CATEGORY):
-                self._mark_unavailable(operation)
+            self._mark_unavailable_if_create(operation)
             status_text = f"status {error.status_code}"
             self._record_error(operation, f"{status_text} {error.reason}".rstrip(), status_text)
 
@@ -125,12 +126,12 @@ class _SyncApplier:
         self._store.set_binding(operation.scope, operation.kind, discord_id)
         self._discord_id_by_binding[(operation.scope, operation.kind)] = discord_id
 
-    def _mark_unavailable(self, operation: SyncOperation) -> None:
-        if operation.kind is not None:
+    def _mark_unavailable_if_create(self, operation: SyncOperation) -> None:
+        if operation.action in CREATE_ACTIONS and operation.kind is not None:
             self._unavailable_bindings.add((operation.scope, operation.kind))
 
     def _record_error(self, operation: SyncOperation, detail: str, log_detail: str) -> None:
-        """오류 1줄: '{작업} {scope}/{kind}: {사유}' (토큰·응답 본문 미포함, 로그엔 디스코드 사유 문구 제외)"""
-        prefix = f"{operation.action} {operation.scope}/{operation.kind}"
+        """오류 1줄: '{작업} {scope}/{kind 또는 채널 이름}: {사유}' (토큰·응답 본문 미포함, 로그엔 디스코드 사유 문구 제외)"""
+        prefix = f"{operation.action} {operation.scope}/{operation.kind or operation.name}"
         self.report.errors.append(f"{prefix}: {detail}")
         logger.warning("[control-tower discord sync] %s : %s", prefix, log_detail)
