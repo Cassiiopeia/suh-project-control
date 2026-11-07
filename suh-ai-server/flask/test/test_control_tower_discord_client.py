@@ -190,3 +190,31 @@ def test_put_onboarding_true_on_success_false_on_failure_never_raises():
     assert (session.calls[0]["method"], session.calls[0]["url"]) == ("PUT", f"{BASE_URL}/guilds/{GUILD_ID}/onboarding")
     assert client.put_onboarding({}) is False
     assert client.put_onboarding({}) is False
+
+
+def test_초대_멤버_역할_호출은_디스코드_REST_경로와_감사_사유를_쓴다():
+    client, session, _ = _client(FakeResponse(200, {"code": "abc"}), FakeResponse(200, []), FakeResponse(204),
+                                 FakeResponse(200, []), FakeResponse(204))
+    assert client.create_invite("55")["code"] == "abc"
+    client.list_guild_invites()
+    client.add_member_role("7", "8")
+    client.list_members(after="42")
+    client.delete_invite("abc")
+
+    requests_made = [(call["method"], call["url"]) for call in session.calls]
+    assert requests_made == [
+        ("POST", f"{BASE_URL}/channels/55/invites"),
+        ("GET", f"{BASE_URL}/guilds/{GUILD_ID}/invites"),
+        ("PUT", f"{BASE_URL}/guilds/{GUILD_ID}/members/7/roles/8"),
+        ("GET", f"{BASE_URL}/guilds/{GUILD_ID}/members?limit=1000&after=42"),
+        ("DELETE", f"{BASE_URL}/invites/abc"),
+    ]
+    assert session.calls[0]["json"] == {"max_age": 0, "max_uses": 0, "unique": True}
+    assert session.calls[0]["headers"]["X-Audit-Log-Reason"] == AUDIT_LOG_REASON
+
+
+def test_초대_생성_실패는_DiscordError():
+    client, _, _ = _client(FakeResponse(403, {"message": "Missing Permissions"}))
+    with pytest.raises(DiscordError) as error:
+        client.create_invite("55")
+    assert error.value.status_code == 403

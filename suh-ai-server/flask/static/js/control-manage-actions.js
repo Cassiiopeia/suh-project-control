@@ -13,6 +13,9 @@
     cloudflare_not_configured: 'CLOUDFLARE_API_TOKEN이 설정되지 않았습니다',
     dns_lookup_failed: 'Cloudflare 조회에 실패했습니다',
     unavailable: '관제소를 사용할 수 없습니다',
+    discord_not_configured: '디스코드 봇이 설정되지 않았습니다',
+    discord_not_synced: '디스코드 동기화를 먼저 실행하세요 (상태 채널·역할 없음)',
+    discord_failed: '디스코드 요청에 실패했습니다',
   };
   // 서비스 id 규칙 (서버 검증과 같음)
   const IDENTIFIER_PATTERN = /^[a-z0-9][a-z0-9-]{1,40}$/;

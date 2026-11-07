@@ -59,10 +59,12 @@ def build_manage(runtime, context: ManageContext) -> dict:
     """관리 화면 본문: 상태 페이지 설정 > 프로젝트 > 서비스(인프라 포함, 표시 순서) > 외부 점검 사용량"""
     states = _current_states(runtime)
     page = context.effective.page
+    invites = runtime.store.all_project_invites()
     return {
         "page": {"title": page.title, "notice_text": page.notice_text, "notice_level": page.notice_level,
                  "preview_url": os.environ.get(STATUS_PAGE_URL_ENV) or DEFAULT_STATUS_PAGE_URL},
-        "projects": [_project_entry(project, context) for project in context.effective.projects],
+        "projects": [_project_entry(project, context, invites.get(project.id))
+                     for project in context.effective.projects],
         "services": [_service_entry(service, context, states)
                      for service in context.effective.services + context.effective.infrastructure],
         "external_checks": {"used": count_external_checks(context.effective), "maximum": MAX_EXTERNAL_CHECKS},
@@ -98,7 +100,8 @@ def _current_states(runtime) -> dict:
     return dict(snapshot.states) if snapshot is not None else {}
 
 
-def _project_entry(project, context: ManageContext) -> dict:
+def _project_entry(project, context: ManageContext, invite=None) -> dict:
+    """invite_url: 디스코드 초대 링크 (없으면 null)"""
     override = context.overrides.project_overrides.get(project.id)
     original = next((item for item in context.file_registry.projects if item.id == project.id), None)
     custom = next((item for item in context.overrides.custom_projects if item.id == project.id), None)
@@ -108,6 +111,7 @@ def _project_entry(project, context: ManageContext) -> dict:
         "source": SOURCE_REGISTRY if original is not None else SOURCE_CUSTOM,
         "original_name": original.name if original is not None else (custom.name if custom else project.name),
         "overridden_fields": override.overridden_fields() if override else [],
+        "invite_url": invite.url if invite is not None else None,
     }
 
 

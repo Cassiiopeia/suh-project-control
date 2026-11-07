@@ -59,13 +59,14 @@ class AuditAction(str, Enum):
     CLAUDE_CODE_REQUEST = "CLAUDE_CODE_REQUEST"
     CLAUDE_CODE_ISSUED = "CLAUDE_CODE_ISSUED"
     CLAUDE_CODE_VIEW = "CLAUDE_CODE_VIEW"
-    # 관제소 관리 화면: 서비스 덮어쓰기·추가·삭제 / 프로젝트 덮어쓰기·추가 / 상태 페이지 설정
+    # 관제소 관리 화면: 서비스 덮어쓰기·추가·삭제 / 프로젝트 덮어쓰기·추가 / 상태 페이지 설정 / 프로젝트 초대 발급
     CONTROL_SERVICE_UPDATE = "CONTROL_SERVICE_UPDATE"
     CONTROL_SERVICE_CREATE = "CONTROL_SERVICE_CREATE"
     CONTROL_SERVICE_DELETE = "CONTROL_SERVICE_DELETE"
     CONTROL_PROJECT_UPDATE = "CONTROL_PROJECT_UPDATE"
     CONTROL_PROJECT_CREATE = "CONTROL_PROJECT_CREATE"
     CONTROL_STATUS_PAGE_UPDATE = "CONTROL_STATUS_PAGE_UPDATE"
+    CONTROL_PROJECT_INVITE = "CONTROL_PROJECT_INVITE"
 
 
 def record(category: AuditCategory, action: AuditAction, actor_ip: str, detail: dict = None, *,
