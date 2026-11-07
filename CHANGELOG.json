@@ -1,14 +1,33 @@
 {
   "metadata": {
-    "lastUpdated": "2026-11-07T10:52:09Z",
-    "currentVersion": "2.0.76",
+    "lastUpdated": "2026-11-07T11:20:14Z",
+    "currentVersion": "2.0.77",
     "projectType": "python",
-    "totalReleases": 72,
+    "totalReleases": 73,
     "projectTypes": [
       "python"
     ]
   },
   "releases": [
+    {
+      "version": "2.0.77",
+      "project_type": "python",
+      "project_types": [
+        "python"
+      ],
+      "date": "2026-11-07",
+      "pr_number": 154,
+      "raw_summary": "## Summary by CodeRabbit\n\n## 릴리스 노트\n\n* **문서**\n  * 저장소에 MIT 라이선스를 추가하고 README에 라이선스 안내를 넣음",
+      "parsed_changes": {
+        "문서": {
+          "title": "문서",
+          "items": [
+            "저장소에 MIT 라이선스를 추가하고 README에 라이선스 안내를 넣음"
+          ]
+        }
+      },
+      "parse_method": "markdown"
+    },
     {
       "version": "2.0.76",
       "project_type": "python",

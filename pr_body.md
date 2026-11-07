@@ -5,7 +5,7 @@
 ## 릴리스 노트
 
 * **문서**
-  * 저장소 첫 화면(README)을 개편하고 관리 화면 캡처와 API Key 인증 안내를 추가
+  * 저장소에 MIT 라이선스를 추가하고 README에 라이선스 안내를 넣음
 
 <!-- end of auto-generated comment: release notes by coderabbit.ai -->
 
