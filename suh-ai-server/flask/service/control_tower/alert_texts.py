@@ -1,0 +1,128 @@
+"""관제소 알림 문구: 제목, 본문(원인·시작 시각·다운 시간·영향 서비스), 기간 한국어 표기"""
+from __future__ import annotations
+
+from datetime import datetime
+
+from service.control_tower.state_machine import CAUSE_EXTERNAL_PATH, CAUSE_SERVICE_DOWN, CAUSE_UNREACHABLE
+from service.control_tower.time_zones import KST
+
+KST_TIME_FORMAT = "%Y-%m-%d %H:%M KST"
+
+SECONDS_PER_MINUTE = 60
+SECONDS_PER_HOUR = 3600
+SECONDS_PER_DAY = 86400
+
+# 장애 원인 코드 > 표시 문구
+CAUSE_LABELS = {
+    CAUSE_SERVICE_DOWN: "서비스 다운",
+    CAUSE_EXTERNAL_PATH: "바깥 연결 문제 (프록시/포트포워딩/DNS)",
+    CAUSE_UNREACHABLE: "접속 불가",
+}
+UNKNOWN_CAUSE_LABEL = "알 수 없음"
+# 다수 장애·복구 본문에 나열할 최대 이름 수 (넘으면 '외 N개')
+BULK_NAME_LIMIT = 40
+
+
+def format_duration_korean(seconds: float) -> str:
+    """초 > 큰 단위 2개까지 한국어 (예: 2일 3시간, 1시간 12분, 5분, 1분 미만)"""
+    total_seconds = int(seconds)
+    days, remainder = divmod(total_seconds, SECONDS_PER_DAY)
+    hours, remainder = divmod(remainder, SECONDS_PER_HOUR)
+    minutes = remainder // SECONDS_PER_MINUTE
+    if days:
+        return _join_units((days, "일"), (hours, "시간"))
+    if hours:
+        return _join_units((hours, "시간"), (minutes, "분"))
+    if minutes:
+        return f"{minutes}분"
+    return "1분 미만"
+
+
+def _join_units(major: tuple[int, str], minor: tuple[int, str]) -> str:
+    """큰 단위 + 작은 단위 (작은 단위 0이면 생략)"""
+    text = f"{major[0]}{major[1]}"
+    return text if not minor[0] else f"{text} {minor[0]}{minor[1]}"
+
+
+def format_kst(moment: datetime) -> str:
+    """시각 > YYYY-MM-DD HH:MM KST"""
+    return moment.astimezone(KST).strftime(KST_TIME_FORMAT)
+
+
+def down_title(service_name: str) -> str:
+    return f"[다운] {service_name}"
+
+
+def reminder_title(service_name: str) -> str:
+    return f"[계속 다운] {service_name}"
+
+
+def recovery_title(service_name: str) -> str:
+    return f"[복구] {service_name}"
+
+
+def still_down_bundle_title(anchor_name: str) -> str:
+    return f"[복구 후 계속 다운] {anchor_name}"
+
+
+def bulk_down_title(service_count: int) -> str:
+    return f"[다수 장애] {service_count}개 서비스"
+
+
+def bulk_recovery_title(service_count: int) -> str:
+    return f"[다수 복구] {service_count}개 서비스"
+
+
+def bulk_body(entries: list[str]) -> str:
+    """다수 장애·복구 본문: 한 줄에 1개, 40개 넘으면 '외 N개'"""
+    lines = entries[:BULK_NAME_LIMIT]
+    remaining_count = len(entries) - len(lines)
+    if remaining_count > 0:
+        lines.append(f"외 {remaining_count}개")
+    return "\n".join(lines)
+
+
+def still_down_bundle_body(children: list[tuple[str, str | None]]) -> str:
+    """묶음 본문: (이름, 원인) 목록 > 원인 같으면 '원인' 1줄 + 이름 목록, 다르면 이름마다 원인 괄호"""
+    causes = {cause for _, cause in children}
+    if len(causes) == 1:
+        names = [name for name, _ in children]
+        return _join_lines(f"원인: {cause_label(causes.pop())}", _name_list_line("계속 다운", names))
+    names_with_cause = [f"{name} ({cause_label(cause)})" for name, cause in children]
+    return _name_list_line("계속 다운", names_with_cause)
+
+
+def down_body(cause: str | None, since: datetime, affected_names: list[str]) -> str:
+    """down 본문: 원인 > 시작 > 영향 서비스"""
+    return _join_lines(_outage_lines(cause, since), _name_list_line("영향 서비스", affected_names))
+
+
+def reminder_body(cause: str | None, since: datetime, now: datetime, affected_names: list[str]) -> str:
+    """재알림 본문: 원인 > 시작 > 다운 지속 > 영향 서비스"""
+    elapsed_line = f"다운 지속: {format_duration_korean((now - since).total_seconds())}"
+    return _join_lines(_outage_lines(cause, since), elapsed_line, _name_list_line("영향 서비스", affected_names))
+
+
+def recovery_body(cause: str | None, since: datetime, now: datetime, recovered_child_names: list[str]) -> str:
+    """복구 본문: 원인 > 시작 > 다운 시간 > 함께 복구된 서비스"""
+    downtime_line = f"다운 시간: {format_duration_korean((now - since).total_seconds())}"
+    return _join_lines(_outage_lines(cause, since), downtime_line,
+                       _name_list_line("함께 복구된 서비스", recovered_child_names))
+
+
+def cause_label(cause: str | None) -> str:
+    """원인 코드 > 표시 문구 (모르면 '알 수 없음')"""
+    return CAUSE_LABELS.get(cause or "", UNKNOWN_CAUSE_LABEL)
+
+
+def _outage_lines(cause: str | None, since: datetime) -> str:
+    return f"원인: {cause_label(cause)}\n시작: {format_kst(since)}"
+
+
+def _name_list_line(label: str, names: list[str]) -> str:
+    """이름 목록 > '{label} N개: a, b' (없으면 빈 문자열)"""
+    return f"{label} {len(names)}개: {', '.join(names)}" if names else ""
+
+
+def _join_lines(*lines: str) -> str:
+    return "\n".join(line for line in lines if line)

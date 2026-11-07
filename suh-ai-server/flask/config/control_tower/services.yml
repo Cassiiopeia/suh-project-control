@@ -1,0 +1,395 @@
+# 관제소 등록 파일: 서비스·프로젝트·알림·디스코드 정책의 단일 원본 (시크릿 없음)
+# ${NAME} = 기동 시 환경변수로 치환 (예: NAS_LAN_HOST = NAS 내부 IP)
+# 서비스 status: active 감시·알림·공개 / paused 감시만 / retired 감시 안 함
+# 외부 점검 expect 비어 있으면 '응답이 오고 502·503·504·520~530(Cloudflare 엣지 오류)이 아니면 정상'
+# 외부 점검(Worker) 상한 45개 (Cloudflare 무료 서브요청 한도)
+
+alert:
+  failures_to_down: 3    # 연속 실패 3회 > down 알림
+  successes_to_up: 2     # 연속 성공 2회 > 복구 알림
+  slow_milliseconds: 5000
+  reminder_hours: 6      # down 지속 중 재알림 간격
+  digest_hour_kst: 9     # 일일 요약 시각 (KST)
+  parent_recovery_grace_minutes: 10  # 부모 복구 후 자식 알림 보류 (분), 이후 계속 down은 묶음 1건
+  bulk_alert_threshold: 5  # 한 번에 개별 down(또는 복구) 알림 5건 이상 > #관제-긴급 1건으로 묶음
+
+discord:
+  roles:                          # 프로젝트마다 만들어지는 역할 이름 규칙
+    member: "{project}"           # 온보딩에서 고름
+    dev: "{project}-dev"          # 관리자가 직접 줌
+  admin_role_name: 관리자
+  channel_visibility:             # 채널 종류 > 볼 수 있는 역할 (admin은 항상 포함)
+    status: [member, dev]
+    deploy: [member, dev]
+    error: [dev]
+    report: [dev]
+  global_channels:
+    notice: {visible_to: [everyone]}
+    alert: {visible_to: [admin]}    # #관제-긴급
+    digest: {visible_to: [admin]}   # #관제-요약
+
+infrastructure:                   # 다른 서비스의 부모 (depends_on 대상)
+  - id: nas
+    name: 시놀로지 NAS
+    checks:
+      internal: {tcp: "${NAS_LAN_HOST}:5001"}   # DSM 포트
+  - id: windows
+    name: Windows SUH AI 서버
+    # 별도 점검 없음: 관제소 자신 (심박으로 Worker가 판정)
+  - id: home-network
+    name: 집 인터넷
+    # 별도 점검 없음: Worker가 관제소 심박 끊김으로 판정
+
+projects:
+  - id: suhsaechan
+    name: 수한 개인 사이트·도구
+    services:
+      - id: suhsaechan-home
+        name: 수한 홈
+        public: true
+        depends_on: nas
+        checks:
+          external: {url: "https://suhsaechan.kr/"}
+      - id: suhsaechan-www
+        name: 수한 홈 (www)
+        public: true
+        depends_on: nas
+        checks:
+          external: {url: "https://www.suhsaechan.kr/"}
+      - id: suhsaechan-web
+        name: 웹
+        public: true
+        depends_on: nas
+        checks:
+          external: {url: "https://web.suhsaechan.kr/"}
+          internal: {tcp: "${NAS_LAN_HOST}:3007"}
+      - id: suhsaechan-note
+        name: 노트
+        public: false  # 관리 도구 주소 노출 방지, 소유자 확인 후 true로 변경 가능
+        depends_on: nas
+        checks:
+          external: {url: "https://note.suhsaechan.kr/"}
+      - id: suhsaechan-chat
+        name: 채팅
+        public: false  # 관리 도구 주소 노출 방지, 소유자 확인 후 true로 변경 가능
+        depends_on: nas
+        checks:
+          external: {url: "https://chat.suhsaechan.kr/"}
+      - id: suhsaechan-chrome
+        name: 크롬
+        public: false  # 관리 도구 주소 노출 방지, 소유자 확인 후 true로 변경 가능
+        depends_on: nas
+        checks:
+          external: {url: "https://chrome.suhsaechan.kr/"}
+          internal: {tcp: "${NAS_LAN_HOST}:3008"}
+      - id: suhsaechan-file
+        name: 파일
+        public: false  # 관리 도구 주소 노출 방지, 소유자 확인 후 true로 변경 가능
+        depends_on: nas
+        checks:
+          external: {url: "https://file.suhsaechan.kr/"}
+      - id: suhsaechan-lab
+        name: 랩
+        public: true
+        depends_on: nas
+        checks:
+          external: {url: "https://lab.suhsaechan.kr/"}
+      - id: suhsaechan-lab-beta
+        name: 랩 베타
+        status: paused
+        public: true
+        depends_on: nas
+        checks:
+          external: {url: "https://lab.beta.suhsaechan.kr/"}
+      - id: suhsaechan-mail
+        name: 메일
+        public: false  # 관리 도구 주소 노출 방지, 소유자 확인 후 true로 변경 가능
+        depends_on: nas
+        checks:
+          external: {url: "https://mail.suhsaechan.kr/"}
+  - id: suh-ai
+    name: SUH AI 서버
+    services:
+      - id: suh-ai-server
+        name: SUH AI 서버
+        public: true
+        checks:
+          external: {url: "https://ai.suhsaechan.kr/"}
+  - id: elum
+    name: 이룸
+    services:
+      - id: elum-api
+        name: 이룸 API
+        public: true
+        depends_on: nas
+        checks:
+          external: {url: "https://api.elum.suhsaechan.kr/healthz", expect: [200]}
+  - id: romrom
+    name: 롬롬
+    services:
+      - id: romrom-web
+        name: 롬롬 웹
+        public: true
+        depends_on: nas
+        checks:
+          external: {url: "https://romrom.suhsaechan.kr/"}
+      - id: romrom-api
+        name: 롬롬 API
+        public: true
+        depends_on: nas
+        checks:
+          external: {url: "https://api.romrom.suhsaechan.kr/"}
+      - id: romrom-admin
+        name: 롬롬 관리자
+        status: paused
+        public: false
+        depends_on: nas
+        checks:
+          external: {url: "https://admin.romrom.suhsaechan.kr/"}
+  - id: passql
+    name: 패스큐엘
+    services:
+      - id: passql-api
+        name: 패스큐엘 API
+        public: true
+        depends_on: nas
+        checks:
+          external: {url: "https://api.passql.suhsaechan.kr/"}
+      - id: passql-ai
+        name: 패스큐엘 AI
+        public: true
+        depends_on: nas
+        checks:
+          external: {url: "https://ai.passql.suhsaechan.kr/"}
+  - id: pickerpicker
+    name: 피커피커
+    services:
+      - id: pickerpicker-web
+        name: 피커피커 웹
+        public: true
+        depends_on: nas
+        checks:
+          external: {url: "https://pickerpicker.suhsaechan.kr/"}
+          internal: {url: "http://${NAS_LAN_HOST}:3010/"}
+      - id: pickerpicker-api
+        name: 피커피커 API
+        public: true
+        depends_on: nas
+        checks:
+          external: {url: "https://api.pickerpicker.suhsaechan.kr/"}
+          internal: {url: "http://${NAS_LAN_HOST}:8001/"}
+  - id: bagel
+    name: 베이글
+    services:
+      - id: bagel-web
+        name: 베이글 웹
+        public: true
+        depends_on: nas
+        checks:
+          external: {url: "https://bagel.suhsaechan.kr/"}
+          internal: {url: "http://${NAS_LAN_HOST}:3006/"}
+      - id: bagel-api
+        name: 베이글 API
+        public: true
+        depends_on: nas
+        checks:
+          external: {url: "https://api.bagel.suhsaechan.kr/"}
+          internal: {url: "http://${NAS_LAN_HOST}:8093/"}
+  - id: freemates
+    name: 프리메이츠
+    services:
+      - id: freemates-web
+        name: 프리메이츠 웹
+        public: true
+        depends_on: nas
+        checks:
+          external: {url: "https://freemates.suhsaechan.kr/"}
+  - id: palim
+    name: 팔림
+    services:
+      - id: palim-web
+        name: 팔림 웹
+        public: true
+        depends_on: nas
+        checks:
+          external: {url: "https://palim.suhsaechan.kr/"}
+          internal: {url: "http://${NAS_LAN_HOST}:8095/"}
+  - id: mapsy
+    name: 맵시
+    services:
+      - id: mapsy-api
+        name: 맵시 API
+        public: true
+        depends_on: nas
+        checks:
+          external: {url: "https://api.mapsy.suhsaechan.kr/"}
+          internal: {url: "http://${NAS_LAN_HOST}:8096/"}
+      - id: mapsy-ai
+        name: 맵시 AI
+        status: paused
+        public: true
+        depends_on: nas
+        checks:
+          external: {url: "https://ai.mapsy.suhsaechan.kr/"}
+  - id: hack-the-beat
+    name: 해크 더 비트
+    services:
+      - id: hack-the-beat-api
+        name: 해크 더 비트 API
+        public: true
+        depends_on: nas
+        checks:
+          external: {url: "https://api.hack-the-beat.suhsaechan.kr/"}
+          internal: {url: "http://${NAS_LAN_HOST}:8096/"}
+  - id: tripgether
+    name: 트립게더
+    services:
+      - id: tripgether-api
+        name: 트립게더 API
+        status: paused
+        public: true
+        depends_on: nas
+        checks:
+          external: {url: "https://api.tripgether.suhsaechan.kr/"}
+      - id: tripgether-ai
+        name: 트립게더 AI
+        status: paused
+        public: true
+        depends_on: nas
+        checks:
+          external: {url: "https://ai.tripgether.suhsaechan.kr/"}
+      - id: tripgether-api-test
+        name: 트립게더 테스트 API
+        status: paused
+        public: true
+        depends_on: nas
+        checks:
+          external: {url: "https://api.test.tripgether.suhsaechan.kr/"}
+  - id: sejong-malsami
+    name: 세종말싸미
+    services:
+      - id: sejong-malsami-web
+        name: 세종말싸미 웹
+        status: paused
+        public: true
+        depends_on: nas
+        checks:
+          external: {url: "https://sejong-malsami.suhsaechan.kr/"}
+      - id: sejong-malsami-api
+        name: 세종말싸미 API
+        status: paused
+        public: true
+        depends_on: nas
+        checks:
+          external: {url: "https://api.sejong-malsami.suhsaechan.kr/"}
+  - id: spacestudyship
+    name: 스페이스스터디쉽
+    services:
+      - id: spacestudyship-api
+        name: 스페이스스터디쉽 API
+        status: paused
+        public: true
+        depends_on: nas
+        checks:
+          external: {url: "https://api.spacestudyship.suhsaechan.kr/"}
+  - id: mapsee
+    name: 맵시(mapsee)
+    services:
+      - id: mapsee-api
+        name: 맵시 API (mapsee)
+        status: paused
+        public: true
+        depends_on: nas
+        checks:
+          external: {url: "https://api.mapsee.suhsaechan.kr/"}
+      - id: mapsee-ai
+        name: 맵시 AI (mapsee)
+        status: paused
+        public: true
+        depends_on: nas
+        checks:
+          external: {url: "https://ai.mapsee.suhsaechan.kr/"}
+  - id: romi
+    name: 로미
+    services:
+      - id: romi-web
+        name: 로미 웹
+        status: paused
+        public: true
+        depends_on: nas
+        checks:
+          external: {url: "https://romi.suhsaechan.kr/"}
+  - id: infra
+    name: 인프라 관리 도구
+    discord:
+      channels: [status, error]
+    services:
+      - id: infra-mongo
+        name: MongoDB 관리
+        public: false
+        depends_on: nas
+        checks:
+          external: {url: "https://mongo.suhsaechan.kr/"}
+          internal: {url: "http://${NAS_LAN_HOST}:8081/"}
+      - id: infra-pgadmin
+        name: pgAdmin
+        public: false
+        depends_on: nas
+        checks:
+          external: {url: "https://pgadmin.suhsaechan.kr/"}
+          internal: {url: "http://${NAS_LAN_HOST}:5050/"}
+      - id: infra-rabbitmq
+        name: RabbitMQ 관리
+        public: false
+        depends_on: nas
+        checks:
+          external: {url: "https://rabbitmq.suhsaechan.kr/"}
+          internal: {url: "http://${NAS_LAN_HOST}:15672/"}
+      - id: infra-minio
+        name: MinIO 콘솔
+        public: false
+        depends_on: nas
+        checks:
+          external: {url: "https://minio.suhsaechan.kr/"}
+          internal: {url: "http://${NAS_LAN_HOST}:9090/"}
+      - id: infra-qdrant
+        name: Qdrant
+        public: false
+        depends_on: nas
+        checks:
+          external: {url: "https://qdrant.suhsaechan.kr/"}
+          internal: {url: "http://${NAS_LAN_HOST}:6333/"}
+      - id: infra-nexus
+        name: Nexus
+        public: false
+        depends_on: nas
+        checks:
+          external: {url: "https://nexus.suhsaechan.kr/"}
+          internal: {url: "http://${NAS_LAN_HOST}:9999/"}
+      - id: infra-traefik
+        name: Traefik 대시보드
+        public: false
+        depends_on: nas
+        checks:
+          external: {url: "https://traefik.suhsaechan.kr/"}
+          internal: {url: "http://${NAS_LAN_HOST}:8078/"}
+      - id: infra-s3
+        name: S3 API
+        public: false
+        depends_on: nas
+        checks:
+          external: {url: "https://s3.suhsaechan.kr/"}
+          internal: {url: "http://${NAS_LAN_HOST}:9000/"}
+      - id: infra-server
+        name: 서버 관리
+        public: false
+        depends_on: nas
+        checks:
+          external: {url: "https://server.suhsaechan.kr/"}
+      - id: control-tower-canary
+        name: 관제소 검증용 카나리아
+        public: false
+        checks:
+          internal: {url: "http://127.0.0.1:18080/"}   # 장애 알림 흐름 검증용 (로컬 더미 서버 on/off)
+
+maintenance: []   # [{service: elum-api, until: "2026-11-06T03:00+09:00", reason: 이전 작업}]

@@ -1,0 +1,20 @@
+# 관제소 Worker: 1분 외부 점검, Flask 심박 수신, 심박 끊김 비상 웹훅, 공개 status 페이지
+# 시크릿 2개는 파일에 두지 않음 (wrangler secret put HMAC_SECRET / DISCORD_EMERGENCY_WEBHOOK_URL)
+name = "suh-control-tower"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+# workers.dev 주소 미사용 (심박·공개 페이지 모두 status.suhsaechan.kr)
+workers_dev = false
+
+[triggers]
+crons = ["* * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "suh-control-tower"
+database_id = "97e4f0b8-0da9-4870-8b75-3072ff27a9ee"
+migrations_dir = "migrations"
+
+[[routes]]
+pattern = "status.suhsaechan.kr"
+custom_domain = true

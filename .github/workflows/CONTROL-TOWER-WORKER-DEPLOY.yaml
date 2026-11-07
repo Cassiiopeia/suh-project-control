@@ -1,0 +1,102 @@
+# ===================================================================
+# 관제소 Worker 배포 워크플로우
+# ===================================================================
+#
+# control-tower-worker/ 를 테스트한 뒤 Cloudflare Workers + D1 에 배포합니다.
+#
+# 배포 프로세스 (순서 고정):
+# 1. test 잡: node --test 실행 (실패 시 배포 중단)
+# 2. deploy 잡 (main 에서만): wrangler.toml 존재·D1 ID 치환 여부 확인
+# 3. D1 마이그레이션 적용 (suh-control-tower, --remote)
+# 4. Worker 배포 (wrangler deploy)
+#
+# 트리거 조건:
+# - main 브랜치에 control-tower-worker/** 또는 이 워크플로우 파일 변경이 push 될 때
+# - workflow_dispatch 를 통한 수동 실행 (main 이 아니면 테스트만)
+#
+# 필요한 Secrets:
+# - CLOUDFLARE_API_TOKEN: Workers 편집 + D1 편집 권한 API 토큰
+# - CLOUDFLARE_ACCOUNT_ID: Cloudflare 계정 ID
+#
+# Worker 런타임 시크릿(HMAC_SECRET, DISCORD_EMERGENCY_WEBHOOK_URL)은
+# 워크플로우가 아니라 `wrangler secret put` 으로 한 번만 등록합니다.
+#
+# ===================================================================
+
+name: CONTROL-TOWER-WORKER-DEPLOY
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - "control-tower-worker/**"
+      - ".github/workflows/CONTROL-TOWER-WORKER-DEPLOY.yaml"
+  workflow_dispatch:
+
+# 배포 중복 실행 직렬화 (진행 중 배포는 취소하지 않음)
+concurrency:
+  group: control-tower-worker-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Worker 테스트
+    runs-on: ubuntu-latest
+    steps:
+      - name: 소스 코드 가져오기
+        uses: actions/checkout@v4
+
+      - name: Node.js 설정
+        uses: actions/setup-node@v4
+        with:
+          # 테스트가 node:sqlite 를 사용 (Node 22.13 이상 필요)
+          node-version: '24'
+
+      - name: Worker 테스트 실행
+        working-directory: control-tower-worker
+        env:
+          # node:sqlite 실험 기능 경고 숨김
+          NODE_OPTIONS: --no-warnings=ExperimentalWarning
+        run: node --test
+
+  deploy:
+    name: D1 마이그레이션 및 배포
+    needs: test
+    # 수동 실행이라도 main 이 아닌 브랜치는 배포하지 않음
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: 소스 코드 가져오기
+        uses: actions/checkout@v4
+
+      - name: D1 데이터베이스 ID 치환 여부 확인
+        run: |
+          # wrangler.toml 이 없으면 마이그레이션·배포 대상을 알 수 없음
+          if [ ! -f control-tower-worker/wrangler.toml ]; then
+            echo "::error::control-tower-worker/wrangler.toml 파일이 없습니다."
+            exit 1
+          fi
+          # 자리표시자가 남아 있으면 마이그레이션·배포가 잘못된 DB 로 향함
+          if grep -q "REPLACE_WITH_D1_DATABASE_ID" control-tower-worker/wrangler.toml; then
+            echo "::error file=control-tower-worker/wrangler.toml::database_id 가 아직 REPLACE_WITH_D1_DATABASE_ID 입니다. 'wrangler d1 create suh-control-tower' 결과 ID 로 교체한 뒤 다시 push 하세요."
+            exit 1
+          fi
+
+      - name: D1 마이그레이션 적용
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: control-tower-worker
+          command: d1 migrations apply suh-control-tower --remote
+
+      - name: Worker 배포
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: control-tower-worker
+          command: deploy
