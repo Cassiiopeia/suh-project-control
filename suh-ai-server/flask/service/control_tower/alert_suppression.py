@@ -1,5 +1,5 @@
 """관제소 down 알림 처리 판정: 알림 없음 / 개별 / 묶음 (생명주기, 점검 중, 조상 사슬, 집 인터넷, 복구 유예)
-조상 상태 3종이 자식을 막음: down, 실패 연속 중(미알림 자식만), 복구 후 유예 시간 이내
+조상 상태 3종이 자식을 막음: down, 실패 연속 중(미알림 자식만), 복구 알림 후 유예 시간 이내
 """
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ ACTIVE_STATUS = "active"
 HOME_NETWORK_ID = "home-network"
 # 집 인터넷 장애 중 억제할 원인 (외부에서만 보이는 실패)
 EXTERNAL_CAUSES = (CAUSE_EXTERNAL_PATH, CAUSE_UNREACHABLE)
-# 복구 후 유예 판정 대상 상태 (since = 복구 시각)
+# 복구 알림 시각 판정 대상 상태 (down 중 재알림 시각과 구분)
 RECOVERED_STATUSES = (STATUS_UP, STATUS_DEGRADED)
 
 # down 서비스 처리 3종
@@ -100,22 +100,28 @@ def _is_blocking(context: AlertContext, ancestor: ServiceSpec, child_state: Serv
     return _is_within_recovery_grace(context, ancestor_state)
 
 
+def recovery_alerted_at(state: ServiceState | None) -> datetime | None:
+    """복구 알림 시각: up/degraded + down 알림 플래그 없음 + 마지막 알림 시각 (그 외 None)"""
+    if state is None or state.status not in RECOVERED_STATUSES or state.is_down_notified:
+        return None
+    return state.last_notified_at
+
+
 def _is_within_recovery_grace(context: AlertContext, ancestor_state: ServiceState) -> bool:
-    """up/degraded 진입(since) 후 유예 시간 이내인지"""
-    if ancestor_state.status not in RECOVERED_STATUSES or ancestor_state.since is None:
+    """복구 알림 후 유예 시간 이내인지 (조용히 복구된 조상은 유예 없음)"""
+    alerted_at = recovery_alerted_at(ancestor_state)
+    if alerted_at is None:
         return False
     grace = timedelta(minutes=context.registry.alert.parent_recovery_grace_minutes)
-    return context.now - ancestor_state.since < grace
+    return context.now - alerted_at < grace
 
 
 def _find_bundle_anchor_id(context: AlertContext, anchors: list[ServiceSpec], child_state: ServiceState) -> str | None:
-    """가장 가까운 묶음 기준: 자식 장애가 조상의 현재 상태 진입(복구) 이전부터 이어진 경우"""
+    """가장 가까운 묶음 기준: 자식 장애가 조상 복구 알림 이전부터 이어진 경우"""
     if child_state.since is None:
         return None
     for anchor in anchors:
-        anchor_state = context.states.get(anchor.id)
-        if anchor_state is None or anchor_state.status not in RECOVERED_STATUSES or anchor_state.since is None:
-            continue
-        if child_state.since < anchor_state.since:
+        alerted_at = recovery_alerted_at(context.states.get(anchor.id))
+        if alerted_at is not None and child_state.since <= alerted_at:
             return anchor.id
     return None

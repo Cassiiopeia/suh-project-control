@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from service.control_tower import alert_texts
 from service.control_tower.alert_suppression import (
     ACTIVE_STATUS, HANDLING_BUNDLE, HANDLING_INDIVIDUAL, AlertContext, decide_down_handling, is_in_maintenance,
+    recovery_alerted_at,
 )
 from service.control_tower.registry import MaintenanceWindow, Registry, ServiceSpec
 from service.control_tower.state_machine import STATUS_DOWN, ServiceState, Transition
@@ -43,11 +44,15 @@ def plan_notifications(registry: Registry, states: dict[str, ServiceState], tran
     notifications: list[Notification] = []
     new_states = dict(states)
 
-    # 복구 알림
+    # 복구 알림 (알림 시각 기록 = 자식 유예·묶음 기준)
     for transition in recovery_by_id.values():
         recovery = _plan_recovery(context, transition)
         if recovery is not None:
             notifications.append(recovery)
+            new_states[transition.service_id] = replace(states[transition.service_id], last_notified_at=now)
+
+    # down 처리는 복구 알림 반영 상태로 판정 (같은 틱 자식 보류)
+    context = replace(context, states=dict(new_states))
 
     # down 처리: 개별은 바로, 묶음은 기준 조상별로 모음 (등록 순서 유지)
     bundled_by_anchor_id: dict[str, list[ServiceSpec]] = {}
@@ -102,13 +107,13 @@ def _plan_down_or_reminder(context: AlertContext, service: ServiceSpec,
 
 
 def _plan_still_down_bundle(context: AlertContext, anchor_id: str, children: list[ServiceSpec]) -> Notification:
-    """유예 종료 후에도 down인 미알림 하위 서비스 > 기준 조상 이름으로 1건 (기준 시각 = 조상 복구 시각)"""
+    """유예 종료 후에도 down인 미알림 하위 서비스 > 기준 조상 이름으로 1건 (기준 시각 = 조상 복구 알림 시각)"""
     anchor = context.registry.service_by_id(anchor_id)
-    anchor_since = context.states[anchor_id].since or context.now
+    anchor_recovered_at = recovery_alerted_at(context.states.get(anchor_id)) or context.now
     body = alert_texts.still_down_bundle_body([(child.name, context.states[child.id].cause) for child in children])
     service_ids = (anchor_id, *(child.id for child in children))
     return _build_notification(anchor, SEVERITY_CRITICAL, alert_texts.still_down_bundle_title(anchor.name), body,
-                               service_ids, "still-down", anchor_since)
+                               service_ids, "still-down", anchor_recovered_at)
 
 
 def _plan_recovery(context: AlertContext, transition: Transition) -> Notification | None:

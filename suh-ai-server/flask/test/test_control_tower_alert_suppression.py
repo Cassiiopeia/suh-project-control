@@ -27,8 +27,8 @@ def _chain_registry(docker_host_status: str = "active") -> Registry:
 
 
 def _nas_just_recovered(**overrides):
-    """NAS 복구 직후 (since = 복구 시각, 이번 장애 알림 완료)"""
-    return all_up(nas=up_state(since=NAS_RECOVERED_AT, last_notified_at=NAS_NOTIFIED_AT), **overrides)
+    """NAS 복구 알림 직후 (계획기가 복구 알림 시 last_notified_at = 복구 시각 기록)"""
+    return all_up(nas=up_state(since=NAS_RECOVERED_AT, last_notified_at=NAS_RECOVERED_AT), **overrides)
 
 
 # ---------- 부모 down ----------
@@ -128,11 +128,44 @@ def test_child_down_held_while_parent_in_failure_streak():
 # ---------- 복구 유예 후 묶음 (R12) ----------
 
 def test_parent_recovery_alert_and_child_suppressed_on_recovery_tick():
-    states = _nas_just_recovered(elum_api=down_state())
+    # 입력 = advance 직후 (last_notified_at은 아직 down 알림 시각)
+    states = all_up(nas=up_state(since=NAS_RECOVERED_AT, last_notified_at=NAS_NOTIFIED_AT), elum_api=down_state())
     notifications, new_states = plan(states, [recovery_transition("nas")], now=NAS_RECOVERED_AT)
     assert titles(notifications) == ["[복구] 시놀로지 NAS"]
     assert (notifications[0].scope, notifications[0].kind) == ("global", "alert")
+    assert new_states["nas"].last_notified_at == NAS_RECOVERED_AT
     assert new_states["elum-api"] == states["elum-api"]
+
+    # 유예 기준 = 복구 알림 시각
+    within_grace, _ = plan(new_states, now=NAS_RECOVERED_AT + GRACE - timedelta(minutes=1))
+    assert within_grace == []
+
+
+# ---------- 유예 기준 = 복구 알림 (R15, since 재설정 영향 없음) ----------
+
+def test_fresh_start_ancestor_gives_no_hold():
+    fresh_nas = up_state(since=BASE_TIME - timedelta(minutes=1))  # INITIAL > up, 알림 이력 없음
+    notifications, _ = plan(all_up(nas=fresh_nas, elum_api=down_state()))
+    assert titles(notifications) == ["[다운] 이룸 API"]
+
+
+def test_ancestor_turning_degraded_gives_no_hold():
+    degraded_nas = replace(up_state(since=BASE_TIME - timedelta(minutes=1), last_notified_at=BASE_TIME - timedelta(days=2)),
+                           status="degraded")
+    notifications, _ = plan(all_up(nas=degraded_nas, elum_api=down_state()))
+    assert titles(notifications) == ["[다운] 이룸 API"]
+
+
+def test_ancestor_blip_holds_child_one_tick_only():
+    blipping_nas = replace(up_state(since=BASE_TIME), consecutive_failures=1)
+    held, states = plan(all_up(nas=blipping_nas, elum_api=down_state()))
+    assert held == []
+
+    # 다음 틱: 실패 연속 끊김 (since 재설정) > 보류 없이 개별 알림
+    next_tick = BASE_TIME + timedelta(minutes=1)
+    states["nas"] = up_state(since=next_tick)
+    notifications, _ = plan(states, now=next_tick)
+    assert titles(notifications) == ["[다운] 이룸 API"]
 
 
 def test_children_still_down_after_grace_are_bundled_once():
