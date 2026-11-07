@@ -1,0 +1,15 @@
+{# 관제소 서비스 정보 창: control-service-modal.js가 본문 채움 (내부 점검 대상 포함, 관리자 전용) #}
+<dialog id="control-service-modal" class="modal">
+  <div class="modal-box max-w-2xl">
+    <h3 class="font-bold text-lg flex items-center gap-2">
+      <i data-lucide="info" class="size-5 text-primary"></i><span id="control-service-modal-title">서비스 정보</span>
+    </h3>
+    <div id="control-service-modal-body" class="py-3 space-y-4 text-sm">
+      <div class="opacity-60">불러오는 중</div>
+    </div>
+    <div class="modal-action">
+      <form method="dialog"><button class="btn btn-sm">닫기</button></form>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>

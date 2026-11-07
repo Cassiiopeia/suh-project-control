@@ -1,0 +1,91 @@
+{# 관제소 서비스 관리 탭: 프로젝트별 서비스 표(이름·추적·공개·순서·주소·정보), 서비스·프로젝트 추가, Cloudflare DNS 가져오기 #}
+<div class="alert alert-info text-sm">
+  <i data-lucide="info" class="size-5"></i>
+  <span>여기서 바꾼 값은 관제소 DB에 저장되어 등록 파일(services.yml) 위에 덮어씁니다. 다음 점검(60초 안)에 감시와 공개 페이지에 반영됩니다.
+    <span id="control-manage-external-usage" class="font-mono"></span></span>
+</div>
+
+<!-- 프로젝트별 서비스 표: JS가 프로젝트마다 카드 1개 생성 -->
+<div id="control-manage-groups" class="space-y-4">
+  <div class="opacity-60 text-sm">불러오는 중</div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+  <!-- 서비스 추가: 외부 점검만 (내부 점검은 등록 파일 서비스만) -->
+  <div class="card bg-base-100 shadow border border-base-300">
+    <div class="card-body">
+      <h2 class="card-title text-base flex items-center gap-2">
+        <i data-lucide="plus-circle" class="size-5 text-primary"></i>서비스 추가
+      </h2>
+      <form id="control-service-form" class="space-y-3">
+        <label class="block w-full">
+          <span class="block text-xs opacity-70 mb-1">프로젝트</span>
+          <select id="control-service-project" class="select select-sm w-full" required></select>
+        </label>
+        <div class="grid grid-cols-2 gap-2">
+          <label class="block">
+            <span class="block text-xs opacity-70 mb-1">id (소문자·숫자·-)</span>
+            <input id="control-service-id" type="text" class="input input-sm w-full" required
+                   pattern="[a-z0-9][a-z0-9\-]{1,40}" autocomplete="off" placeholder="blog-web">
+          </label>
+          <label class="block">
+            <span class="block text-xs opacity-70 mb-1">이름</span>
+            <input id="control-service-name" type="text" class="input input-sm w-full" required maxlength="60"
+                   autocomplete="off" placeholder="블로그">
+          </label>
+        </div>
+        <label class="block w-full">
+          <span class="block text-xs opacity-70 mb-1">외부 점검 주소</span>
+          <input id="control-service-url" type="url" class="input input-sm w-full" required maxlength="2048"
+                 autocomplete="off" placeholder="https://blog.suhsaechan.kr/">
+        </label>
+        <label class="label cursor-pointer justify-start gap-2 text-sm">
+          <input id="control-service-public" type="checkbox" class="toggle toggle-sm">공개 페이지에 표시
+        </label>
+        <button id="control-service-submit" type="submit" class="btn btn-primary btn-sm w-full">
+          <i data-lucide="plus" class="size-4"></i>서비스 추가
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Cloudflare DNS 가져오기: 등록되지 않은 A/AAAA/CNAME 레코드 -->
+  <div class="card bg-base-100 shadow border border-base-300">
+    <div class="card-body">
+      <h2 class="card-title text-base flex items-center gap-2">
+        <i data-lucide="cloud" class="size-5 text-primary"></i>Cloudflare DNS에서 가져오기
+      </h2>
+      <p class="text-xs opacity-60">아직 감시하지 않는 도메인만 보여 줍니다. 추가하면 선택한 프로젝트에 비공개로 들어갑니다.</p>
+      <div class="flex gap-2 mt-2">
+        <select id="control-dns-project" class="select select-sm flex-1"></select>
+        <button id="control-dns-load" class="btn btn-outline btn-sm"><i data-lucide="download-cloud" class="size-4"></i>불러오기</button>
+      </div>
+      <p id="control-dns-message" class="text-xs opacity-70 mt-1" hidden></p>
+      <ul id="control-dns-list" class="mt-2 divide-y divide-base-300 max-h-72 overflow-y-auto"></ul>
+    </div>
+  </div>
+</div>
+
+<!-- 프로젝트 추가 -->
+<div class="card bg-base-100 shadow border border-base-300">
+  <div class="card-body">
+    <h2 class="card-title text-base flex items-center gap-2">
+      <i data-lucide="folder-plus" class="size-5 text-primary"></i>프로젝트 추가
+    </h2>
+    <form id="control-project-form" class="flex flex-wrap gap-2 items-end">
+      <label class="block">
+        <span class="block text-xs opacity-70 mb-1">id</span>
+        <input id="control-project-id" type="text" class="input input-sm" required pattern="[a-z0-9][a-z0-9\-]{1,40}"
+               autocomplete="off" placeholder="blog">
+      </label>
+      <label class="block flex-1 min-w-40">
+        <span class="block text-xs opacity-70 mb-1">이름</span>
+        <input id="control-project-name" type="text" class="input input-sm w-full" required maxlength="60"
+               autocomplete="off" placeholder="블로그">
+      </label>
+      <button id="control-project-submit" type="submit" class="btn btn-primary btn-sm">
+        <i data-lucide="plus" class="size-4"></i>추가
+      </button>
+    </form>
+  </div>
+</div>

@@ -84,9 +84,9 @@ def test_온보딩_질문_구성은_고정_문구이고_infra와_역할_없는_�
 
     assert payload == {
         "prompts": [{
-            "type": 0, "title": "어떤 프로젝트 알림을 받을까요?", "single_select": False, "required": False,
+            "id": "1", "type": 0, "title": "어떤 프로젝트 알림을 받을까요?", "single_select": False, "required": False,
             "in_onboarding": True,
-            "options": [{"title": "이룸", "description": "이룸 상태·배포 알림", "role_ids": ["11"], "channel_ids": []}],
+            "options": [{"id": "100", "title": "이룸", "description": "이룸 상태·배포 알림", "role_ids": ["11"], "channel_ids": []}],
         }],
         "default_channel_ids": ["33"], "enabled": True, "mode": 0,
     }

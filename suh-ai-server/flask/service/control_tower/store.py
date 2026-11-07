@@ -1,4 +1,4 @@
-"""관제소 저장소: 점검 결과·일별 집계·장애·서비스 상태·이벤트 중복·바인딩·점검 창·메타
+"""관제소 저장소: 점검 결과·일별 집계·장애·서비스 상태·이벤트 중복·바인딩·점검 창·메타 (+ 덮어쓰기 믹스인)
 스레드마다 SQLite 연결(WAL), 시각은 UTC ISO 문자열 저장 > aware datetime 복원"""
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 
 from service.control_tower.check_runner import CheckResult
+from service.control_tower.override_store import OverrideStoreMixin
 from service.control_tower.registry import MaintenanceWindow
 from service.control_tower.state_machine import Observation, ServiceState
 from service.control_tower.store_schema import SCHEMA_STATEMENTS, apply_column_migrations
@@ -51,7 +52,7 @@ def _check_columns(check: CheckResult | None) -> tuple:
     return (int(check.is_ok), int(check.is_slow), check.status_code, check.latency_milliseconds, check.error)
 
 
-class ControlTowerStore:
+class ControlTowerStore(OverrideStoreMixin):
     def __init__(self, path: str):
         self._path = path
         self._thread_local = threading.local()
@@ -194,6 +195,15 @@ class ControlTowerStore:
         return [{"id": row["id"], "service_id": row["service_id"], "cause": row["cause"],
                  "started_at": _from_text(row["started_at"]), "ended_at": _from_text(row["ended_at"]),
                  "is_within_maintenance": bool(row["is_within_maintenance"])}
+                for row in rows]
+
+    def recent_incidents_of_service(self, service_id: str, limit: int) -> list[dict]:
+        """서비스 1개의 장애, 최신순"""
+        rows = self._connection().execute(
+            "SELECT id, cause, started_at, ended_at FROM incident WHERE service_id = ? "
+            "ORDER BY started_at DESC, id DESC LIMIT ?", (service_id, limit)).fetchall()
+        return [{"id": row["id"], "service_id": service_id, "cause": row["cause"],
+                 "started_at": _from_text(row["started_at"]), "ended_at": _from_text(row["ended_at"])}
                 for row in rows]
 
     def incidents_overlapping(self, start: datetime, end: datetime) -> list[dict]:

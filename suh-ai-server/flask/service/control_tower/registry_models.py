@@ -1,5 +1,5 @@
 """
-관제소 등록 파일 모델: 프로젝트, 서비스, 알림·디스코드 정책, 점검 창, Worker 스냅샷
+관제소 등록 파일 모델: 프로젝트, 서비스, 알림·디스코드 정책, 점검 창, 상태 페이지, Worker 스냅샷
 """
 from __future__ import annotations
 
@@ -30,6 +30,10 @@ DEFAULT_CHANNEL_VISIBILITY = {
     "status": ("member", "dev"), "deploy": ("member", "dev"), "error": ("dev",), "report": ("dev",),
 }
 DEFAULT_GLOBAL_CHANNELS = {"notice": ("everyone",), "alert": ("admin",), "digest": ("admin",)}
+# 공개 상태 페이지 기본 제목 / 공지 수준 (info 안내, warning 주의, critical 긴급)
+DEFAULT_STATUS_PAGE_TITLE = "SUHSAECHAN Status"
+NOTICE_LEVEL_INFO = "info"
+NOTICE_LEVELS = (NOTICE_LEVEL_INFO, "warning", "critical")
 
 
 @dataclass(frozen=True)
@@ -59,6 +63,7 @@ class ProjectSpec:
     channel_kinds: tuple[str, ...] = PROJECT_CHANNEL_KINDS
     # 채널 종류 > 볼 수 있는 역할 키 (전역 기본값 + 프로젝트 덮어쓰기 반영 완료)
     channel_visibility: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    is_hidden: bool = False  # 관리자 화면에서 숨김 > 공개 페이지 제외 (감시·알림은 유지)
 
 
 @dataclass(frozen=True)
@@ -95,6 +100,13 @@ class MaintenanceWindow:
 
 
 @dataclass(frozen=True)
+class StatusPage:
+    title: str = DEFAULT_STATUS_PAGE_TITLE
+    notice_text: str = ""  # 빈 문자열이면 공지 없음
+    notice_level: str = NOTICE_LEVEL_INFO
+
+
+@dataclass(frozen=True)
 class Registry:
     projects: tuple[ProjectSpec, ...]
     services: tuple[ServiceSpec, ...]
@@ -102,6 +114,7 @@ class Registry:
     alert: AlertPolicy = field(default_factory=AlertPolicy)
     discord: DiscordPolicy = field(default_factory=DiscordPolicy)
     maintenance: tuple[MaintenanceWindow, ...] = ()
+    page: StatusPage = field(default_factory=StatusPage)
 
     def service_by_id(self, service_id: str) -> ServiceSpec | None:
         """프로젝트 서비스 + 인프라에서 id 조회"""
@@ -117,22 +130,23 @@ class Registry:
         )
 
     def to_worker_snapshot(self, maintenance: Iterable[MaintenanceWindow] | None = None) -> dict:
-        """Worker 전달용 공개 필드만 (내부 점검·의존성·점검 사유 제외, id 정렬)
+        """Worker 전달용 공개 필드만 (내부 점검·의존성·점검 사유 제외, 표시 순서 = 튜플 순서, order 0부터)
         maintenance: 등록 파일 + 관리자 화면 병합 창 (생략 시 등록 파일 창만)"""
         windows = self.maintenance if maintenance is None else tuple(maintenance)
+        listed_projects = [project for project in self.projects if not project.is_hidden]
+        listed_services = [service for service in self.services if service.status != SERVICE_STATUS_RETIRED]
         return {
+            "page": _page_to_snapshot(self.page),
             "alert": {
                 "failures_to_down": self.alert.failures_to_down,
                 "slow_milliseconds": self.alert.slow_milliseconds,
             },
             "projects": [
-                {"id": project.id, "name": project.name}
-                for project in sorted(self.projects, key=lambda project: project.id)
+                {"id": project.id, "name": project.name, "order": order}
+                for order, project in enumerate(listed_projects)
             ],
             "services": [
-                _service_to_snapshot(service)
-                for service in sorted(self.services, key=lambda service: service.id)
-                if service.status != SERVICE_STATUS_RETIRED
+                _service_to_snapshot(service, order) for order, service in enumerate(listed_services)
             ],
             "maintenance": [
                 {"service_id": window.service_id, "until": window.until.isoformat()}
@@ -148,10 +162,17 @@ class Registry:
         return hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
 
 
-def _service_to_snapshot(service: ServiceSpec) -> dict:
+def _page_to_snapshot(page: StatusPage) -> dict:
+    """공지 문구 비어 있으면 notice null"""
+    notice = {"text": page.notice_text, "level": page.notice_level} if page.notice_text else None
+    return {"title": page.title, "notice": notice}
+
+
+def _service_to_snapshot(service: ServiceSpec, order: int) -> dict:
     external = service.external
     return {
         "id": service.id,
+        "order": order,
         "name": service.name,
         "project_id": service.project_id,
         "status": service.status,

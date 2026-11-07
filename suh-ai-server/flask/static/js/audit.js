@@ -10,6 +10,7 @@
     SYSTEM: { label: '시스템', badge: 'badge-neutral' },
     SUNSHINE: { label: 'Sunshine', badge: 'badge-info' },
     CLAUDE_LOGIN: { label: 'Claude 로그인', badge: 'badge-warning' },
+    CONTROL_TOWER: { label: '관제소', badge: 'badge-success' },
   };
 
   var ACTION_LABELS = {
@@ -43,6 +44,12 @@
     CLAUDE_CODE_REQUEST: 'Claude 코드 요청',
     CLAUDE_CODE_ISSUED: 'Claude 코드 발급',
     CLAUDE_CODE_VIEW: 'Claude 코드 열람',
+    CONTROL_SERVICE_UPDATE: '관제소 서비스 변경',
+    CONTROL_SERVICE_CREATE: '관제소 서비스 추가',
+    CONTROL_SERVICE_DELETE: '관제소 서비스 삭제',
+    CONTROL_PROJECT_UPDATE: '관제소 프로젝트 변경',
+    CONTROL_PROJECT_CREATE: '관제소 프로젝트 추가',
+    CONTROL_STATUS_PAGE_UPDATE: '관제소 상태 페이지 변경',
   };
 
   // 카테고리 선택 시 행위 셀렉트를 해당 카테고리 것만으로 좁힌다
@@ -56,6 +63,8 @@
     SUNSHINE: ['SUNSHINE_START', 'SUNSHINE_STOP', 'SUNSHINE_RESTART',
                'SUNSHINE_PAIR', 'SUNSHINE_UNPAIR', 'SUNSHINE_SESSION_CLOSE'],
     CLAUDE_LOGIN: ['CLAUDE_CODE_REQUEST', 'CLAUDE_CODE_ISSUED', 'CLAUDE_CODE_VIEW'],
+    CONTROL_TOWER: ['CONTROL_SERVICE_UPDATE', 'CONTROL_SERVICE_CREATE', 'CONTROL_SERVICE_DELETE',
+                    'CONTROL_PROJECT_UPDATE', 'CONTROL_PROJECT_CREATE', 'CONTROL_STATUS_PAGE_UPDATE'],
   };
 
   var KST_FMT = new Intl.DateTimeFormat('ko-KR', {
