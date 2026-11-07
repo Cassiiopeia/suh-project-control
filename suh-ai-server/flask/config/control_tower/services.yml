@@ -42,67 +42,67 @@ infrastructure:                   # 다른 서비스의 부모 (depends_on 대�
 
 projects:
   - id: suhsaechan
-    name: 수한 개인 사이트·도구
+    name: suhsaechan.kr
     services:
       - id: suhsaechan-home
-        name: 수한 홈
+        name: suhsaechan.kr 홈
         public: true
         depends_on: nas
         checks:
           external: {url: "https://suhsaechan.kr/"}
       - id: suhsaechan-www
-        name: 수한 홈 (www)
+        name: suhsaechan.kr 홈 (www)
         public: true
         depends_on: nas
         checks:
           external: {url: "https://www.suhsaechan.kr/"}
       - id: suhsaechan-web
-        name: 웹
+        name: web
         public: true
         depends_on: nas
         checks:
           external: {url: "https://web.suhsaechan.kr/"}
           internal: {tcp: "${NAS_LAN_HOST}:3007"}
       - id: suhsaechan-note
-        name: 노트
+        name: note
         public: false  # 관리 도구 주소 노출 방지, 소유자 확인 후 true로 변경 가능
         depends_on: nas
         checks:
           external: {url: "https://note.suhsaechan.kr/"}
       - id: suhsaechan-chat
-        name: 채팅
+        name: chat
         public: false  # 관리 도구 주소 노출 방지, 소유자 확인 후 true로 변경 가능
         depends_on: nas
         checks:
           external: {url: "https://chat.suhsaechan.kr/"}
       - id: suhsaechan-chrome
-        name: 크롬
+        name: chrome
         public: false  # 관리 도구 주소 노출 방지, 소유자 확인 후 true로 변경 가능
         depends_on: nas
         checks:
           external: {url: "https://chrome.suhsaechan.kr/"}
           internal: {tcp: "${NAS_LAN_HOST}:3008"}
       - id: suhsaechan-file
-        name: 파일
+        name: file
         public: false  # 관리 도구 주소 노출 방지, 소유자 확인 후 true로 변경 가능
         depends_on: nas
         checks:
           external: {url: "https://file.suhsaechan.kr/"}
       - id: suhsaechan-lab
-        name: 랩
+        name: lab
         public: true
         depends_on: nas
         checks:
           external: {url: "https://lab.suhsaechan.kr/"}
       - id: suhsaechan-lab-beta
-        name: 랩 베타
+        name: lab 베타
         status: paused
         public: true
         depends_on: nas
         checks:
           external: {url: "https://lab.beta.suhsaechan.kr/"}
       - id: suhsaechan-mail
-        name: 메일
+        name: mail
         public: false  # 관리 도구 주소 노출 방지, 소유자 확인 후 true로 변경 가능
         depends_on: nas
         checks:
@@ -116,204 +116,204 @@ projects:
         checks:
           external: {url: "https://ai.suhsaechan.kr/"}
   - id: elum
-    name: 이룸
+    name: elum
     services:
       - id: elum-api
-        name: 이룸 API
+        name: elum API
         public: true
         depends_on: nas
         checks:
           external: {url: "https://api.elum.suhsaechan.kr/healthz", expect: [200]}
   - id: romrom
-    name: 롬롬
+    name: romrom
     services:
       - id: romrom-web
-        name: 롬롬 웹
+        name: romrom 웹
         public: true
         depends_on: nas
         checks:
           external: {url: "https://romrom.suhsaechan.kr/"}
       - id: romrom-api
-        name: 롬롬 API
+        name: romrom API
         public: true
         depends_on: nas
         checks:
           external: {url: "https://api.romrom.suhsaechan.kr/"}
       - id: romrom-admin
-        name: 롬롬 관리자
+        name: romrom 관리자
         status: paused
         public: false
         depends_on: nas
         checks:
           external: {url: "https://admin.romrom.suhsaechan.kr/"}
   - id: passql
-    name: 패스큐엘
+    name: passql
     services:
       - id: passql-api
-        name: 패스큐엘 API
+        name: passql API
         public: true
         depends_on: nas
         checks:
           external: {url: "https://api.passql.suhsaechan.kr/"}
       - id: passql-ai
-        name: 패스큐엘 AI
+        name: passql AI
         public: true
         depends_on: nas
         checks:
           external: {url: "https://ai.passql.suhsaechan.kr/"}
   - id: pickerpicker
-    name: 피커피커
+    name: pickerpicker
     services:
       - id: pickerpicker-web
-        name: 피커피커 웹
+        name: pickerpicker 웹
         public: true
         depends_on: nas
         checks:
           external: {url: "https://pickerpicker.suhsaechan.kr/"}
           internal: {url: "http://${NAS_LAN_HOST}:3010/"}
       - id: pickerpicker-api
-        name: 피커피커 API
+        name: pickerpicker API
         public: true
         depends_on: nas
         checks:
           external: {url: "https://api.pickerpicker.suhsaechan.kr/"}
           internal: {url: "http://${NAS_LAN_HOST}:8001/"}
   - id: bagel
-    name: 베이글
+    name: bagel
     services:
       - id: bagel-web
-        name: 베이글 웹
+        name: bagel 웹
         public: true
         depends_on: nas
         checks:
           external: {url: "https://bagel.suhsaechan.kr/"}
           internal: {url: "http://${NAS_LAN_HOST}:3006/"}
       - id: bagel-api
-        name: 베이글 API
+        name: bagel API
         public: true
         depends_on: nas
         checks:
           external: {url: "https://api.bagel.suhsaechan.kr/"}
           internal: {url: "http://${NAS_LAN_HOST}:8093/"}
   - id: freemates
-    name: 프리메이츠
+    name: freemates
     services:
       - id: freemates-web
-        name: 프리메이츠 웹
+        name: freemates 웹
         public: true
         depends_on: nas
         checks:
           external: {url: "https://freemates.suhsaechan.kr/"}
   - id: palim
-    name: 팔림
+    name: palim
     services:
       - id: palim-web
-        name: 팔림 웹
+        name: palim 웹
         public: true
         depends_on: nas
         checks:
           external: {url: "https://palim.suhsaechan.kr/"}
           internal: {url: "http://${NAS_LAN_HOST}:8095/"}
   - id: mapsy
-    name: 맵시
+    name: mapsy
     services:
       - id: mapsy-api
-        name: 맵시 API
+        name: mapsy API
         public: true
         depends_on: nas
         checks:
           external: {url: "https://api.mapsy.suhsaechan.kr/"}
           internal: {url: "http://${NAS_LAN_HOST}:8096/"}
       - id: mapsy-ai
-        name: 맵시 AI
+        name: mapsy AI
         status: paused
         public: true
         depends_on: nas
         checks:
           external: {url: "https://ai.mapsy.suhsaechan.kr/"}
   - id: hack-the-beat
-    name: 해크 더 비트
+    name: hack-the-beat
     services:
       - id: hack-the-beat-api
-        name: 해크 더 비트 API
+        name: hack-the-beat API
         public: true
         depends_on: nas
         checks:
           external: {url: "https://api.hack-the-beat.suhsaechan.kr/"}
           internal: {url: "http://${NAS_LAN_HOST}:8096/"}
   - id: tripgether
-    name: 트립게더
+    name: tripgether
     services:
       - id: tripgether-api
-        name: 트립게더 API
+        name: tripgether API
         status: paused
         public: true
         depends_on: nas
         checks:
           external: {url: "https://api.tripgether.suhsaechan.kr/"}
       - id: tripgether-ai
-        name: 트립게더 AI
+        name: tripgether AI
         status: paused
         public: true
         depends_on: nas
         checks:
           external: {url: "https://ai.tripgether.suhsaechan.kr/"}
       - id: tripgether-api-test
-        name: 트립게더 테스트 API
+        name: tripgether 테스트 API
         status: paused
         public: true
         depends_on: nas
         checks:
           external: {url: "https://api.test.tripgether.suhsaechan.kr/"}
   - id: sejong-malsami
-    name: 세종말싸미
+    name: sejong-malsami
     services:
       - id: sejong-malsami-web
-        name: 세종말싸미 웹
+        name: sejong-malsami 웹
         status: paused
         public: true
         depends_on: nas
         checks:
           external: {url: "https://sejong-malsami.suhsaechan.kr/"}
       - id: sejong-malsami-api
-        name: 세종말싸미 API
+        name: sejong-malsami API
         status: paused
         public: true
         depends_on: nas
         checks:
           external: {url: "https://api.sejong-malsami.suhsaechan.kr/"}
   - id: spacestudyship
-    name: 스페이스스터디쉽
+    name: spacestudyship
     services:
       - id: spacestudyship-api
-        name: 스페이스스터디쉽 API
+        name: spacestudyship API
         status: paused
         public: true
         depends_on: nas
         checks:
           external: {url: "https://api.spacestudyship.suhsaechan.kr/"}
   - id: mapsee
-    name: 맵시(mapsee)
+    name: mapsee
     services:
       - id: mapsee-api
-        name: 맵시 API (mapsee)
+        name: mapsee API
         status: paused
         public: true
         depends_on: nas
         checks:
           external: {url: "https://api.mapsee.suhsaechan.kr/"}
       - id: mapsee-ai
-        name: 맵시 AI (mapsee)
+        name: mapsee AI
         status: paused
         public: true
         depends_on: nas
         checks:
           external: {url: "https://ai.mapsee.suhsaechan.kr/"}
   - id: romi
-    name: 로미
+    name: romi
     services:
       - id: romi-web
-        name: 로미 웹
+        name: romi 웹
         status: paused
         public: true
         depends_on: nas
