@@ -1,6 +1,6 @@
 /**
  * 공개 status 테스트 공통 데이터: 공개·비공개·paused 서비스가 섞인 스냅샷, 최근 결과, 집계, 장애
- * 비공개 쪽에는 내부 IP·관리 도구 주소를 일부러 넣어 노출 여부 확인
+ * 비공개 쪽에는 내부 IP·관리 도구 주소, 결과·장애에는 error·cause를 일부러 넣어 노출 여부 확인
  */
 
 // 2026-11-07T03:00:00Z = KST 2026-11-07 12:00
@@ -13,7 +13,11 @@ export const HIDDEN_STRINGS = Object.freeze([
   'suh-paused-service', '일시중지 서비스', 'http://10.0.0.7:8080/',
   'secret-db', '비밀 DB', '비밀 프로젝트', 'https://secret-internal.example',
   'https://api.elum.example/health',
+  'LEAK_ERROR_DETAIL', 'LEAK_CAUSE_DETAIL',
 ]);
+// 결과·장애에 섞어 넣는 내부 원인 문구 (공개 모델에 없어야 함)
+const LEAK_ERROR = 'connection_error LEAK_ERROR_DETAIL 192.168.0.10';
+const LEAK_CAUSE = 'LEAK_CAUSE_DETAIL NAS 10.0.0.2 디스크 가득 참';
 
 export function createStatusConfig() {
   return {
@@ -46,7 +50,7 @@ export function recentResult(isOk, isSlow = false, minutesAgo = 0) {
 
 export function createRecentResults() {
   return {
-    'elum-api': [recentResult(true, false, 0), recentResult(true, false, 1), recentResult(true, false, 2)],
+    'elum-api': [recentResult(true, false, 0), { ...recentResult(false, false, 1), error: LEAK_ERROR }, recentResult(true, false, 2)],
     'elum-admin-hidden': [recentResult(false, false, 0), recentResult(false, false, 1), recentResult(false, false, 2)],
     'secret-db': [recentResult(false, false, 0), recentResult(false, false, 1), recentResult(false, false, 2)],
     'suh-paused-service': [recentResult(false, false, 0), recentResult(false, false, 1), recentResult(false, false, 2)],
@@ -58,17 +62,18 @@ export function createTodayRollup() {
   return { day: TODAY_KST, services: { 'elum-api': [720, 720], 'elum-admin-hidden': [720, 10], 'suh-blog': [720, 720] } };
 }
 
-export function createRollupRows() {
-  return [
-    { day: '2026-11-06', service_id: 'elum-api', total: 1440, ok: 1440 },
-    { day: '2026-11-06', service_id: 'elum-admin-hidden', total: 1440, ok: 10 },
-    { day: '2026-11-05', service_id: 'secret-db', total: 1440, ok: 0 },
-  ];
+/** public_rollup_json 형태 (비공개 서비스도 섞어 페이지 쪽 필터 확인) */
+export function createPublicRollup() {
+  return {
+    'elum-api': [['2026-11-06', 1440, 1440]],
+    'elum-admin-hidden': [['2026-11-06', 1440, 10]],
+    'secret-db': [['2026-11-05', 1440, 0]],
+  };
 }
 
 export function createPublicIncidents() {
   return [
-    { service_id: 'elum-api', started_at: '2026-11-06T05:00:00+00:00', ended_at: '2026-11-06T06:12:00+00:00' },
+    { service_id: 'elum-api', started_at: '2026-11-06T05:00:00+00:00', ended_at: '2026-11-06T06:12:00+00:00', cause: LEAK_CAUSE },
     { service_id: 'elum-admin-hidden', started_at: '2026-11-06T05:00:00+00:00', ended_at: null },
     { service_id: 'secret-db', started_at: '2026-11-05T05:00:00+00:00', ended_at: null },
   ];

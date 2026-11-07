@@ -14,6 +14,7 @@ export const MetaKey = Object.freeze({
   LAST_ROLLUP_DAY: 'last_rollup_day', // daily_rollup에 마지막으로 기록한 KST 날짜
   TODAY_ROLLUP_JSON: 'today_rollup_json', // {"day": KST, "services": {id: [total, ok]}}
   RECENT_RESULTS_JSON: 'recent_results_json', // {id: [{is_ok, is_slow, checked_at}, ...]} 최신순
+  PUBLIC_ROLLUP_JSON: 'public_rollup_json', // 공개 서비스 90일 집계 {id: [[day, total, ok], ...]} (오늘 제외, 하루 마감 때 갱신)
   WEBHOOK_MISSING_WARNED_HOUR: 'webhook_missing_warned_hour', // 웹훅 미설정 경고를 마지막으로 남긴 KST 시 (YYYY-MM-DDTHH)
 });
 

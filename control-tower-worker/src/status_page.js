@@ -3,8 +3,9 @@
  * 모델 = /api/status.json 본문 그대로 (주소·원인·내부 id 없음), HTML은 status_render.js
  */
 import { HEARTBEAT_SILENCE_SECONDS } from './emergency.js';
+import { isPubliclyVisibleService, listStatusDays } from './public_rollup.js';
 import { isPlainObject } from './store.js';
-import { MILLISECONDS_PER_SECOND, parseIsoMilliseconds, toIsoUtc, toKstDay } from './time.js';
+import { MILLISECONDS_PER_SECOND, parseIsoMilliseconds, toIsoUtc } from './time.js';
 
 export { renderStatusPage } from './status_render.js';
 
@@ -13,21 +14,18 @@ export const ServiceState = Object.freeze({
   UP: 'up', DEGRADED: 'degraded', DOWN: 'down', MAINTENANCE: 'maintenance', UNKNOWN: 'unknown',
 });
 
-// 막대 칸 수 (오늘 포함 일 수)
-export const STATUS_DAY_COUNT = 90;
 // 최근 장애 표시 기간 (밀리초, 14일)
 const INCIDENT_WINDOW_MILLISECONDS = 14 * 24 * 60 * 60 * 1000;
 // 최근 장애 최대 표시 수
 const MAXIMUM_INCIDENT_COUNT = 20;
-const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 const MILLISECONDS_PER_MINUTE = 60 * 1000;
 // 연속 실패 down 판정 기본값 (스냅샷에 없을 때)
 const DEFAULT_FAILURES_TO_DOWN = 3;
 // 막대 색 경계 (만분율 정수 비교로 부동소수 오차 회피): ok ≥ 99.5%, warn ≥ 95%
 const OK_LEVEL_MINIMUM_BASIS_POINTS = 9950;
 const WARN_LEVEL_MINIMUM_BASIS_POINTS = 9500;
-// 서비스 lifecycle 중 공개 대상
-const VISIBLE_SERVICE_STATUS = 'active';
+// 최신 결과가 이보다 오래되면 unknown (초, 크론 정지·점검 대상 제외 등)
+const RECENT_RESULT_STALE_SECONDS = 5 * 60;
 
 // 전체 배너 우선순위 (앞일수록 우선) > 문구
 const OVERALL_PRIORITY = [ServiceState.DOWN, ServiceState.DEGRADED, ServiceState.MAINTENANCE, ServiceState.UP];
@@ -42,12 +40,12 @@ const OVERALL_MESSAGE_BY_STATE = Object.freeze({
 /**
  * 공개 모델 생성: 공개 서비스 선별 > 프로젝트별 서비스 행 > 전체 배너 > 지연 여부 > 최근 장애
  * config = 스냅샷, recentResults = {id: [{is_ok, is_slow, checked_at}] 최신순}, todayRollup = {day, services: {id: [total, ok]}},
- * rollups = [{day, service_id, total, ok}], publicIncidents = [{service_id, started_at, ended_at}], lastHeartbeatAt = ISO | null
+ * publicRollup = {id: [[day, total, ok]]} (오늘 제외), publicIncidents = [{service_id, started_at, ended_at}], lastHeartbeatAt = ISO | null
  */
-export function buildStatusModel(config, recentResults, todayRollup, rollups, publicIncidents, lastHeartbeatAt, nowMilliseconds) {
+export function buildStatusModel(config, recentResults, todayRollup, publicRollup, publicIncidents, lastHeartbeatAt, nowMilliseconds) {
   const visibleProjects = selectVisibleProjects(config);
-  const days = listRecentDays(nowMilliseconds);
-  const countsByServiceDay = indexDailyCounts(rollups, todayRollup);
+  const days = listStatusDays(nowMilliseconds);
+  const countsByDayByServiceId = indexDailyCounts(publicRollup, todayRollup);
   const maintenanceUntilById = indexMaintenanceUntil(config);
   const failuresToDown = readFailuresToDown(config);
   const safeRecentResults = isPlainObject(recentResults) ? recentResults : {};
@@ -61,8 +59,8 @@ export function buildStatusModel(config, recentResults, todayRollup, rollups, pu
       return {
         id: service.id,
         name: service.name,
-        state: isUnderMaintenance ? ServiceState.MAINTENANCE : judgeServiceState(recent, failuresToDown),
-        ...buildUptimeBars(service.id, days, countsByServiceDay),
+        state: isUnderMaintenance ? ServiceState.MAINTENANCE : judgeServiceState(recent, failuresToDown, nowMilliseconds),
+        ...buildUptimeBars(days, countsByDayByServiceId.get(service.id)),
       };
     }),
   }));
@@ -98,7 +96,7 @@ function selectVisibleProjects(config) {
   if (!isPlainObject(config) || !Array.isArray(config.services) || !Array.isArray(config.projects)) return [];
   const servicesByProjectId = new Map();
   for (const service of config.services) {
-    if (!isPlainObject(service) || service.is_public !== true || service.status !== VISIBLE_SERVICE_STATUS) continue;
+    if (!isPubliclyVisibleService(service)) continue;
     const services = servicesByProjectId.get(service.project_id) ?? [];
     services.push(service);
     servicesByProjectId.set(service.project_id, services);
@@ -117,14 +115,20 @@ function compareByName(left, right) {
   return leftName < rightName ? -1 : 1;
 }
 
-/** 최근 결과(최신순) > down(최근 N회 모두 실패) | degraded(최근 1회 실패·느림) | up | unknown(결과 없음) */
-function judgeServiceState(recent, failuresToDown) {
-  if (recent.length === 0) return ServiceState.UNKNOWN;
+/** 최근 결과(최신순) > unknown(없음·5분 넘게 오래됨) | down(최근 N회 모두 실패) | degraded(최근 1회 실패·느림) | up */
+function judgeServiceState(recent, failuresToDown, nowMilliseconds) {
+  if (recent.length === 0 || isRecentResultStale(recent[0], nowMilliseconds)) return ServiceState.UNKNOWN;
   const isDown = recent.length >= failuresToDown && recent.slice(0, failuresToDown).every((result) => result?.is_ok !== true);
   if (isDown) return ServiceState.DOWN;
   const newest = recent[0];
   if (newest?.is_ok !== true || newest?.is_slow === true) return ServiceState.DEGRADED;
   return ServiceState.UP;
+}
+
+/** 최신 결과 checked_at이 없거나 5분 초과 전이면 오래됨 */
+function isRecentResultStale(newestResult, nowMilliseconds) {
+  const checkedMilliseconds = parseIsoMilliseconds(newestResult?.checked_at);
+  return checkedMilliseconds === null || nowMilliseconds - checkedMilliseconds > RECENT_RESULT_STALE_SECONDS * MILLISECONDS_PER_SECOND;
 }
 
 /** 서비스 상태 목록 > 우선순위 최상위 상태, 정상조차 없으면 unknown */
@@ -140,45 +144,45 @@ function readFailuresToDown(config) {
 /** 점검 창 > {service_id: until 밀리초} (같은 서비스 여러 개면 가장 늦은 종료) */
 function indexMaintenanceUntil(config) {
   const untilById = new Map();
-  for (const window of Array.isArray(config?.maintenance) ? config.maintenance : []) {
-    const untilMilliseconds = parseIsoMilliseconds(window?.until);
+  for (const maintenanceWindow of Array.isArray(config?.maintenance) ? config.maintenance : []) {
+    const untilMilliseconds = parseIsoMilliseconds(maintenanceWindow?.until);
     if (untilMilliseconds === null) continue;
-    untilById.set(window.service_id, Math.max(untilMilliseconds, untilById.get(window.service_id) ?? -Infinity));
+    const serviceId = maintenanceWindow.service_id;
+    untilById.set(serviceId, Math.max(untilMilliseconds, untilById.get(serviceId) ?? -Infinity));
   }
   return untilById;
 }
 
-/** 오늘 포함 최근 90일 KST 날짜 (오래된 날 > 오늘) */
-function listRecentDays(nowMilliseconds) {
-  return Array.from({ length: STATUS_DAY_COUNT },
-    (_, index) => toKstDay(nowMilliseconds - (STATUS_DAY_COUNT - 1 - index) * MILLISECONDS_PER_DAY));
-}
-
-/** 첫 막대 날짜 (daily_rollup 조회 시작일) */
-export function calculateFirstStatusDay(nowMilliseconds) {
-  return listRecentDays(nowMilliseconds)[0];
-}
-
-/** daily_rollup 행 + 오늘 집계(자기 날짜에 덮어씀, 전날 미마감분 포함) > Map("id|day" > [total, ok]) */
-function indexDailyCounts(rollups, todayRollup) {
-  const countsByServiceDay = new Map();
-  for (const row of Array.isArray(rollups) ? rollups : []) {
-    countsByServiceDay.set(`${row.service_id}|${row.day}`, [Number(row.total) || 0, Number(row.ok) || 0]);
+/** 공개 집계 + 오늘 집계(자기 날짜에 덮어씀, 전날 미마감분 포함) > Map(id > Map(day > [total, ok])) */
+function indexDailyCounts(publicRollup, todayRollup) {
+  const countsByDayByServiceId = new Map();
+  const setCounts = (serviceId, day, total, okCount) => {
+    const countsByDay = countsByDayByServiceId.get(serviceId) ?? new Map();
+    countsByDay.set(day, [Number(total) || 0, Number(okCount) || 0]);
+    countsByDayByServiceId.set(serviceId, countsByDay);
+  };
+  if (isPlainObject(publicRollup)) {
+    for (const [serviceId, entries] of Object.entries(publicRollup)) {
+      if (!Array.isArray(entries)) continue;
+      for (const entry of entries) {
+        if (Array.isArray(entry)) setCounts(serviceId, entry[0], entry[1], entry[2]);
+      }
+    }
   }
   if (isPlainObject(todayRollup) && isPlainObject(todayRollup.services)) {
     for (const [serviceId, counts] of Object.entries(todayRollup.services)) {
-      if (Array.isArray(counts)) countsByServiceDay.set(`${serviceId}|${todayRollup.day}`, [Number(counts[0]) || 0, Number(counts[1]) || 0]);
+      if (Array.isArray(counts)) setCounts(serviceId, todayRollup.day, counts[0], counts[1]);
     }
   }
-  return countsByServiceDay;
+  return countsByDayByServiceId;
 }
 
 /** 서비스 1개 > {uptime_percent: 90일 합계 기준, days: [{day, uptime_percent, level}]} */
-function buildUptimeBars(serviceId, days, countsByServiceDay) {
+function buildUptimeBars(days, countsByDay) {
   let totalSum = 0;
   let okSum = 0;
   const bars = days.map((day) => {
-    const [total, okCount] = countsByServiceDay.get(`${serviceId}|${day}`) ?? [0, 0];
+    const [total, okCount] = countsByDay?.get(day) ?? [0, 0];
     totalSum += total;
     okSum += okCount;
     return { day, uptime_percent: toUptimePercent(total, okCount), level: toUptimeLevel(total, okCount) };

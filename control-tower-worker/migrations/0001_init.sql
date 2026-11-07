@@ -1,7 +1,8 @@
 -- 관제소 Worker D1 초기 스키마: 상태 키값(meta), 1분 점검 원시(check_run, 7일), 일별 집계(daily_rollup, 90일+)
 
 -- meta 키: last_heartbeat_at, emergency_state(ok|down), emergency_since, config_json, config_version,
---          public_incidents_json, last_rollup_day, today_rollup_json, recent_results_json, webhook_missing_warned_hour
+--          public_incidents_json, last_rollup_day, today_rollup_json, recent_results_json, webhook_missing_warned_hour,
+--          public_rollup_json
 CREATE TABLE IF NOT EXISTS meta (
     key TEXT PRIMARY KEY,
     value TEXT

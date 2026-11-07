@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import { buildStatusModel, renderStatusPage, toUptimeLevel } from '../src/status_page.js';
 import { formatDurationLabel } from '../src/status_render.js';
 import {
-  HIDDEN_STRINGS, STATUS_NOW_MILLISECONDS, TODAY_KST, createPublicIncidents, createRecentResults, createRollupRows,
+  HIDDEN_STRINGS, STATUS_NOW_MILLISECONDS, TODAY_KST, createPublicIncidents, createPublicRollup, createRecentResults,
   createStatusConfig, createTodayRollup, recentResult,
 } from '../test_support/status_fixtures.js';
 
@@ -19,7 +19,7 @@ function buildFixtureModel(overrides = {}) {
     pick('config', createStatusConfig),
     pick('recentResults', createRecentResults),
     pick('todayRollup', createTodayRollup),
-    pick('rollups', createRollupRows),
+    pick('publicRollup', createPublicRollup),
     pick('publicIncidents', createPublicIncidents),
     pick('lastHeartbeatAt', () => RECENT_HEARTBEAT_AT),
     pick('nowMilliseconds', () => STATUS_NOW_MILLISECONDS),
@@ -40,7 +40,7 @@ function stateOf(recent, { maintenance = [], failuresToDown = 3 } = {}) {
   return findService(model, 'elum-api').state;
 }
 
-test('비공개·paused 서비스와 내부 주소는 HTML·JSON 어디에도 없다', () => {
+test('비공개·paused 서비스, 내부 주소, 결과 error·장애 cause는 HTML·JSON 어디에도 없다', () => {
   const model = buildFixtureModel();
   const html = renderStatusPage(model);
   const json = JSON.stringify(model);
@@ -71,6 +71,21 @@ test('상태 판정: 정상·느림·최근 1회 실패·연속 실패·데이�
   assert.equal(findService(buildFixtureModel(), 'elum-web').state, 'unknown', 'no external check');
 });
 
+test('최신 결과가 5분 넘게 오래되면 unknown', () => {
+  assert.equal(stateOf([recentResult(true, false, 5)]), 'up');
+  assert.equal(stateOf([recentResult(true, false, 6)]), 'unknown');
+  assert.equal(stateOf([recentResult(false, false, 6), recentResult(false, false, 7), recentResult(false, false, 8)]), 'unknown');
+  assert.equal(stateOf([{ is_ok: true, is_slow: false }]), 'unknown', 'no checked_at');
+});
+
+test('마지막 갱신: 최신 점검 시각 KST, 기록 없으면 점검 기록 없음', () => {
+  const html = renderStatusPage(buildFixtureModel());
+  assert.ok(html.includes('마지막 갱신 2026-11-07 12:00 KST'));
+  const emptyHtml = renderStatusPage(buildFixtureModel({ recentResults: {} }));
+  assert.ok(emptyHtml.includes('점검 기록 없음'));
+  assert.equal(emptyHtml.includes('마지막 갱신'), false);
+});
+
 test('점검 창이 남아 있으면 maintenance, 끝났으면 원래 판정', () => {
   const failing = [recentResult(false), recentResult(false), recentResult(false)];
   const futureUntil = new Date(STATUS_NOW_MILLISECONDS + 30 * MINUTE_MILLISECONDS).toISOString();
@@ -90,7 +105,7 @@ test('전체 배너: 장애 > 느림 > 점검 > 정상 > 불러오는 중', () =
     [{ config: maintenanceConfig }, 'maintenance', '일부 서비스 점검 중입니다'],
     [{}, 'up', '모든 서비스가 정상 작동 중입니다'],
     [{ recentResults: {} }, 'unknown', '상태 정보를 불러오는 중입니다'],
-    [{ config: null, recentResults: null, todayRollup: null, rollups: [], publicIncidents: null, lastHeartbeatAt: null },
+    [{ config: null, recentResults: null, todayRollup: null, publicRollup: null, publicIncidents: null, lastHeartbeatAt: null },
       'unknown', '상태 정보를 불러오는 중입니다'],
   ];
   for (const [overrides, expectedState, expectedMessage] of cases) {
@@ -128,7 +143,7 @@ test('막대 색 경계: 99.5% 이상 ok, 95% 이상 warn, 미만 bad, 없음 no
 
 test('90일 막대: 오래된 날 > 오늘, 오늘은 today_rollup, 전날 미마감분도 반영', () => {
   const todayRollup = { day: '2026-11-06', services: { 'elum-api': [1000, 940] } };
-  const model = buildFixtureModel({ todayRollup, rollups: [{ day: '2026-11-05', service_id: 'elum-api', total: 100, ok: 100 }] });
+  const model = buildFixtureModel({ todayRollup, publicRollup: { 'elum-api': [['2026-11-05', 100, 100]] } });
   const days = findService(model, 'elum-api').days;
   assert.equal(days.length, 90);
   assert.equal(days[0].day, '2026-08-10');
@@ -139,12 +154,12 @@ test('90일 막대: 오래된 날 > 오늘, 오늘은 today_rollup, 전날 미�
 });
 
 test('90일 가동률: 있는 날 합계 기준 소수 2자리, 데이터 없으면 null', () => {
-  const rollups = [{ day: '2026-11-06', service_id: 'elum-api', total: 1000, ok: 990 }];
+  const publicRollup = { 'elum-api': [['2026-11-06', 1000, 990]] };
   const todayRollup = { day: TODAY_KST, services: { 'elum-api': [1000, 1000] } };
-  const model = buildFixtureModel({ rollups, todayRollup });
+  const model = buildFixtureModel({ publicRollup, todayRollup });
   assert.equal(findService(model, 'elum-api').uptime_percent, 99.5);
   assert.equal(findService(model, 'elum-web').uptime_percent, null);
-  const roundingModel = buildFixtureModel({ rollups: [], todayRollup: { day: TODAY_KST, services: { 'elum-api': [3, 2] } } });
+  const roundingModel = buildFixtureModel({ publicRollup: {}, todayRollup: { day: TODAY_KST, services: { 'elum-api': [3, 2] } } });
   assert.equal(findService(roundingModel, 'elum-api').uptime_percent, 66.66);
   const html = renderStatusPage(model);
   assert.ok(html.includes('99.50%'));
@@ -197,6 +212,8 @@ test('HTML 골격: 제목·viewport·다크 모드·외부 자원 없음·360px 
   assert.equal(/<script/i.test(html), false);
   assert.equal(/<link|<img|src=|url\(/i.test(html), false);
   for (const label of ['정상', '확인 중', '마지막 갱신']) assert.ok(html.includes(label), label);
+  assert.equal(html.includes('title="'), false, 'no per-cell title');
+  assert.ok(html.includes('aria-label="최근 가동 기록"'));
   // 고정 폭(max-width 제외)은 360px 이하만
   const fixedWidths = [...html.matchAll(/(?<![-\w])width:\s*(\d+)px/g)].map((match) => Number(match[1]));
   assert.ok(fixedWidths.every((width) => width <= 360), `fixed widths ${fixedWidths}`);

@@ -18,6 +18,15 @@ const STATE_LABEL_BY_STATE = Object.freeze({
 const LEGEND_ITEMS = Object.freeze([
   ['ok', '99.5% 이상'], ['warn', '95% 이상'], ['bad', '95% 미만'], ['none', '기록 없음'],
 ]);
+// 막대 칸 HTML (등급 > 고정 문자열, 칸마다 이스케이프·title 없이 CPU 절약), older = 좁은 화면에서 숨김
+const BAR_CELL_HTML_BY_LEVEL = buildBarCellHtmlByLevel('');
+const OLDER_BAR_CELL_HTML_BY_LEVEL = buildBarCellHtmlByLevel(' older');
+
+function buildBarCellHtmlByLevel(extraClassName) {
+  return Object.freeze(Object.fromEntries(
+    LEGEND_ITEMS.map(([level]) => [level, `<span class="bar-cell ${level}${extraClassName}"></span>`]),
+  ));
+}
 const HTML_ESCAPE_BY_CHARACTER = Object.freeze({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' });
 
 /** 모델 > HTML 문서 1장 */
@@ -40,7 +49,7 @@ ${model.is_delayed ? `<p class="notice">${escapeHtml(DELAYED_NOTICE_TEXT)}</p>` 
 ${projectCards}
 ${model.projects.length > 0 ? renderLegend() : ''}
 ${renderIncidentSection(model.incidents)}
-<footer class="footer">마지막 갱신 ${escapeHtml(formatKstOrDash(model.last_checked_at ?? model.generated_at))} KST</footer>
+<footer class="footer">${escapeHtml(formatLastCheckedText(model.last_checked_at))}</footer>
 </main>
 </body>
 </html>
@@ -68,11 +77,15 @@ function renderProjectCard(project) {
 
 /** 서비스 행: 이름·상태 > 90일 막대 > 캡션(기간·가동률·오늘) */
 function renderServiceRow(service) {
-  const cells = service.days.map((day, index) => renderBarCell(day, index < NARROW_HIDDEN_DAY_COUNT)).join('');
+  let cells = '';
+  service.days.forEach((day, index) => {
+    const cellHtmlByLevel = index < NARROW_HIDDEN_DAY_COUNT ? OLDER_BAR_CELL_HTML_BY_LEVEL : BAR_CELL_HTML_BY_LEVEL;
+    cells += cellHtmlByLevel[day.level] ?? cellHtmlByLevel.none;
+  });
   const uptimeText = service.uptime_percent === null ? '기록 없음' : `${service.uptime_percent.toFixed(2)}%`;
   return `<div class="service">`
     + `<div class="service-head"><span class="service-name">${escapeHtml(service.name)}</span>${renderStatePill(service.state)}</div>`
-    + `<div class="bars" role="img" aria-label="최근 90일 가동 기록">${cells}</div>`
+    + `<div class="bars" role="img" aria-label="최근 가동 기록">${cells}</div>`
     + `<div class="bar-caption"><span><span class="caption-long">90일 전</span><span class="caption-short">60일 전</span></span>`
     + `<span>가동률 ${escapeHtml(uptimeText)}</span><span>오늘</span></div>`
     + `</div>`;
@@ -81,13 +94,6 @@ function renderServiceRow(service) {
 function renderStatePill(state) {
   const label = STATE_LABEL_BY_STATE[state] ?? STATE_LABEL_BY_STATE.unknown;
   return `<span class="pill state-${escapeHtml(state)}"><span class="dot"></span>${escapeHtml(label)}</span>`;
-}
-
-/** 막대 1칸 (title = 날짜·가동률, 좁은 화면 숨김 대상은 older) */
-function renderBarCell(day, isOlder) {
-  const percentText = day.uptime_percent === null ? '기록 없음' : `${day.uptime_percent.toFixed(2)}%`;
-  const className = isOlder ? `bar-cell ${day.level} older` : `bar-cell ${day.level}`;
-  return `<span class="${escapeHtml(className)}" title="${escapeHtml(`${day.day} · ${percentText}`)}"></span>`;
 }
 
 function renderLegend() {
@@ -117,6 +123,12 @@ function renderIncident(incident) {
   return `<li class="incident"><div class="service-head">`
     + `<span class="service-name">${escapeHtml(incident.project_name)} · ${escapeHtml(incident.service_name)}</span>${pill}</div>`
     + `<p class="incident-time">${escapeHtml(timeText)}</p></li>`;
+}
+
+/** 마지막 점검 시각 > '마지막 갱신 YYYY-MM-DD HH:MM KST', 없으면 '점검 기록 없음' */
+function formatLastCheckedText(lastCheckedAt) {
+  const milliseconds = parseIsoMilliseconds(lastCheckedAt);
+  return milliseconds === null ? '점검 기록 없음' : `마지막 갱신 ${toKstDateTime(milliseconds)} KST`;
 }
 
 /** ISO > KST 'YYYY-MM-DD HH:MM', 없거나 잘못되면 '-' */

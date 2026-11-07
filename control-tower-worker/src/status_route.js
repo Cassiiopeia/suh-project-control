@@ -1,9 +1,10 @@
 /**
- * GET / · /api/status.json: 캐시 조회 > (없으면) meta 1회 + daily_rollup 90일 1회 > 모델 > HTML|JSON > 60초 캐시
- * check_run은 읽지 않음 (무료 CPU·읽기 한도), 캐시 키는 쿼리 문자열 제거한 경로 (임의 쿼리로 캐시 우회 차단)
+ * GET / · /api/status.json: 캐시 조회 > (없으면) meta 1회 > 모델 > HTML|JSON > 60초 캐시
+ * meta만 읽음 (check_run·daily_rollup 안 읽음, 무료 CPU·읽기 한도), 캐시 키는 쿼리 문자열 제거한 경로 (임의 쿼리로 캐시 우회 차단)
+ * 캐시 오류는 경고만 남기고 캐시 없이 응답
  */
-import { buildStatusModel, calculateFirstStatusDay, renderStatusPage } from './status_page.js';
-import { MetaKey, getDailyRollupsSince, getMetaValues, parseJsonObject } from './store.js';
+import { buildStatusModel, renderStatusPage } from './status_page.js';
+import { MetaKey, getMetaValues, parseJsonObject } from './store.js';
 
 export const STATUS_JSON_PATH = '/api/status.json';
 export const STATUS_PAGE_PATHS = new Set(['/', STATUS_JSON_PATH]);
@@ -26,7 +27,7 @@ export function getDefaultStatusCache() {
 export async function handleStatusRequest(request, environment, nowMilliseconds, cache, context) {
   const url = new URL(request.url);
   const cacheKey = new Request(`${url.origin}${url.pathname}`);
-  const cachedResponse = cache ? await cache.match(cacheKey) : undefined;
+  const cachedResponse = await matchCachedResponse(cache, cacheKey);
   if (cachedResponse) return cachedResponse;
 
   const model = await loadStatusModel(environment.DB, nowMilliseconds);
@@ -34,25 +35,41 @@ export async function handleStatusRequest(request, environment, nowMilliseconds,
     ? buildStatusResponse(JSON.stringify(model), 'application/json; charset=utf-8')
     : buildStatusResponse(renderStatusPage(model), 'text/html; charset=utf-8');
   if (cache) {
-    const putPromise = cache.put(cacheKey, response.clone());
+    const putPromise = Promise.resolve()
+      .then(() => cache.put(cacheKey, response.clone()))
+      .catch((error) => console.warn(`[control-tower worker status] cache write failed : ${error?.name ?? 'unknown'}`));
     if (typeof context?.waitUntil === 'function') context.waitUntil(putPromise);
     else await putPromise;
   }
   return response;
 }
 
-/** meta 5키 1회 + daily_rollup(첫 막대 날짜부터) 1회 > 공개 모델 */
+/** 캐시 조회 (캐시 없음·오류 > undefined) */
+async function matchCachedResponse(cache, cacheKey) {
+  if (!cache) return undefined;
+  try {
+    return await cache.match(cacheKey);
+  } catch (error) {
+    console.warn(`[control-tower worker status] cache read failed : ${error?.name ?? 'unknown'}`);
+    return undefined;
+  }
+}
+
+/** meta 6키 1회 > 공개 모델 (설정 손상은 경고 후 설정 없음으로) */
 async function loadStatusModel(database, nowMilliseconds) {
   const meta = await getMetaValues(database, [
     MetaKey.CONFIG_JSON, MetaKey.RECENT_RESULTS_JSON, MetaKey.TODAY_ROLLUP_JSON,
-    MetaKey.PUBLIC_INCIDENTS_JSON, MetaKey.LAST_HEARTBEAT_AT,
+    MetaKey.PUBLIC_ROLLUP_JSON, MetaKey.PUBLIC_INCIDENTS_JSON, MetaKey.LAST_HEARTBEAT_AT,
   ]);
-  const rollups = await getDailyRollupsSince(database, calculateFirstStatusDay(nowMilliseconds));
+  const config = parseJsonObject(meta[MetaKey.CONFIG_JSON]);
+  if (config === null && meta[MetaKey.CONFIG_JSON] !== null) {
+    console.warn('[control-tower worker status] config_json invalid : ignored');
+  }
   return buildStatusModel(
-    parseJsonObject(meta[MetaKey.CONFIG_JSON]),
+    config,
     parseJsonObject(meta[MetaKey.RECENT_RESULTS_JSON]),
     parseJsonObject(meta[MetaKey.TODAY_ROLLUP_JSON]),
-    rollups,
+    parseJsonObject(meta[MetaKey.PUBLIC_ROLLUP_JSON]),
     parseJsonArray(meta[MetaKey.PUBLIC_INCIDENTS_JSON]),
     meta[MetaKey.LAST_HEARTBEAT_AT],
     nowMilliseconds,
