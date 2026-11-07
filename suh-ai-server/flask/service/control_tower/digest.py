@@ -1,0 +1,59 @@
+"""관제소 일일 요약: KST 하루 기준 활성 서비스 가동률(100% 미만만) + 그날과 겹친 장애 건수·다운 시간"""
+from __future__ import annotations
+
+from datetime import date, datetime, time, timedelta
+
+from service.control_tower import alert_texts
+from service.control_tower.alert_planner import GLOBAL_SCOPE, Notification
+from service.control_tower.alert_suppression import ACTIVE_STATUS
+from service.control_tower.registry import Registry, ServiceSpec
+
+DIGEST_KIND = "digest"
+SEVERITY_INFO = "info"
+DAY_FORMAT = "%Y-%m-%d"
+PERCENT = 100
+ALL_HEALTHY_LINE = "모든 서비스 정상 (100%)"
+NO_DATA_LINE = "집계 데이터 없음"
+NO_INCIDENT_LINE = "장애 없음"
+
+
+def build_daily_digest(registry: Registry, store, day_kst: date) -> Notification:
+    """요약 1건: 활성 서비스 가동률 줄 > 장애 줄 > 전역 digest 알림"""
+    day_text = day_kst.strftime(DAY_FORMAT)
+    active_services = [
+        service for service in registry.infrastructure + registry.services if service.status == ACTIVE_STATUS
+    ]
+    body = "\n".join([
+        _uptime_section(active_services, store.rollups_on_day(day_text)),
+        _incident_line(active_services, store, day_kst),
+    ])
+    return Notification(GLOBAL_SCOPE, DIGEST_KIND, SEVERITY_INFO, f"[일일 요약] {day_text}", body, (),
+                        f"digest:{day_text}")
+
+
+def _uptime_section(services: list[ServiceSpec], rollup_by_service_id: dict[str, tuple[int, int]]) -> str:
+    """100% 미만 서비스 '{이름}: {가동률:.2f}%' 줄 (없으면 정상 문구, 집계 자체가 없으면 데이터 없음)"""
+    rollups = [(service, rollup_by_service_id[service.id]) for service in services
+               if service.id in rollup_by_service_id]
+    if not rollups:
+        return NO_DATA_LINE
+    degraded_lines = [
+        f"{service.name}: {ok * PERCENT / total:.2f}%" for service, (total, ok) in rollups if ok < total
+    ]
+    return "\n".join(degraded_lines) if degraded_lines else ALL_HEALTHY_LINE
+
+
+def _incident_line(services: list[ServiceSpec], store, day_kst: date) -> str:
+    """그날과 겹친 장애 'N건, 총 다운 시간' (다운 시간은 그날 안으로 자른 합계)"""
+    day_start = datetime.combine(day_kst, time.min, tzinfo=alert_texts.KST)
+    day_end = day_start + timedelta(days=1)
+    active_service_ids = {service.id for service in services}
+    incidents = [incident for incident in store.incidents_overlapping(day_start, day_end)
+                 if incident["service_id"] in active_service_ids]
+    if not incidents:
+        return NO_INCIDENT_LINE
+    downtime_seconds = sum(
+        (min(incident["ended_at"] or day_end, day_end) - max(incident["started_at"], day_start)).total_seconds()
+        for incident in incidents
+    )
+    return f"장애 {len(incidents)}건, 총 다운 시간 {alert_texts.format_duration_korean(downtime_seconds)}"

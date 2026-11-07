@@ -131,6 +131,12 @@ class ControlTowerStore:
         ).fetchall()
         return [(row["day"], row["total"], row["ok"]) for row in reversed(rows)]
 
+    def rollups_on_day(self, day: str) -> dict[str, tuple[int, int]]:
+        """KST 일자(YYYY-MM-DD) 1개의 서비스별 (total, ok)"""
+        rows = self._connection().execute(
+            "SELECT service_id, total, ok FROM daily_rollup WHERE day = ?", (day,)).fetchall()
+        return {row["service_id"]: (row["total"], row["ok"]) for row in rows}
+
     # ---- 서비스 상태 ----
 
     def load_states(self) -> dict[str, ServiceState]:
@@ -181,6 +187,16 @@ class ControlTowerStore:
             "SELECT id, service_id, cause, started_at, ended_at FROM incident "
             "WHERE started_at >= ? OR ended_at IS NULL ORDER BY started_at DESC, id DESC LIMIT ?",
             (_to_text(since), limit)).fetchall()
+        return [{"id": row["id"], "service_id": row["service_id"], "cause": row["cause"],
+                 "started_at": _from_text(row["started_at"]), "ended_at": _from_text(row["ended_at"])}
+                for row in rows]
+
+    def incidents_overlapping(self, start: datetime, end: datetime) -> list[dict]:
+        """[start, end) 구간과 겹친 장애 (진행 중 포함), 시작순"""
+        rows = self._connection().execute(
+            "SELECT id, service_id, cause, started_at, ended_at FROM incident "
+            "WHERE started_at < ? AND (ended_at IS NULL OR ended_at > ?) ORDER BY started_at, id",
+            (_to_text(end), _to_text(start))).fetchall()
         return [{"id": row["id"], "service_id": row["service_id"], "cause": row["cause"],
                  "started_at": _from_text(row["started_at"]), "ended_at": _from_text(row["ended_at"])}
                 for row in rows]

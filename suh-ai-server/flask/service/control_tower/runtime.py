@@ -12,6 +12,7 @@ class ControlTowerRuntime:
     registry_provider: Callable[[], Registry]
     store: object  # ControlTowerStore
     dispatcher: object  # EventDispatcher
+    poller: object | None = None  # ControlTowerPoller (관리자 화면 현재 상태 조회용)
 
 
 _runtime: ControlTowerRuntime | None = None
