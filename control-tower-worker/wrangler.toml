@@ -12,8 +12,7 @@ crons = ["* * * * *"]
 [[d1_databases]]
 binding = "DB"
 database_name = "suh-control-tower"
-# 첫 배포 전 `wrangler d1 create suh-control-tower` 결과 ID로 교체
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "97e4f0b8-0da9-4870-8b75-3072ff27a9ee"
 migrations_dir = "migrations"
 
 [[routes]]
