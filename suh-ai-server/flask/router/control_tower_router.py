@@ -9,9 +9,11 @@ from datetime import datetime, timezone
 
 from flask import Blueprint, jsonify, request
 
+from router.control_tower_admin_api import register_admin_api
 from service.control_tower.runtime import get_runtime
 
 control_tower_bp = Blueprint('control_tower', __name__)
+register_admin_api(control_tower_bp)  # 관리자 화면 API (nginx 키 검사 대상)
 
 # 프로젝트별 토큰 env: CONTROL_EVENT_TOKEN_{프로젝트 id 대문자, '-' > '_'}
 TOKEN_ENV_PREFIX = 'CONTROL_EVENT_TOKEN_'

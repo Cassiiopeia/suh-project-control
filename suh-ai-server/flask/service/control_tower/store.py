@@ -201,7 +201,15 @@ class ControlTowerStore:
                  "started_at": _from_text(row["started_at"]), "ended_at": _from_text(row["ended_at"])}
                 for row in rows]
 
-    # ---- 이벤트 중복 억제 ----
+    # ---- 이벤트 중복 억제·조회 ----
+
+    def recent_events(self, limit: int) -> list[dict]:
+        """최근 접수 이벤트 (dedupe_key 제외), 최신순"""
+        rows = self._connection().execute(
+            "SELECT id, project_id, kind, created_at FROM event_log ORDER BY created_at DESC, id DESC LIMIT ?",
+            (limit,)).fetchall()
+        return [{"id": row["id"], "project_id": row["project_id"], "kind": row["kind"],
+                 "created_at": _from_text(row["created_at"])} for row in rows]
 
     def record_event(self, project_id: str, kind: str, dedupe_key: str | None, created_at: datetime) -> bool:
         """이벤트 기록: 같은 (프로젝트, 키)가 10분 내 있으면 False(기록 안 함), 키 없으면 항상 True"""

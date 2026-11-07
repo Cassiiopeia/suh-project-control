@@ -45,7 +45,8 @@ def start_control_tower(environ: Mapping[str, str] = os.environ, database_path: 
                                 environ=environ)
 
     runtime = ControlTowerRuntime(registry_provider=poller.current_registry, store=store, dispatcher=dispatcher,
-                                  poller=poller)
+                                  poller=poller, discord_client_provider=lambda: discord_client,
+                                  guild_id=environ.get(DISCORD_GUILD_ID_ENV) or None)
     set_runtime(runtime)
     poller.start()
 

@@ -125,3 +125,22 @@ def test_claude_login_page_renders(client):
 def test_menu_has_claude_login_link(client):
     body = client.get('/admin').get_data(as_text=True)
     assert 'admin/claude-login' in body
+
+
+def test_control_page_renders(client):
+    resp = client.get('/admin/control')
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert '관제소' in body
+    assert 'control.js' in body
+    assert 'control-summary' in body
+    assert 'control-service-table' in body
+    assert 'control-maintenance-form' in body
+    assert 'control-registry-error' in body
+    assert not EMOJI_RE.search(body)
+
+
+def test_menu_has_control_link_with_radar_icon(client):
+    body = client.get('/admin').get_data(as_text=True)
+    assert 'admin/control' in body
+    assert 'data-lucide="radar"' in body

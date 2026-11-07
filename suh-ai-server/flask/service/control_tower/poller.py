@@ -8,6 +8,7 @@ import os
 import threading
 import time
 from datetime import datetime, timedelta
+from types import MappingProxyType
 from typing import Callable, Mapping
 
 from config.control_tower_config import POLL_INTERVAL_SECONDS
@@ -16,9 +17,10 @@ from service.control_tower.check_runner import run_check, utc_now
 from service.control_tower.digest import build_daily_digest
 from service.control_tower.heartbeat_client import HeartbeatResponse
 from service.control_tower.poller_steps import (
-    build_observations, build_public_incidents, fresh_external_results, heartbeat_check_result, merge_maintenance,
+    build_observations, build_public_incidents, carry_over_external_observations, fresh_external_results, heartbeat_check_result, merge_maintenance,
     monitored_services, restore_undelivered_alert_flags, run_internal_checks,
 )
+from service.control_tower.poller_snapshot import EMPTY_VIEW, PollerSnapshot, PublishedView
 from service.control_tower.registry import Registry, RegistryError, load_registry
 from service.control_tower.state_machine import (
     INITIAL_STATE, STATUS_DOWN, Observation, ServiceState, Transition, advance,
@@ -57,6 +59,8 @@ class ControlTowerPoller:
         self._states: dict[str, ServiceState] | None = None  # 첫 틱에 저장소에서 1회 복원
         self._last_applied_external_checked_at: datetime | None = None  # 같은 Worker 결과 중복 반영 방지
         self._stop_event = threading.Event()
+        # 틱 끝에 통째로 교체하는 불변 뷰 (요청 스레드는 참조 하나만 읽음)
+        self._published_view = EMPTY_VIEW
 
     def start(self) -> threading.Thread:
         thread = threading.Thread(target=self._run_loop, daemon=True, name="control-tower-poller")
@@ -72,6 +76,11 @@ class ControlTowerPoller:
 
     def current_states(self) -> dict[str, ServiceState]:
         return dict(self._states or {})
+
+    def snapshot(self) -> PollerSnapshot:
+        """관리자 화면용 현재 상태: 등록 정보·상태·서비스별 마지막 관측·마지막 틱 시각 (불변)"""
+        view = self._published_view
+        return PollerSnapshot(self._registry, view.states, view.observations, view.last_tick_at)
 
     def tick(self) -> None:
         """틱 1회: 등록 파일 > 심박 > 내부 점검 > 상태 전이 > 알림 계획·발송 > 장애 구간·저장 > 요약 > 정리"""
@@ -100,10 +109,19 @@ class ControlTowerPoller:
 
         # 장애 구간 > 저장 (서비스별 독립) > 하루 1회 작업
         self._states = planned_states
+        self._publish_view(planned_states, observations, now)
         self._record_incidents(transitions, now)
         self._save_tick(observations, previous_states, planned_states, now)
         self._run_daily_task("digest", lambda: self._send_digest_if_due(registry, now))
         self._run_daily_task("purge", lambda: self._purge_if_due(now))
+
+    def _publish_view(self, states: dict[str, ServiceState], observations: dict[str, Observation],
+                      now: datetime) -> None:
+        """snapshot용 불변 뷰 교체 (외부 결과는 직전 값 이월)"""
+        displayed_observations = carry_over_external_observations(
+            observations, self._published_view.observations, now)
+        self._published_view = PublishedView(
+            MappingProxyType(dict(states)), MappingProxyType(displayed_observations), now)
 
     def _run_loop(self) -> None:
         """고정 주기: 틱 소요 시간을 빼고 대기"""

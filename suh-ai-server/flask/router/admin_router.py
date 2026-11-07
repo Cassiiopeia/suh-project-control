@@ -73,6 +73,12 @@ def claude_login():
     return render_template('admin/claude_login.html', root='..', active='claude-login')
 
 
+@admin_bp.route('/admin/control', methods=['GET'])
+def control():
+    """관제소 서비스 감시 현황 페이지 (상태·장애·이벤트·점검 창·디스코드 동기화)"""
+    return render_template('admin/control.html', root='..', active='control')
+
+
 @admin_bp.route('/admin/models', methods=['GET'])
 def models():
     """모델 관리 페이지 (HF 검색·다운로드·벤치마크)"""

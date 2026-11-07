@@ -7,6 +7,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
+from typing import Mapping
 
 from service.control_tower.alert_planner import SEVERITY_CRITICAL, Notification
 from service.control_tower.alert_suppression import HOME_NETWORK_ID
@@ -106,6 +107,21 @@ def build_observations(services: list[ServiceSpec], internal_results: dict[str, 
         external = external_results.get(service.id) if service.external is not None else None
         observations[service.id] = Observation(internal_results.get(service.id), external, external is not None)
     return observations
+
+
+def carry_over_external_observations(observations: dict[str, Observation],
+                                     previous: Mapping[str, Observation], now: datetime) -> dict[str, Observation]:
+    """표시용 관측: 이번 틱에 외부 결과가 없는 서비스는 3분 안의 직전 외부 결과 유지 (판정·저장에는 쓰지 않음)"""
+    carried = dict(observations)
+    for service_id, observation in observations.items():
+        previous_observation = previous.get(service_id)
+        if observation.is_external_known or previous_observation is None:
+            continue
+        previous_external = previous_observation.external
+        if (previous_observation.is_external_known and previous_external is not None
+                and now - previous_external.checked_at <= EXTERNAL_RESULT_MAX_AGE):
+            carried[service_id] = replace(observation, external=previous_external, is_external_known=True)
+    return carried
 
 
 def build_public_incidents(registry: Registry, store, now: datetime) -> list[dict]:
