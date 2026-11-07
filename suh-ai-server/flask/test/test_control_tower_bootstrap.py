@@ -89,3 +89,24 @@ def test_기동_동기화는_관리자_버튼과_같은_잠금을_기다린다(p
         assert sync_calls == []
     _wait_until(lambda: sync_calls != [])
     assert len(sync_calls) == 1
+
+
+def test_기동_동기화와_런타임은_관리자_덮어쓰기를_적용한_실효_등록_정보를_쓴다(paths, monkeypatch):
+    from datetime import datetime, timezone
+    from service.control_tower.override_models import CustomProject
+    from service.control_tower.store import ControlTowerStore
+    database_path, registry_path = paths
+    prepared_store = ControlTowerStore(database_path)
+    prepared_store.initialize()
+    prepared_store.insert_custom_project(CustomProject("blog", "블로그"), datetime.now(timezone.utc))
+    prepared_store.close()
+    sync_calls = []
+    monkeypatch.setattr(bootstrap, "sync_discord", lambda *arguments: sync_calls.append(arguments))
+
+    started_runtime = bootstrap.start_control_tower({"DISCORD_BOT_TOKEN": "bot-token", "DISCORD_GUILD_ID": "9000"},
+                                                    database_path, registry_path)
+
+    _wait_until(lambda: sync_calls != [])
+    assert [project.id for project in sync_calls[0][0].projects] == ["elum", "blog"]
+    _wait_until(lambda: started_runtime.registry_provider().projects != ())
+    assert [project.id for project in started_runtime.file_registry_provider().projects] == ["elum"]

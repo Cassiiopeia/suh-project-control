@@ -15,6 +15,8 @@ class ControlTowerRuntime:
     poller: object | None = None  # ControlTowerPoller (관리자 화면 현재 상태 조회용)
     discord_client_provider: Callable[[], object | None] | None = None  # 호출 시점의 DiscordClient (미설정이면 None)
     guild_id: str | None = None  # 디스코드 동기화 대상 서버 ID
+    # 덮어쓰기 전 등록 파일 원본 (없으면 registry_provider 값을 원본으로 봄)
+    file_registry_provider: Callable[[], Registry] | None = None
 
 
 _runtime: ControlTowerRuntime | None = None

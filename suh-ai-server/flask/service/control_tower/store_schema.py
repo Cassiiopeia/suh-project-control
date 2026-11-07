@@ -1,4 +1,4 @@
-"""관제소 SQLite 스키마: 테이블 8개 + 인덱스 + 기존 DB 열 추가 (시각은 UTC ISO-8601 문자열)"""
+"""관제소 SQLite 스키마: 테이블 12개 + 인덱스 + 기존 DB 열 추가 (시각은 UTC ISO-8601 문자열)"""
 from __future__ import annotations
 
 SCHEMA_STATEMENTS = (
@@ -69,6 +69,36 @@ SCHEMA_STATEMENTS = (
         reason TEXT NOT NULL
     )""",
     "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+    # 관리자 화면 서비스 덮어쓰기 (NULL 칸 = 원본 값, is_public 1 공개 0 비공개)
+    """CREATE TABLE IF NOT EXISTS service_override (
+        service_id TEXT PRIMARY KEY,
+        name TEXT, status TEXT, is_public INTEGER, sort_order INTEGER, external_url TEXT,
+        updated_at TEXT NOT NULL
+    )""",
+    # 관리자 화면에서 추가한 서비스 (외부 점검만)
+    """CREATE TABLE IF NOT EXISTS custom_service (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        external_url TEXT NOT NULL,
+        status TEXT NOT NULL,
+        is_public INTEGER NOT NULL,
+        sort_order INTEGER,
+        created_at TEXT NOT NULL
+    )""",
+    # 관리자 화면 프로젝트 덮어쓰기 (is_hidden 1 공개 페이지 숨김 0 표시)
+    """CREATE TABLE IF NOT EXISTS project_override (
+        project_id TEXT PRIMARY KEY,
+        name TEXT, is_hidden INTEGER, sort_order INTEGER,
+        updated_at TEXT NOT NULL
+    )""",
+    # 관리자 화면에서 추가한 프로젝트
+    """CREATE TABLE IF NOT EXISTS custom_project (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        sort_order INTEGER,
+        created_at TEXT NOT NULL
+    )""",
 )
 
 # 기존 DB에 없으면 추가하는 열: (테이블, 열 이름, 열 정의)

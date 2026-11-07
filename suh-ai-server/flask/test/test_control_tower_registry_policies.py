@@ -79,14 +79,17 @@ def test_worker_snapshot_excludes_internal_checks_and_secrets(tmp_path):
 
     snapshot = load_registry(path, {"NAS_LAN_HOST": "10.0.0.5"}).to_worker_snapshot()
 
+    # 표시 순서 = 등록 파일 순서 (id 정렬 아님), page는 기본값
     assert snapshot == {
+        "page": {"title": "SUHSAECHAN Status", "notice": None},
         "alert": {"failures_to_down": 3, "slow_milliseconds": 5000},
-        "projects": [{"id": "elum", "name": "이룸"}],
+        "projects": [{"id": "elum", "name": "이룸", "order": 0}],
         "services": [
-            {"id": "elum-api", "name": "이룸 API", "project_id": "elum", "status": "active", "is_public": True,
+            {"id": "elum-web", "order": 0, "name": "이룸 웹", "project_id": "elum", "status": "active",
+             "is_public": False, "external": None},
+            {"id": "elum-api", "order": 1, "name": "이룸 API", "project_id": "elum", "status": "active",
+             "is_public": True,
              "external": {"url": "https://api.elum.suhsaechan.kr/healthz", "expect": [200], "timeout_seconds": 8}},
-            {"id": "elum-web", "name": "이룸 웹", "project_id": "elum", "status": "active", "is_public": False,
-             "external": None},
         ],
         "maintenance": [{"service_id": "elum-api", "until": "2026-11-06T03:00:00+09:00"}],
     }

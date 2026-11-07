@@ -2,10 +2,13 @@
  * 공개 status 테스트 공통 데이터: 공개·비공개·paused 서비스가 섞인 스냅샷, 최근 결과, 집계, 장애
  * 비공개 쪽에는 내부 IP·관리 도구 주소, 결과·장애에는 error·cause를 일부러 넣어 노출 여부 확인
  */
+import { buildStatusModel } from '../src/status_page.js';
 
 // 2026-11-07T03:00:00Z = KST 2026-11-07 12:00
 export const STATUS_NOW_MILLISECONDS = Date.UTC(2026, 10, 7, 3, 0, 0);
 export const TODAY_KST = '2026-11-07';
+// 1분 전 심박 (지연 아님)
+export const RECENT_HEARTBEAT_AT = new Date(STATUS_NOW_MILLISECONDS - 60000).toISOString();
 
 // 노출되면 안 되는 문자열 (비공개·paused 서비스, 내부 주소)
 export const HIDDEN_STRINGS = Object.freeze([
@@ -77,4 +80,18 @@ export function createPublicIncidents() {
     { service_id: 'elum-admin-hidden', started_at: '2026-11-06T05:00:00+00:00', ended_at: null },
     { service_id: 'secret-db', started_at: '2026-11-05T05:00:00+00:00', ended_at: null },
   ];
+}
+
+/** 공통 데이터로 모델 생성, 지정한 키만 덮어씀 (null도 그대로 전달) */
+export function buildFixtureModel(overrides = {}) {
+  const pick = (key, createDefault) => (key in overrides ? overrides[key] : createDefault());
+  return buildStatusModel(
+    pick('config', createStatusConfig),
+    pick('recentResults', createRecentResults),
+    pick('todayRollup', createTodayRollup),
+    pick('publicRollup', createPublicRollup),
+    pick('publicIncidents', createPublicIncidents),
+    pick('lastHeartbeatAt', () => RECENT_HEARTBEAT_AT),
+    pick('nowMilliseconds', () => STATUS_NOW_MILLISECONDS),
+  );
 }

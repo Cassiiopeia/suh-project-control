@@ -1,138 +1,144 @@
 /**
- * 공개 status HTML: 모델 > 전체 배너·지연 안내 > 프로젝트 카드(서비스 행·90일 막대·가동률) > 범례 > 최근 14일 장애 > 마지막 갱신
- * 외부 자원·스크립트 없음, 동적 문자열은 전부 escapeHtml
+ * 공개 status HTML: 모델 > head(SEO) > 머리(로고·이름) > 전체 배너 > 공지·지연 안내 > 진행 중 장애 > 프로젝트 묶음(details) > 범례 > 14일 장애 > 바닥
+ * JS 없음 (접기는 details, 툴팁은 data-tip + CSS), 동적 문자열은 전부 escapeHtml
  */
+import { escapeHtml } from './html_escape.js';
+import { renderActiveIncidents, renderIncidentHistory, toMonthDayLabel } from './status_render_history.js';
+import { renderSeoHead } from './status_seo.js';
 import { STATUS_PAGE_CSS } from './status_style.js';
 import { parseIsoMilliseconds, toKstDateTime } from './time.js';
 
-export const STATUS_PAGE_TITLE = 'SUH 서비스 상태';
+export { escapeHtml } from './html_escape.js';
+export { formatDurationLabel } from './status_render_history.js';
+
 export const DELAYED_NOTICE_TEXT = '일부 서비스 상태 확인이 지연되고 있습니다';
+export const POWERED_BY_TEXT = 'SUH 관제소';
 // 좁은 화면에서 숨기는 오래된 막대 수 (90칸 중 앞 30칸 > 60일 표시)
 const NARROW_HIDDEN_DAY_COUNT = 30;
+// 묶음이 이 수 이하면 전부 펼침, 넘으면 문제 있는 묶음만 펼침
+const ALWAYS_OPEN_GROUP_COUNT = 3;
 
 // 서비스 상태 > 표시 이름
 const STATE_LABEL_BY_STATE = Object.freeze({
   up: '정상', degraded: '느림', down: '장애', maintenance: '점검 중', unknown: '확인 중',
 });
+// 전체 배너 아이콘 글자
+const HERO_ICON_BY_STATE = Object.freeze({ up: '✓', degraded: '!', down: '!', maintenance: '…', unknown: '?' });
+// 공지 수준 > 표시 이름
+const NOTICE_LABEL_BY_LEVEL = Object.freeze({ info: '안내', warning: '주의', critical: '긴급' });
 // 막대 범례 (색 등급 > 설명)
 const LEGEND_ITEMS = Object.freeze([
   ['ok', '99.5% 이상'], ['warn', '95% 이상'], ['bad', '95% 미만'], ['none', '기록 없음'],
 ]);
-// 막대 칸 HTML (등급 > 고정 문자열, 칸마다 이스케이프·title 없이 CPU 절약), older = 좁은 화면에서 숨김
-const BAR_CELL_HTML_BY_LEVEL = buildBarCellHtmlByLevel('');
-const OLDER_BAR_CELL_HTML_BY_LEVEL = buildBarCellHtmlByLevel(' older');
-
-function buildBarCellHtmlByLevel(extraClassName) {
-  return Object.freeze(Object.fromEntries(
-    LEGEND_ITEMS.map(([level]) => [level, `<span class="bar-cell ${level}${extraClassName}"></span>`]),
-  ));
-}
-const HTML_ESCAPE_BY_CHARACTER = Object.freeze({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' });
+const KNOWN_LEVELS = new Set(LEGEND_ITEMS.map(([level]) => level));
 
 /** 모델 > HTML 문서 1장 */
 export function renderStatusPage(model) {
-  const projectCards = model.projects.map(renderProjectCard).join('');
+  const isEveryGroupOpen = model.projects.length <= ALWAYS_OPEN_GROUP_COUNT;
+  const groups = model.projects.map((project) => renderProjectGroup(project, isEveryGroupOpen)).join('\n');
   return `<!doctype html>
 <html lang="ko">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<title>${escapeHtml(STATUS_PAGE_TITLE)}</title>
+${renderSeoHead(model)}
 <style>${STATUS_PAGE_CSS}</style>
 </head>
 <body>
 <main class="page">
-<h1 class="page-title">${escapeHtml(STATUS_PAGE_TITLE)}</h1>
-<section class="banner state-${escapeHtml(model.overall.state)}" role="status"><span class="dot"></span><span>${escapeHtml(model.overall.message)}</span></section>
-${model.is_delayed ? `<p class="notice">${escapeHtml(DELAYED_NOTICE_TEXT)}</p>` : ''}
-${projectCards}
-${model.projects.length > 0 ? renderLegend() : ''}
-${renderIncidentSection(model.incidents)}
-<footer class="footer">${escapeHtml(formatLastCheckedText(model.last_checked_at))}</footer>
+${renderSiteHeader(model.page.title)}
+${renderHero(model)}
+${renderNotice(model.page.notice)}
+${model.is_delayed ? renderDelayedNotice() : ''}
+${renderActiveIncidents(model.incidents)}
+${model.projects.length > 0 ? renderGroupSection(groups) : ''}
+${renderIncidentHistory(model.incidents, model.generated_at)}
+<footer class="footer"><span>${escapeHtml(model.page.title)}</span><span>Powered by <strong>${escapeHtml(POWERED_BY_TEXT)}</strong></span></footer>
 </main>
 </body>
 </html>
 `;
 }
 
-/** 문자열 HTML 이스케이프 (& < > " ') */
-export function escapeHtml(value) {
-  return String(value ?? '').replace(/[&<>"']/g, (character) => HTML_ESCAPE_BY_CHARACTER[character]);
+/** 머리: 로고 타일 + 사이트 이름 + 실시간 표시 */
+function renderSiteHeader(title) {
+  return `<header class="site-header"><a class="brand" href="/">`
+    + `<img class="brand-logo" src="/logo.png" width="36" height="36" alt="">`
+    + `<h1 class="brand-name">${escapeHtml(title)}</h1></a>`
+    + `<span class="live-chip state-up"><span class="dot"></span>1분마다 확인</span></header>`;
 }
 
-/** 분 > 한국어 기간 (예: 1시간 12분, 2일 3시간, 1분 미만) */
-export function formatDurationLabel(totalMinutes) {
-  const days = Math.floor(totalMinutes / (24 * 60));
-  const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
-  const minutes = totalMinutes % 60;
-  if (days > 0) return hours > 0 ? `${days}일 ${hours}시간` : `${days}일`;
-  if (hours > 0) return minutes > 0 ? `${hours}시간 ${minutes}분` : `${hours}시간`;
-  return minutes > 0 ? `${minutes}분` : '1분 미만';
+/** 전체 상태 배너: 아이콘 + 문구 + 마지막 갱신 */
+function renderHero(model) {
+  const state = model.overall.state;
+  return `<section class="hero state-${escapeHtml(state)}" role="status">`
+    + `<span class="hero-icon" aria-hidden="true">${HERO_ICON_BY_STATE[state] ?? HERO_ICON_BY_STATE.unknown}</span>`
+    + `<div><p class="hero-message">${escapeHtml(model.overall.message)}</p>`
+    + `<p class="hero-detail">${escapeHtml(formatLastCheckedText(model.last_checked_at))}</p></div></section>`;
 }
 
-function renderProjectCard(project) {
-  return `<section class="card"><h2>${escapeHtml(project.name)}</h2>${project.services.map(renderServiceRow).join('')}</section>\n`;
+/** 공지 배너 (없으면 빈 문자열), 수준별 색 */
+function renderNotice(notice) {
+  if (!notice) return '';
+  const level = NOTICE_LABEL_BY_LEVEL[notice.level] ? notice.level : 'info';
+  return `<section class="notice notice-${level}" role="note"><span class="notice-label">${NOTICE_LABEL_BY_LEVEL[level]}</span>`
+    + `<p class="notice-text">${escapeHtml(notice.text)}</p></section>`;
 }
 
-/** 서비스 행: 이름·상태 > 90일 막대 > 캡션(기간·가동률·오늘) */
+function renderDelayedNotice() {
+  return `<section class="notice notice-delayed" role="note"><p class="notice-text">${escapeHtml(DELAYED_NOTICE_TEXT)}</p></section>`;
+}
+
+/** 묶음 목록 + 범례 */
+function renderGroupSection(groups) {
+  const legendItems = LEGEND_ITEMS.map(([level, label]) =>
+    `<li><span class="legend-swatch ${level}"></span>${escapeHtml(label)}</li>`).join('');
+  return `<h2 class="section-title">서비스 상태<small>최근 90일 가동률</small></h2>`
+    + `<div class="groups">${groups}</div>`
+    + `<ul class="legend" aria-label="막대 색 안내">${legendItems}</ul>`;
+}
+
+/** 프로젝트 묶음: summary(상태 점·이름·구성 요소 수·묶음 가동률) > 서비스 행 */
+function renderProjectGroup(project, isEveryGroupOpen) {
+  const isOpen = isEveryGroupOpen || project.state !== 'up';
+  const stateLabel = STATE_LABEL_BY_STATE[project.state] ?? STATE_LABEL_BY_STATE.unknown;
+  return `<details class="group"${isOpen ? ' open' : ''}><summary class="group-summary">`
+    + `<span class="chevron" aria-hidden="true"></span>`
+    + `<span class="group-title"><span class="group-name">${escapeHtml(project.name)}</span>`
+    + `<span class="group-meta">구성 요소 ${project.service_count}개 · ${escapeHtml(stateLabel)}</span></span>`
+    + `<span class="group-uptime">${escapeHtml(formatUptimeText(project.uptime_percent))}</span>`
+    + `<span class="dot state-${escapeHtml(project.state)}" aria-label="${escapeHtml(stateLabel)}"></span>`
+    + `</summary><div class="group-body">${project.services.map(renderServiceRow).join('')}</div></details>`;
+}
+
+/** 서비스 행: 이름·상태 > 90일 막대(툴팁) > 캡션(기간·가동률·오늘) */
 function renderServiceRow(service) {
+  const lastIndex = service.days.length - 1;
+  const stateLabel = STATE_LABEL_BY_STATE[service.state] ?? STATE_LABEL_BY_STATE.unknown;
   let cells = '';
   service.days.forEach((day, index) => {
-    const cellHtmlByLevel = index < NARROW_HIDDEN_DAY_COUNT ? OLDER_BAR_CELL_HTML_BY_LEVEL : BAR_CELL_HTML_BY_LEVEL;
-    cells += cellHtmlByLevel[day.level] ?? cellHtmlByLevel.none;
+    const level = KNOWN_LEVELS.has(day.level) ? day.level : 'none';
+    const olderClassName = index < NARROW_HIDDEN_DAY_COUNT ? ' older' : '';
+    const dayLabel = index === lastIndex ? `오늘 · 현재 ${stateLabel}` : toMonthDayLabel(day.day);
+    cells += `<span class="bar-cell ${level}${olderClassName}" data-tip="${dayLabel} · ${formatUptimeText(day.uptime_percent)}"></span>`;
   });
-  const uptimeText = service.uptime_percent === null ? '기록 없음' : `${service.uptime_percent.toFixed(2)}%`;
   return `<div class="service">`
-    + `<div class="service-head"><span class="service-name">${escapeHtml(service.name)}</span>${renderStatePill(service.state)}</div>`
+    + `<div class="service-head"><span class="service-name">${escapeHtml(service.name)}</span>`
+    + `<span class="pill state-${escapeHtml(service.state)}"><span class="dot"></span>${escapeHtml(stateLabel)}</span></div>`
     + `<div class="bars" role="img" aria-label="최근 가동 기록">${cells}</div>`
     + `<div class="bar-caption"><span><span class="caption-long">90일 전</span><span class="caption-short">60일 전</span></span>`
-    + `<span>가동률 ${escapeHtml(uptimeText)}</span><span>오늘</span></div>`
+    + `<span>가동률 ${escapeHtml(formatUptimeText(service.uptime_percent))}</span><span>오늘</span></div>`
     + `</div>`;
 }
 
-function renderStatePill(state) {
-  const label = STATE_LABEL_BY_STATE[state] ?? STATE_LABEL_BY_STATE.unknown;
-  return `<span class="pill state-${escapeHtml(state)}"><span class="dot"></span>${escapeHtml(label)}</span>`;
-}
-
-function renderLegend() {
-  const items = LEGEND_ITEMS.map(([level, label]) =>
-    `<li><span class="legend-swatch ${level}"></span>${escapeHtml(label)}</li>`).join('');
-  return `<ul class="legend" aria-label="막대 색 안내">${items}</ul>`;
-}
-
-/** 최근 14일 장애 카드 (없으면 안내 문구) */
-function renderIncidentSection(incidents) {
-  const body = incidents.length === 0
-    ? '<p class="empty">최근 14일 동안 장애가 없었습니다</p>'
-    : `<ul class="incidents">${incidents.map(renderIncident).join('')}</ul>`;
-  return `<section class="card"><h2>최근 14일 장애</h2>${body}</section>`;
-}
-
-/** 장애 1건: 프로젝트·서비스 이름, 진행 중/해결됨, KST 시각·기간 (원인 없음) */
-function renderIncident(incident) {
-  const startedText = formatKstOrDash(incident.started_at);
-  const durationText = formatDurationLabel(incident.duration_minutes);
-  const timeText = incident.is_ongoing
-    ? `${startedText} KST부터 · ${durationText} 경과`
-    : `${startedText} ~ ${formatKstOrDash(incident.ended_at)} KST · ${durationText}`;
-  const pill = incident.is_ongoing
-    ? '<span class="pill state-down"><span class="dot"></span>진행 중</span>'
-    : '<span class="pill state-up"><span class="dot"></span>해결됨</span>';
-  return `<li class="incident"><div class="service-head">`
-    + `<span class="service-name">${escapeHtml(incident.project_name)} · ${escapeHtml(incident.service_name)}</span>${pill}</div>`
-    + `<p class="incident-time">${escapeHtml(timeText)}</p></li>`;
+/** 가동률 > '99.50%', 없으면 '기록 없음' */
+function formatUptimeText(uptimePercent) {
+  return typeof uptimePercent === 'number' ? `${uptimePercent.toFixed(2)}%` : '기록 없음';
 }
 
 /** 마지막 점검 시각 > '마지막 갱신 YYYY-MM-DD HH:MM KST', 없으면 '점검 기록 없음' */
 function formatLastCheckedText(lastCheckedAt) {
   const milliseconds = parseIsoMilliseconds(lastCheckedAt);
   return milliseconds === null ? '점검 기록 없음' : `마지막 갱신 ${toKstDateTime(milliseconds)} KST`;
-}
-
-/** ISO > KST 'YYYY-MM-DD HH:MM', 없거나 잘못되면 '-' */
-function formatKstOrDash(isoText) {
-  const milliseconds = parseIsoMilliseconds(isoText);
-  return milliseconds === null ? '-' : toKstDateTime(milliseconds);
 }
