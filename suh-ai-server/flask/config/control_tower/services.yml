@@ -10,6 +10,7 @@ alert:
   slow_milliseconds: 5000
   reminder_hours: 6      # down 지속 중 재알림 간격
   digest_hour_kst: 9     # 일일 요약 시각 (KST)
+  parent_recovery_grace_minutes: 10  # 부모 복구 후 자식 알림 보류 (분), 이후 계속 down은 묶음 1건
 
 discord:
   roles:                          # 프로젝트마다 만들어지는 역할 이름 규칙

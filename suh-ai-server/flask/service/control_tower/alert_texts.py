@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+from service.control_tower.state_machine import CAUSE_EXTERNAL_PATH, CAUSE_SERVICE_DOWN, CAUSE_UNREACHABLE
+
 KST = timezone(timedelta(hours=9))
 KST_TIME_FORMAT = "%Y-%m-%d %H:%M KST"
 
@@ -12,9 +14,9 @@ SECONDS_PER_DAY = 86400
 
 # 장애 원인 코드 > 표시 문구
 CAUSE_LABELS = {
-    "service_down": "서비스 다운",
-    "external_path": "바깥 연결 문제 (프록시/포트포워딩/DNS)",
-    "unreachable": "접속 불가",
+    CAUSE_SERVICE_DOWN: "서비스 다운",
+    CAUSE_EXTERNAL_PATH: "바깥 연결 문제 (프록시/포트포워딩/DNS)",
+    CAUSE_UNREACHABLE: "접속 불가",
 }
 UNKNOWN_CAUSE_LABEL = "알 수 없음"
 
@@ -57,6 +59,20 @@ def recovery_title(service_name: str) -> str:
     return f"[복구] {service_name}"
 
 
+def still_down_bundle_title(anchor_name: str) -> str:
+    return f"[복구 후 계속 다운] {anchor_name}"
+
+
+def still_down_bundle_body(children: list[tuple[str, str | None]]) -> str:
+    """묶음 본문: (이름, 원인) 목록 > 원인 같으면 '원인' 1줄 + 이름 목록, 다르면 이름마다 원인 괄호"""
+    causes = {cause for _, cause in children}
+    if len(causes) == 1:
+        names = [name for name, _ in children]
+        return _join_lines(f"원인: {cause_label(causes.pop())}", _name_list_line("계속 다운", names))
+    names_with_cause = [f"{name} ({cause_label(cause)})" for name, cause in children]
+    return _name_list_line("계속 다운", names_with_cause)
+
+
 def down_body(cause: str | None, since: datetime, affected_names: list[str]) -> str:
     """down 본문: 원인 > 시작 > 영향 서비스"""
     return _join_lines(_outage_lines(cause, since), _name_list_line("영향 서비스", affected_names))
@@ -75,9 +91,13 @@ def recovery_body(cause: str | None, since: datetime, now: datetime, recovered_c
                        _name_list_line("함께 복구된 서비스", recovered_child_names))
 
 
+def cause_label(cause: str | None) -> str:
+    """원인 코드 > 표시 문구 (모르면 '알 수 없음')"""
+    return CAUSE_LABELS.get(cause or "", UNKNOWN_CAUSE_LABEL)
+
+
 def _outage_lines(cause: str | None, since: datetime) -> str:
-    cause_label = CAUSE_LABELS.get(cause or "", UNKNOWN_CAUSE_LABEL)
-    return f"원인: {cause_label}\n시작: {format_kst(since)}"
+    return f"원인: {cause_label(cause)}\n시작: {format_kst(since)}"
 
 
 def _name_list_line(label: str, names: list[str]) -> str:

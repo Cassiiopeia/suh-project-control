@@ -373,6 +373,16 @@ def test_alert_digest_hour_accepts_midnight_and_rejects_out_of_range(tmp_path):
     assert "failures_to_down" in str(raised.value)
 
 
+def test_alert_parent_recovery_grace_minutes_default_override_and_rejects_non_positive(tmp_path):
+    assert load_registry(write_registry(tmp_path, MINIMAL_REGISTRY), {}).alert.parent_recovery_grace_minutes == 10
+    overridden = load_registry(write_registry(tmp_path, "alert: {parent_recovery_grace_minutes: 15}\n"), {})
+    assert overridden.alert.parent_recovery_grace_minutes == 15
+
+    with pytest.raises(RegistryError) as raised:
+        load_registry(write_registry(tmp_path, "alert: {parent_recovery_grace_minutes: 0}\n"), {})
+    assert "parent_recovery_grace_minutes" in str(raised.value)
+
+
 def test_unreadable_registry_file_raises_registry_error(tmp_path):
     with pytest.raises(RegistryError) as missing:
         load_registry(str(tmp_path / "nope.yml"), {})

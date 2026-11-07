@@ -64,6 +64,7 @@ class AlertPolicy:
     slow_milliseconds: int = 5000  # 초과 시 degraded
     reminder_hours: int = 6  # down 지속 중 재알림 간격
     digest_hour_kst: int = 9  # 일일 요약 시각 (KST 시)
+    parent_recovery_grace_minutes: int = 10  # 부모 복구 후 자식 알림 보류 시간 (분), 이후 계속 down은 묶음 1건
 
 
 @dataclass(frozen=True)
