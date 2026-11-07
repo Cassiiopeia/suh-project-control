@@ -102,3 +102,8 @@ suh-ai-server/flask/logs/
 
 # 리눅스에서 Windows 절대경로 리터럴(C:\...)이 상대 디렉토리로 오생성되는 사고 방지
 suh-ai-server/flask/C:*
+
+# 관제소 Worker 로컬 생성물 (wrangler 상태·로컬 시크릿·패키지)
+control-tower-worker/.wrangler/
+control-tower-worker/.dev.vars
+control-tower-worker/node_modules/

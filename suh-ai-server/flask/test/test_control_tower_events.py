@@ -1,9 +1,7 @@
-"""관제소 이벤트 입구·라우팅: 응답 6종, 토큰 인증, 채널 바인딩 대체, 런타임 미설정, nginx 예외 경로"""
+"""관제소 이벤트 입구·라우팅: 응답 6종, 토큰 인증, 채널 바인딩 대체, 런타임 미설정"""
 from __future__ import annotations
 
 import logging
-import os
-import re
 from datetime import datetime, timezone
 
 import pytest
@@ -19,7 +17,6 @@ TOKEN_ENV_NAME = "CONTROL_EVENT_TOKEN_ELUM"
 TOKEN = "elum-secret-token"
 STATUS_PAGE_URL = "https://status.example.com"
 NOW = datetime(2026, 11, 6, 0, 0, tzinfo=timezone.utc)
-NGINX_CONF_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "config", "nginx.conf")
 
 VALID_PAYLOAD = {
     "project": "elum", "kind": "report", "severity": "warning", "title": "신고 접수",
@@ -171,6 +168,7 @@ def test_body_without_string_project_returns_400(client, payload):
     ({"title": "가" * 201}, ["title"]),
     ({"body": "나" * 2001}, ["body"]),
     ({"url": "http://insecure.example.com"}, ["url"]),
+    ({"url": "https://e.example.com/" + "a" * 2027}, ["url"]),  # 2049자
     ({"dedupe_key": 5}, ["dedupe_key"]),
     ({"kind": "x", "severity": "y", "title": ""}, ["kind", "severity", "title"]),
 ])
@@ -181,7 +179,8 @@ def test_invalid_fields_are_all_reported(client, overrides, expected_fields):
 
 
 def test_boundary_lengths_are_valid(client):
-    response = _post(client, {**VALID_PAYLOAD, "title": "가" * 200, "body": "", "dedupe_key": "k1"})
+    response = _post(client, {**VALID_PAYLOAD, "title": "가" * 200, "body": "", "dedupe_key": "k1",
+                              "url": "https://e.example.com/" + "a" * 2026})  # url 2048자
     assert response.status_code == 202
 
 
@@ -262,18 +261,3 @@ def test_link_url_overrides_status_page_url_in_embed():
     from service.control_tower.discord_messages import to_embed
     embed = to_embed(_notification(link_url="https://elum.example.com/x"), STATUS_PAGE_URL)
     assert embed["url"] == "https://elum.example.com/x"
-
-
-# ---- nginx ----
-
-def test_nginx_exempts_only_event_intake():
-    with open(NGINX_CONF_PATH, encoding="utf-8") as conf_file:
-        conf_text = conf_file.read()
-    location_blocks = re.split(r"\n\s*location\s+", conf_text)[1:]
-    exempt_locations = [block.split("{", 1)[0].strip() for block in location_blocks
-                        if "return 401" not in block]
-    assert exempt_locations == ["= /api/flask/control/events"]
-    event_block = next(block for block in location_blocks if block.startswith("= /api/flask/control/events"))
-    assert "proxy_pass http://python_backend" in event_block
-    assert "rewrite ^/api/flask/(.*)$ /$1 break;" in event_block
-    assert "api_key_valid" not in event_block

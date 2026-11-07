@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import time
 
 import requests
@@ -127,7 +128,7 @@ class DiscordClient:
 
     @classmethod
     def _retry_after_seconds(cls, response) -> float:
-        """429 대기 시간: JSON retry_after > 헤더 Retry-After > 상한 적용"""
+        """429 대기 시간: JSON retry_after > 헤더 Retry-After > 상한 적용 (숫자 아님·NaN·무한대 > 기본 대기)"""
         body = cls._parse_json(response)
         raw_value = body.get("retry_after") if isinstance(body, dict) else None
         if raw_value is None:
@@ -135,5 +136,7 @@ class DiscordClient:
         try:
             retry_after_seconds = float(raw_value)
         except (TypeError, ValueError):
+            retry_after_seconds = SERVER_ERROR_RETRY_DELAY_SECONDS
+        if not math.isfinite(retry_after_seconds):
             retry_after_seconds = SERVER_ERROR_RETRY_DELAY_SECONDS
         return min(max(retry_after_seconds, 0.0), MAX_RETRY_AFTER_SECONDS)

@@ -1,6 +1,6 @@
 /**
  * 공개 status 모델 (순수 함수): 공개·active 서비스만 > 현재 상태·90일 막대·가동률 > 전체 배너·지연 여부·최근 14일 장애
- * 모델 = /api/status.json 본문 그대로 (주소·원인·내부 id 없음), HTML은 status_render.js
+ * 모델 = /api/status.json 본문 그대로 (점검 주소·원인 없음, 공개 서비스·프로젝트의 등록 파일 id는 포함), HTML은 status_render.js
  */
 import { HEARTBEAT_SILENCE_SECONDS } from './emergency.js';
 import { isPubliclyVisibleService, listStatusDays } from './public_rollup.js';

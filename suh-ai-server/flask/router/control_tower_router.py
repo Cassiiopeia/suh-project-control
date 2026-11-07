@@ -9,14 +9,13 @@ from datetime import datetime, timezone
 
 from flask import Blueprint, jsonify, request
 
+from config.control_tower_config import EVENT_TOKEN_ENV_PREFIX
 from router.control_tower_admin_api import register_admin_api
 from service.control_tower.runtime import get_runtime
 
 control_tower_bp = Blueprint('control_tower', __name__)
 register_admin_api(control_tower_bp)  # 관리자 화면 API (nginx 키 검사 대상)
 
-# 프로젝트별 토큰 env: CONTROL_EVENT_TOKEN_{프로젝트 id 대문자, '-' > '_'}
-TOKEN_ENV_PREFIX = 'CONTROL_EVENT_TOKEN_'
 TOKEN_HEADER_NAME = 'X-Control-Token'
 
 
@@ -44,7 +43,7 @@ def receive_event():
 
 def _is_token_valid(project_id: str, presented_token: str) -> bool:
     """토큰 env 없음 > 거부, 있으면 상수 시간 비교"""
-    expected_token = os.environ.get(TOKEN_ENV_PREFIX + project_id.upper().replace('-', '_'), '')
+    expected_token = os.environ.get(EVENT_TOKEN_ENV_PREFIX + project_id.upper().replace('-', '_'), '')
     if not expected_token:
         return False
     return hmac.compare_digest(expected_token.encode('utf-8'), presented_token.encode('utf-8'))

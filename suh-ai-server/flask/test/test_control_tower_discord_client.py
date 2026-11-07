@@ -77,6 +77,14 @@ def test_send_embed_429_retry_after_falls_back_to_header_and_is_capped():
     assert sleeps == [MAX_RETRY_AFTER_SECONDS]
 
 
+@pytest.mark.parametrize("retry_after_header", ["nan", "inf", "-inf"])
+def test_send_embed_429_non_finite_retry_after_uses_default_delay(retry_after_header):
+    client, _, sleeps = _client(FakeResponse(429, None, headers={"Retry-After": retry_after_header}),
+                                FakeResponse(200, {}))
+    assert client.send_embed("999", {}) is True
+    assert sleeps == [SERVER_ERROR_RETRY_DELAY_SECONDS]
+
+
 def test_send_embed_returns_false_when_second_attempt_also_fails():
     client, session, _ = _client(FakeResponse(429, {"retry_after": 1}), FakeResponse(429, {"retry_after": 1}))
     assert client.send_embed("999", {}) is False

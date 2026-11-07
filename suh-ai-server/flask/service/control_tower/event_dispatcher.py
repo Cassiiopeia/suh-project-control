@@ -26,6 +26,8 @@ TITLE_MAX_LENGTH = 200
 BODY_MAX_LENGTH = 2000
 # 이벤트 링크는 https만 허용
 ALLOWED_URL_PREFIX = "https://"
+# 이벤트 링크 최대 길이 (글자 수, 디스코드 임베드 url 상한)
+URL_MAX_LENGTH = 2048
 HTTP_ACCEPTED = 202
 HTTP_BAD_REQUEST = 400
 
@@ -102,7 +104,8 @@ def validate_event_payload(payload: dict) -> list[str]:
     if dedupe_key is not None and not isinstance(dedupe_key, str):
         invalid_fields.append("dedupe_key")
     url = payload.get("url")
-    if url is not None and (not isinstance(url, str) or not url.startswith(ALLOWED_URL_PREFIX)):
+    if url is not None and (not isinstance(url, str) or not url.startswith(ALLOWED_URL_PREFIX)
+                            or len(url) > URL_MAX_LENGTH):
         invalid_fields.append("url")
     return invalid_fields
 
