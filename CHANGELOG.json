@@ -1,14 +1,44 @@
 {
   "metadata": {
-    "lastUpdated": "2026-11-07T12:19:45Z",
-    "currentVersion": "2.0.79",
+    "lastUpdated": "2026-11-07T12:41:01Z",
+    "currentVersion": "2.0.80",
     "projectType": "python",
-    "totalReleases": 75,
+    "totalReleases": 76,
     "projectTypes": [
       "python"
     ]
   },
   "releases": [
+    {
+      "version": "2.0.80",
+      "project_type": "python",
+      "project_types": [
+        "python"
+      ],
+      "date": "2026-11-07",
+      "pr_number": 161,
+      "raw_summary": "## Summary by CodeRabbit\n\n## 릴리스 노트\n\n* **새 기능**\n  * 관제소 서비스 관리 화면 (추적 여부·이름·공개·순서)\n  * 서비스 정보 보기 창\n  * Cloudflare DNS에서 감시할 도메인 가져오기\n  * 상태 페이지 이름·공지 설정\n  * 상태 페이지 새 디자인 (SUHSAECHAN Status)\n  * 검색 노출용 정보·아이콘 추가\n\n* **버그 수정**\n  * 디스코드 프로젝트 고르기 질문이 만들어지지 않던 문제",
+      "parsed_changes": {
+        "새_기능": {
+          "title": "새 기능",
+          "items": [
+            "관제소 서비스 관리 화면 (추적 여부·이름·공개·순서)",
+            "서비스 정보 보기 창",
+            "Cloudflare DNS에서 감시할 도메인 가져오기",
+            "상태 페이지 이름·공지 설정",
+            "상태 페이지 새 디자인 (SUHSAECHAN Status)",
+            "검색 노출용 정보·아이콘 추가"
+          ]
+        },
+        "버그_수정": {
+          "title": "버그 수정",
+          "items": [
+            "디스코드 프로젝트 고르기 질문이 만들어지지 않던 문제"
+          ]
+        }
+      },
+      "parse_method": "markdown"
+    },
     {
       "version": "2.0.79",
       "project_type": "python",
