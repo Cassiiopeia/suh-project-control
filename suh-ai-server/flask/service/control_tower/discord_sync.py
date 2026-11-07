@@ -29,7 +29,9 @@ ONBOARDING_EXCLUDED_PROJECT_IDS = ("infra",)
 ONBOARDING_PROMPT_TYPE_MULTIPLE_CHOICE = 0
 ONBOARDING_MODE_DEFAULT = 0
 # 온보딩 질문·옵션 id: Discord가 실제 id로 바꿔 주는 자리표시자 (옵션은 시작값 + 순번)
-ONBOARDING_PROMPT_PLACEHOLDER_ID = "1"
+ONBOARDING_PROMPT_PLACEHOLDER_ID_START = 1
+# Discord 질문당 옵션 최대 개수 (13개부터 400 TOO_MANY_ONBOARDING_OPTIONS, 2026-11-07 실측)
+ONBOARDING_MAXIMUM_OPTIONS_PER_PROMPT = 12
 ONBOARDING_OPTION_PLACEHOLDER_ID_START = 100
 NOTICE_CHANNEL_KIND = "notice"
 # 동기화 동시 실행 방지: 기동 동기화와 관리자 화면 버튼이 같은 잠금을 씀
@@ -59,7 +61,7 @@ def sync_discord(registry: Registry, client, store, guild_id: str) -> SyncReport
 
 def build_onboarding_payload(registry: Registry, role_ids_by_project: dict[str, str],
                              notice_channel_id: str | None = None) -> dict:
-    """온보딩 질문 1개: 프로젝트마다 옵션 1개(member 역할 부여), 역할 없는 프로젝트·인프라 제외"""
+    """온보딩 질문: 프로젝트마다 옵션 1개(member 역할 부여), 질문당 최대 12개씩 나눔, 역할 없는 프로젝트·인프라 제외"""
     listed_projects = [
         project for project in registry.projects
         if project.id not in ONBOARDING_EXCLUDED_PROJECT_IDS and role_ids_by_project.get(project.id)
@@ -74,19 +76,27 @@ def build_onboarding_payload(registry: Registry, role_ids_by_project: dict[str, 
         }
         for index, project in enumerate(listed_projects)
     ]
+    option_chunks = [options[start:start + ONBOARDING_MAXIMUM_OPTIONS_PER_PROMPT]
+                     for start in range(0, len(options), ONBOARDING_MAXIMUM_OPTIONS_PER_PROMPT)]
     return {
-        "prompts": [{
-            "id": ONBOARDING_PROMPT_PLACEHOLDER_ID,
-            "type": ONBOARDING_PROMPT_TYPE_MULTIPLE_CHOICE,
-            "title": ONBOARDING_PROMPT_TITLE,
-            "single_select": False,
-            "required": False,
-            "in_onboarding": True,
-            "options": options,
-        }],
+        "prompts": [_build_prompt(chunk, index, len(option_chunks)) for index, chunk in enumerate(option_chunks)],
         "default_channel_ids": [notice_channel_id] if notice_channel_id else [],
         "enabled": True,
         "mode": ONBOARDING_MODE_DEFAULT,
+    }
+
+
+def _build_prompt(options: list[dict], index: int, prompt_count: int) -> dict:
+    """질문 1개: 여러 개로 나뉘면 제목 끝에 (순번/전체)"""
+    title = ONBOARDING_PROMPT_TITLE if prompt_count == 1 else f"{ONBOARDING_PROMPT_TITLE} ({index + 1}/{prompt_count})"
+    return {
+        "id": str(ONBOARDING_PROMPT_PLACEHOLDER_ID_START + index),
+        "type": ONBOARDING_PROMPT_TYPE_MULTIPLE_CHOICE,
+        "title": title,
+        "single_select": False,
+        "required": False,
+        "in_onboarding": True,
+        "options": options,
     }
 
 
@@ -100,7 +110,7 @@ def _apply_onboarding(registry: Registry, client, store) -> bool:
         if (project.id, ROLE_KIND_PREFIX + ONBOARDING_ROLE_KEY) in bindings
     }
     payload = build_onboarding_payload(registry, role_ids_by_project, bindings.get((GLOBAL_SCOPE, NOTICE_CHANNEL_KIND)))
-    if not payload["prompts"][0]["options"]:
+    if not payload["prompts"]:
         return False
     payload_hash = _onboarding_payload_hash(payload)
     if store.get_meta(META_KEY_ONBOARDING_HASH) == payload_hash:
