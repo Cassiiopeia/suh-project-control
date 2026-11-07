@@ -209,6 +209,11 @@ class ControlTowerStore:
             "SELECT discord_id FROM discord_binding WHERE scope = ? AND kind = ?", (scope, kind)).fetchone()
         return row["discord_id"] if row else None
 
+    def all_bindings(self) -> dict[tuple[str, str], str]:
+        """바인딩 전체: (scope, kind) > 디스코드 id"""
+        rows = self._connection().execute("SELECT scope, kind, discord_id FROM discord_binding").fetchall()
+        return {(row["scope"], row["kind"]): row["discord_id"] for row in rows}
+
     def set_binding(self, scope: str, kind: str, discord_id: str) -> None:
         with self._connection() as connection:
             connection.execute("INSERT OR REPLACE INTO discord_binding VALUES (?,?,?)", (scope, kind, discord_id))

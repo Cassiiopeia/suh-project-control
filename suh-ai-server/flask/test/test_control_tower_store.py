@@ -143,6 +143,14 @@ def test_바인딩은_덮어쓰고_없으면_None이다(store):
     assert store.get_binding("global", "alert") == "333"
 
 
+def test_전체_바인딩은_scope_kind_키로_모두_돌려준다(store):
+    assert store.all_bindings() == {}
+    store.set_binding("elum", "role:member", "111")
+    store.set_binding("global", "notice", "222")
+
+    assert store.all_bindings() == {("elum", "role:member"): "111", ("global", "notice"): "222"}
+
+
 def test_메타는_저장하고_덮어쓴다(store):
     assert store.get_meta("last_digest_day") is None
     store.set_meta("last_digest_day", "2026-11-05")
