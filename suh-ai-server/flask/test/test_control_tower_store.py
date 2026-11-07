@@ -28,7 +28,8 @@ EXTERNAL_FAIL = Observation(_result(), _result(False), True)
 def store(tmp_path):
     control_tower_store = ControlTowerStore(str(tmp_path / "nested" / "control_tower.db"))
     control_tower_store.initialize()
-    return control_tower_store
+    yield control_tower_store
+    control_tower_store.close()
 
 
 def test_상태_저장_후_새_저장소에서_재로드하면_값이_그대로다(tmp_path):
@@ -38,10 +39,12 @@ def test_상태_저장_후_새_저장소에서_재로드하면_값이_그대로�
     saved_state = ServiceState("down", 3, 0, "service_down", BASE_TIME, BASE_TIME + timedelta(hours=1), True)
     first_store.save_state(SERVICE_ID, saved_state)
     first_store.save_state("unknown-one", INITIAL_STATE)
+    first_store.close()
 
     restarted_store = ControlTowerStore(path)
     restarted_store.initialize()
     loaded_states = restarted_store.load_states()
+    restarted_store.close()
 
     assert loaded_states[SERVICE_ID] == saved_state
     assert loaded_states["unknown-one"] == INITIAL_STATE
@@ -201,6 +204,79 @@ def test_일별_집계는_400일_넘은_날짜만_지운다(store):
     store.purge(now)
 
     assert len(store.uptime_by_day(SERVICE_ID, 1000)) == 1
+
+
+def test_점검_결과_행에_내부_외부_열과_외부_수신_여부가_저장된다(store):
+    store.save_results(SERVICE_ID, EXTERNAL_FAIL, BASE_TIME)
+
+    row = store._connection().execute("SELECT * FROM check_result").fetchone()
+
+    assert row["service_id"] == SERVICE_ID
+    assert row["is_external_known"] == 1
+    assert (row["internal_is_ok"], row["internal_is_slow"], row["internal_status_code"],
+            row["internal_latency_milliseconds"], row["internal_error"]) == (1, 0, 200, 120, None)
+    assert (row["external_is_ok"], row["external_is_slow"], row["external_status_code"],
+            row["external_latency_milliseconds"], row["external_error"]) == (0, 0, None, 120, "timeout")
+
+
+def test_외부_미수신_점검은_외부_열이_비고_수신_여부가_0이다(store):
+    store.save_results(SERVICE_ID, NO_DATA, BASE_TIME)  # 데이터 없음 > 저장 안 함
+    store.save_results(SERVICE_ID, Observation(_result(), _result(False), False), BASE_TIME)
+
+    row = store._connection().execute("SELECT * FROM check_result").fetchone()
+
+    assert row["is_external_known"] == 0
+    assert row["external_is_ok"] is None and row["external_error"] is None
+
+
+def test_같은_시각_재저장은_일별_집계를_중복_증가시키지_않는다(store):
+    store.save_results(SERVICE_ID, OK, BASE_TIME)
+    store.save_results(SERVICE_ID, FAIL, BASE_TIME)
+
+    assert store.uptime_by_day(SERVICE_ID, 7) == [("2026-11-06", 1, 1)]
+    assert _count(store, "check_result") == 1
+
+
+def test_여러_스레드의_동시_장애_열기는_하나만_만든다(store):
+    opened_ids: list[int] = []
+    errors: list[Exception] = []
+
+    def open_in_thread():
+        try:
+            opened_ids.append(store.open_incident(SERVICE_ID, "service_down", BASE_TIME))
+        except Exception as error:  # noqa: BLE001 테스트에서 스레드 예외 수집
+            errors.append(error)
+
+    threads = [threading.Thread(target=open_in_thread) for _ in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert errors == []
+    assert len(set(opened_ids)) == 1
+
+
+def test_여러_스레드의_동시_이벤트_기록은_하나만_True다(store):
+    results: list[bool] = []
+
+    def record_in_thread():
+        results.append(store.record_event("elum", "error", "same-key", BASE_TIME))
+
+    threads = [threading.Thread(target=record_in_thread) for _ in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert results.count(True) == 1
+
+
+def test_close_후에도_다시_사용할_수_있다(store):
+    store.set_meta("key", "value")
+    store.close()
+
+    assert store.get_meta("key") == "value"
 
 
 def test_다른_스레드에서도_같은_저장소를_쓸_수_있다(store):

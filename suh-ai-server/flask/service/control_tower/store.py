@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sqlite3
 import threading
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 
 from service.control_tower.check_runner import CheckResult
@@ -54,6 +55,8 @@ class ControlTowerStore:
     def __init__(self, path: str):
         self._path = path
         self._thread_local = threading.local()
+        self._opened_connections: list[sqlite3.Connection] = []  # close()에서 전부 닫기 위한 추적
+        self._opened_connections_lock = threading.Lock()
 
     def _connection(self) -> sqlite3.Connection:
         """현재 스레드 전용 연결 (없으면 생성)"""
@@ -64,7 +67,29 @@ class ControlTowerStore:
             connection.execute("PRAGMA journal_mode=WAL")
             connection.execute(f"PRAGMA busy_timeout={BUSY_TIMEOUT_MILLISECONDS}")
             self._thread_local.connection = connection
+            with self._opened_connections_lock:
+                self._opened_connections.append(connection)
         return connection
+
+    def close(self) -> None:
+        """모든 스레드의 연결 닫기 (이후 호출 시 연결을 새로 엶)"""
+        with self._opened_connections_lock:
+            for connection in self._opened_connections:
+                connection.close()
+            self._opened_connections.clear()
+            self._thread_local = threading.local()
+
+    @contextmanager
+    def _write_transaction(self):
+        """쓰기 잠금을 먼저 잡는 트랜잭션: 조회 > 기록 사이 경합 방지 (성공 시 커밋, 예외 시 롤백)"""
+        connection = self._connection()
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            yield connection
+        except BaseException:
+            connection.rollback()
+            raise
+        connection.commit()
 
     def initialize(self) -> None:
         """상위 폴더 생성 > 테이블·인덱스 생성"""
@@ -131,7 +156,7 @@ class ControlTowerStore:
 
     def open_incident(self, service_id: str, cause: str, started_at: datetime) -> int:
         """장애 열기 (이미 열린 장애가 있으면 그 id 반환)"""
-        with self._connection() as connection:
+        with self._write_transaction() as connection:
             existing = connection.execute(
                 "SELECT id FROM incident WHERE service_id = ? AND ended_at IS NULL", (service_id,)).fetchone()
             if existing is not None:
@@ -142,7 +167,7 @@ class ControlTowerStore:
 
     def close_incident(self, service_id: str, ended_at: datetime) -> int | None:
         """열린 장애 닫기 (없으면 None)"""
-        with self._connection() as connection:
+        with self._write_transaction() as connection:
             existing = connection.execute(
                 "SELECT id FROM incident WHERE service_id = ? AND ended_at IS NULL", (service_id,)).fetchone()
             if existing is None:
@@ -164,7 +189,7 @@ class ControlTowerStore:
 
     def record_event(self, project_id: str, kind: str, dedupe_key: str | None, created_at: datetime) -> bool:
         """이벤트 기록: 같은 (프로젝트, 키)가 10분 내 있으면 False(기록 안 함), 키 없으면 항상 True"""
-        with self._connection() as connection:
+        with self._write_transaction() as connection:
             if dedupe_key:
                 window_start = _to_text(created_at - EVENT_DEDUPE_WINDOW)
                 duplicate = connection.execute(
