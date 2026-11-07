@@ -1,0 +1,8 @@
+{
+  "name": "suh-control-tower-worker",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node --test"
+  }
+}

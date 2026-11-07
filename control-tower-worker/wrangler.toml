@@ -1,0 +1,19 @@
+# 관제소 Worker: 1분 외부 점검, Flask 심박 수신, 심박 끊김 비상 웹훅, 공개 status 페이지
+# 시크릿 2개는 파일에 두지 않음 (wrangler secret put HMAC_SECRET / DISCORD_EMERGENCY_WEBHOOK_URL)
+name = "suh-control-tower"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+[triggers]
+crons = ["* * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "suh-control-tower"
+# 첫 배포 전 `wrangler d1 create suh-control-tower` 결과 ID로 교체
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+[[routes]]
+pattern = "status.suhsaechan.kr"
+custom_domain = true
