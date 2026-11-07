@@ -51,7 +51,7 @@ def test_env가_없으면_디스코드·심박_없이_폴러만_시작하고_런
     started_runtime = bootstrap.start_control_tower({}, database_path, registry_path)
 
     assert runtime_module.get_runtime() is started_runtime
-    assert started_runtime.poller._heartbeat_client is None
+    assert started_runtime.poller._heartbeat_step._heartbeat_client is None
     assert started_runtime.dispatcher._discord_client_provider() is None
     _wait_until(lambda: started_runtime.registry_provider().projects != ())
     assert [project.id for project in started_runtime.registry_provider().projects] == ["elum"]
@@ -68,7 +68,7 @@ def test_env가_있으면_심박_클라이언트와_기동_디스코드_동기�
 
     started_runtime = bootstrap.start_control_tower(environ, database_path, registry_path)
 
-    assert isinstance(started_runtime.poller._heartbeat_client, HeartbeatClient)
+    assert isinstance(started_runtime.poller._heartbeat_step._heartbeat_client, HeartbeatClient)
     assert started_runtime.dispatcher._discord_client_provider() is not None
     _wait_until(lambda: sync_calls != [])
     registry, _, _, guild_id = sync_calls[0]

@@ -109,15 +109,20 @@ class FakeDispatcher:
 
 
 class FakeHeartbeatClient:
-    """매 호출 response_factory(now) 반환 (None이면 실패), 호출 기록"""
+    """매 호출 response_factory(now) 반환 (None이면 연결 실패, 예외면 raise), 호출·점검 창 기록"""
 
     def __init__(self, response_factory=lambda now: HeartbeatResponse({}, now)):
         self.response_factory = response_factory
         self.calls: list[tuple] = []
+        self.maintenance_calls: list[tuple] = []
 
-    def send(self, registry, public_incidents, now):
+    def send(self, registry, public_incidents, now, maintenance=None):
         self.calls.append((registry, public_incidents, now))
-        return self.response_factory(now)
+        self.maintenance_calls.append(tuple(maintenance or ()))
+        response = self.response_factory(now)
+        if isinstance(response, Exception):
+            raise response
+        return response
 
 
 @pytest.fixture

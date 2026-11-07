@@ -1,5 +1,5 @@
 """관제소 심박 클라이언트: Worker에 서명한 심박 전송 > 설정 요청 시 스냅샷 1회 재전송 > 외부 점검 결과 수신
-실패(예외·2xx 외·잘못된 JSON)는 None + 경고 로그 (비밀키·본문 미기록)
+연결 실패·타임아웃 > None, Worker 응답했지만 거절(2xx 외·잘못된 JSON) > HeartbeatRejectedError (비밀키·본문 미기록)
 """
 from __future__ import annotations
 
@@ -10,11 +10,12 @@ import logging
 import math
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import Iterable
 
 import requests
 
 from service.control_tower.check_runner import CheckResult
-from service.control_tower.registry import Registry
+from service.control_tower.registry import MaintenanceWindow, Registry
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,18 @@ SIGNATURE_HEADER = "X-CT-Signature"
 CONTENT_TYPE = "application/json; charset=utf-8"
 HTTP_SUCCESS_MIN = 200
 HTTP_SUCCESS_MAX = 299
+# 거절 사유: 2xx지만 JSON 객체가 아닌 응답
+REJECTION_INVALID_RESPONSE = "invalid_response"
+# 집 인터넷 장애로 보는 전송 실패 (연결 실패·TLS 포함·타임아웃)
+NETWORK_FAILURE_ERRORS = (requests.exceptions.ConnectionError, requests.exceptions.Timeout)
+
+
+class HeartbeatRejectedError(Exception):
+    """Worker가 응답했지만 심박을 받지 않음: 상태 코드 문자열 또는 invalid_response (집 인터넷 장애 아님)"""
+
+    def __init__(self, rejection_status: str):
+        super().__init__(f"heartbeat rejected : {rejection_status}")
+        self.rejection_status = rejection_status
 
 
 @dataclass(frozen=True)
@@ -47,12 +60,16 @@ class HeartbeatClient:
         self._secret = secret
         self._session = session if session is not None else requests.Session()
 
-    def send(self, registry: Registry, public_incidents: list[dict], now: datetime) -> HeartbeatResponse | None:
-        """심박 1회: 전송 > need_config면 스냅샷 넣어 1회 재전송 > 외부 결과 변환"""
-        body = {"sent_at": now.isoformat(), "config_version": registry.version(), "public_incidents": public_incidents}
+    def send(self, registry: Registry, public_incidents: list[dict], now: datetime,
+             maintenance: Iterable[MaintenanceWindow] | None = None) -> HeartbeatResponse | None:
+        """심박 1회: 전송 > need_config면 스냅샷 넣어 1회 재전송 > 외부 결과 변환
+        maintenance: 등록 파일 + 관리자 화면 병합 창 (버전·스냅샷 모두 같은 창 기준), 거절 시 HeartbeatRejectedError"""
+        windows = None if maintenance is None else tuple(maintenance)
+        body = {"sent_at": now.isoformat(), "config_version": registry.version(windows),
+                "public_incidents": public_incidents}
         response_body = self._post(body, now)
         if response_body is not None and response_body.get("need_config") is True:
-            response_body = self._post({**body, "config": registry.to_worker_snapshot()}, now)
+            response_body = self._post({**body, "config": registry.to_worker_snapshot(windows)}, now)
         if response_body is None:
             return None
         # 재전송 후에도 설정 요청이면 결과 없이 심박 성공으로 처리
@@ -62,7 +79,7 @@ class HeartbeatClient:
         return _parse_response(response_body)
 
     def _post(self, body: dict, now: datetime) -> dict | None:
-        """서명 POST: 직렬화 바이트 그대로 서명·전송 > 2xx JSON 객체만 반환"""
+        """서명 POST: 직렬화 바이트 그대로 서명·전송 > 2xx JSON 객체 반환 / 연결 실패 None / 거절 예외"""
         raw_body = json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         timestamp = int(now.timestamp())
         headers = {
@@ -73,20 +90,20 @@ class HeartbeatClient:
         try:
             response = self._session.post(self._heartbeat_url, data=raw_body, headers=headers,
                                           timeout=REQUEST_TIMEOUT_SECONDS)
-        except Exception as error:  # 네트워크 오류 종류만 기록 (예외 문구 미기록)
+        except NETWORK_FAILURE_ERRORS as error:  # 네트워크 오류 종류만 기록 (예외 문구 미기록)
             logger.warning("[control-tower heartbeat] failed : %s", type(error).__name__)
             return None
         if not HTTP_SUCCESS_MIN <= response.status_code <= HTTP_SUCCESS_MAX:
             logger.warning("[control-tower heartbeat] rejected : status %s", response.status_code)
-            return None
+            raise HeartbeatRejectedError(str(response.status_code))
         try:
             response_body = response.json()
         except ValueError:
-            logger.warning("[control-tower heartbeat] failed : response is not JSON")
-            return None
+            response_body = None
         if not isinstance(response_body, dict):
-            logger.warning("[control-tower heartbeat] failed : response is not an object")
-            return None
+            logger.warning("[control-tower heartbeat] rejected : status %s : response is not a JSON object",
+                           response.status_code)
+            raise HeartbeatRejectedError(REJECTION_INVALID_RESPONSE)
         return response_body
 
 

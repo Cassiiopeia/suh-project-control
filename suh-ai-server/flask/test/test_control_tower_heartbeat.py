@@ -1,16 +1,18 @@
-"""관제소 심박 클라이언트: 서명 고정 벡터, 서명·본문 일치, need_config 재전송, 외부 결과 매핑, 실패 시 None"""
+"""관제소 심박 클라이언트: 서명 고정 벡터, 서명·본문 일치, need_config 재전송, 외부 결과 매핑, 연결 실패 None·거절 예외, 병합 점검 창"""
 from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 import requests
 
 from service.control_tower.check_runner import CheckResult
-from service.control_tower.heartbeat_client import HeartbeatClient, HeartbeatResponse, sign
-from service.control_tower.registry import CheckSpec, ProjectSpec, Registry, ServiceSpec
+from service.control_tower.heartbeat_client import (
+    HeartbeatClient, HeartbeatRejectedError, HeartbeatResponse, sign,
+)
+from service.control_tower.registry import CheckSpec, MaintenanceWindow, ProjectSpec, Registry, ServiceSpec
 
 SECRET = "test-secret"
 WORKER_URL = "https://worker.example.com/"
@@ -147,22 +149,53 @@ def test_checked_at이_없으면_외부_결과를_버린다():
 @pytest.mark.parametrize("response", [
     requests.exceptions.ConnectionError("refused test-secret"),
     requests.exceptions.Timeout("slow"),
-    FakeResponse(status_code=401, payload={"error": "unauthorized"}),
-    FakeResponse(status_code=500, payload=None),
-    FakeResponse(is_json_valid=False),
-    FakeResponse(payload=["not", "a", "mapping"]),
+    requests.exceptions.SSLError("tls test-secret"),
 ])
-def test_실패는_None을_돌려주고_비밀키를_로그에_남기지_않는다(response, caplog):
+def test_연결_실패와_타임아웃은_None을_돌려주고_비밀키를_로그에_남기지_않는다(response, caplog):
     client, _ = _client(response)
 
     with caplog.at_level(logging.WARNING):
         assert client.send(REGISTRY, [], NOW) is None
 
-    assert "[control-tower heartbeat]" in caplog.text
+    assert "[control-tower heartbeat] failed" in caplog.text
     assert SECRET not in caplog.text
 
 
-def test_재전송이_실패하면_None이다():
+@pytest.mark.parametrize("response,expected_status", [
+    (FakeResponse(status_code=401, payload={"error": "unauthorized"}), "401"),
+    (FakeResponse(status_code=500, payload=None), "500"),
+    (FakeResponse(is_json_valid=False), "invalid_response"),
+    (FakeResponse(payload=["not", "a", "mapping"]), "invalid_response"),
+])
+def test_응답했지만_거절이면_상태를_담은_예외를_던지고_경고를_남긴다(response, expected_status, caplog):
+    client, _ = _client(response)
+
+    with caplog.at_level(logging.WARNING), pytest.raises(HeartbeatRejectedError) as raised:
+        client.send(REGISTRY, [], NOW)
+
+    assert raised.value.rejection_status == expected_status
+    assert "[control-tower heartbeat] rejected" in caplog.text
+    assert SECRET not in caplog.text
+
+
+def test_재전송이_거절되면_거절_예외다():
     client, _ = _client(FakeResponse(payload={"need_config": True}), FakeResponse(status_code=503))
 
-    assert client.send(REGISTRY, [], NOW) is None
+    with pytest.raises(HeartbeatRejectedError) as raised:
+        client.send(REGISTRY, [], NOW)
+
+    assert raised.value.rejection_status == "503"
+
+
+def test_병합_점검_창을_주면_버전과_스냅샷_모두_그_창을_쓴다():
+    windows = (MaintenanceWindow("elum-api", NOW + timedelta(hours=1), "관리자 화면"),)
+    client, session = _client(FakeResponse(payload={"need_config": True}), FakeResponse(payload=RESULTS_RESPONSE))
+
+    client.send(REGISTRY, [], NOW, windows)
+
+    first_body = json.loads(session.requests[0]["data"])
+    second_body = json.loads(session.requests[1]["data"])
+    assert first_body["config_version"] == REGISTRY.version(windows) != REGISTRY.version()
+    assert second_body["config"] == REGISTRY.to_worker_snapshot(windows)
+    assert second_body["config"]["maintenance"] == [
+        {"service_id": "elum-api", "until": (NOW + timedelta(hours=1)).isoformat()}]

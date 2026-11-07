@@ -1,4 +1,4 @@
-"""관제소 폴러: 1분 틱으로 등록 파일·심박·내부 점검·상태 전이·알림·저장·장애 구간·일일 요약·보관 정리 연결
+"""관제소 폴러: 1분 틱으로 등록 파일·점검 창·심박·내부 점검·상태 전이·알림·저장·장애 구간·일일 요약·보관 정리 연결
 저장소는 폴러 스레드에서만 사용 (내부 점검 스레드는 결과만 반환), 틱 예외는 삼켜서 스레드 생존
 """
 from __future__ import annotations
@@ -15,15 +15,21 @@ from config.control_tower_config import POLL_INTERVAL_SECONDS
 from service.control_tower.alert_planner import Notification, plan_notifications
 from service.control_tower.check_runner import run_check, utc_now
 from service.control_tower.digest import build_daily_digest
-from service.control_tower.heartbeat_client import HeartbeatResponse
+from service.control_tower.meta_keys import (
+    META_KEY_LAST_DIGEST_DAY, META_KEY_LAST_PURGE_DAY, META_KEY_REGISTRY_ERROR,
+)
+from service.control_tower.poller_heartbeat import HeartbeatStep
+from service.control_tower.poller_snapshot import EMPTY_VIEW, PollerSnapshot, PublishedView
 from service.control_tower.poller_steps import (
-    build_observations, build_public_incidents, carry_over_external_observations, fresh_external_results, heartbeat_check_result, merge_maintenance,
+    build_observations, carry_over_external_observations, is_under_maintenance, merge_maintenance,
     monitored_services, restore_undelivered_alert_flags, run_internal_checks,
 )
-from service.control_tower.poller_snapshot import EMPTY_VIEW, PollerSnapshot, PublishedView
-from service.control_tower.registry import Registry, RegistryError, load_registry
+from service.control_tower.registry import MaintenanceWindow, Registry, RegistryError, load_registry
 from service.control_tower.state_machine import (
     INITIAL_STATE, STATUS_DOWN, Observation, ServiceState, Transition, advance,
+)
+from service.control_tower.system_alerts import (
+    ConditionAlert, build_registry_error_alert, build_registry_recovered_notice,
 )
 from service.control_tower.time_zones import KST
 
@@ -31,15 +37,6 @@ logger = logging.getLogger(__name__)
 
 # 등록 파일을 한 번도 읽지 못했을 때 라우터에 주는 빈 등록 정보
 EMPTY_REGISTRY = Registry(projects=(), services=())
-
-# meta: 마지막 일일 요약·보관 정리 KST 일자 (YYYY-MM-DD)
-META_KEY_LAST_DIGEST_DAY = "last_digest_day"
-META_KEY_LAST_PURGE_DAY = "last_purge_day"
-# meta: 마지막 심박 성공 시각 (UTC ISO) / 직전 심박 성공 여부 ('1' 성공, '0' 실패)
-META_KEY_HEARTBEAT_LAST_OK_AT = "heartbeat_last_ok_at"
-META_KEY_HEARTBEAT_IS_OK = "heartbeat_is_ok"
-# meta: 등록 파일 재로드 오류 요약 (정상이면 '')
-META_KEY_REGISTRY_ERROR = "registry_error"
 
 
 class ControlTowerPoller:
@@ -49,15 +46,15 @@ class ControlTowerPoller:
         self._registry_path = registry_path
         self._store = store
         self._dispatcher = dispatcher
-        self._heartbeat_client = heartbeat_client  # None이면 심박·외부 결과·집 인터넷 판정 없음
+        self._heartbeat_step = HeartbeatStep(heartbeat_client, store, dispatcher)
         self._check_runner = check_runner
         self._now = now
         self._interval_seconds = interval_seconds
         self._environ = environ if environ is not None else os.environ
         self._registry: Registry | None = None
         self._recorded_registry_error: str | None = None  # None: 아직 meta 기록 전
+        self._registry_error_alert: ConditionAlert | None = None  # 첫 재로드 때 meta 값으로 생성
         self._states: dict[str, ServiceState] | None = None  # 첫 틱에 저장소에서 1회 복원
-        self._last_applied_external_checked_at: datetime | None = None  # 같은 Worker 결과 중복 반영 방지
         self._stop_event = threading.Event()
         # 틱 끝에 통째로 교체하는 불변 뷰 (요청 스레드는 참조 하나만 읽음)
         self._published_view = EMPTY_VIEW
@@ -83,25 +80,25 @@ class ControlTowerPoller:
         return PollerSnapshot(self._registry, view.states, view.observations, view.last_tick_at)
 
     def tick(self) -> None:
-        """틱 1회: 등록 파일 > 심박 > 내부 점검 > 상태 전이 > 알림 계획·발송 > 장애 구간·저장 > 요약 > 정리"""
+        """틱 1회: 등록 파일 > 점검 창 > 심박 > 내부 점검 > 상태 전이 > 알림 계획·발송 > 장애 구간·저장 > 요약 > 정리"""
         now = self._now()
-        registry = self._reload_registry()
+        registry = self._reload_registry(now)
         if registry is None:
             return
         previous_states = self._load_states_once()
 
+        # 점검 창 (등록 파일 + 관리자 화면, 같은 서비스는 관리자 화면 우선): 알림·Worker 스냅샷·공개 장애 공용
+        maintenance = merge_maintenance(registry, self._store.active_maintenance(now))
+
         # 관측 조립 (심박 > 내부 점검 병렬)
         services = monitored_services(registry)
-        heartbeat_response = self._send_heartbeat(registry, now)
+        heartbeat = self._heartbeat_step.run(registry, maintenance, now)
         internal_results = run_internal_checks(services, self._check_runner, registry.alert.slow_milliseconds)
-        heartbeat_check = None if self._heartbeat_client is None else heartbeat_check_result(
-            heartbeat_response is not None, now)
-        external_results = self._take_external_results(heartbeat_response, now)
-        observations = build_observations(services, internal_results, external_results, heartbeat_check)
+        observations = build_observations(services, internal_results, heartbeat.external_results,
+                                          heartbeat.home_network_check)
 
-        # 상태 전이 > 알림 (점검 창: 등록 파일 + 관리자 화면) > 발송 실패한 down 알림은 다음 틱 재계획
+        # 상태 전이 > 알림 > 발송 실패한 down 알림은 다음 틱 재계획
         advanced_states, transitions = self._advance_states(registry, previous_states, observations, now)
-        maintenance = merge_maintenance(registry, self._store.active_maintenance(now))
         notifications, planned_states = plan_notifications(registry, advanced_states, transitions, maintenance, now)
         undelivered = [notification for notification in notifications if not self._dispatch_safely(notification)]
         if undelivered and self._dispatcher.is_delivery_configured():
@@ -110,7 +107,7 @@ class ControlTowerPoller:
         # 장애 구간 > 저장 (서비스별 독립) > 하루 1회 작업
         self._states = planned_states
         self._publish_view(planned_states, observations, now)
-        self._record_incidents(transitions, now)
+        self._record_incidents(transitions, maintenance, now)
         self._save_tick(observations, previous_states, planned_states, now)
         self._run_daily_task("digest", lambda: self._send_digest_if_due(registry, now))
         self._run_daily_task("purge", lambda: self._purge_if_due(now))
@@ -134,8 +131,9 @@ class ControlTowerPoller:
             elapsed_seconds = time.monotonic() - started_seconds
             self._stop_event.wait(max(0.0, self._interval_seconds - elapsed_seconds))
 
-    def _reload_registry(self) -> Registry | None:
-        """등록 파일 재로드: 성공 > 교체, 실패 > 이전 등록 정보 유지 + 오류 종류별 1회 로그 (Review Focus 4)"""
+    def _reload_registry(self, now: datetime) -> Registry | None:
+        """등록 파일 재로드: 성공 > 교체, 실패 > 이전 등록 정보 유지 + 오류 종류별 로그·전역 알림 1회 (해소 시 정상화 1회)"""
+        error_alert = self._registry_alert()  # meta 갱신 전에 직전 오류 읽기
         try:
             registry = load_registry(self._registry_path, self._environ)
         except Exception as error:
@@ -143,12 +141,22 @@ class ControlTowerPoller:
             if error_text != self._recorded_registry_error:
                 logger.warning("[control-tower poller] registry reload failed : %s", error_text)
             self._record_registry_error(error_text)
+            error_alert.report(error_text, now, _first_registry_problem(error))
             return self._registry
         if self._recorded_registry_error:
             logger.info("[control-tower poller] registry reloaded after error")
         self._registry = registry
         self._record_registry_error("")
+        error_alert.report(None, now)
         return registry
+
+    def _registry_alert(self) -> ConditionAlert:
+        """등록 파일 오류 알림 (재기동 전 기록된 같은 오류는 다시 알리지 않음)"""
+        if self._registry_error_alert is None:
+            previous_error = self._store.get_meta(META_KEY_REGISTRY_ERROR) or None
+            self._registry_error_alert = ConditionAlert(
+                self._dispatcher, build_registry_error_alert, build_registry_recovered_notice, previous_error)
+        return self._registry_error_alert
 
     def _record_registry_error(self, error_text: str) -> None:
         """meta registry_error 기록 (값이 바뀔 때만)"""
@@ -161,33 +169,6 @@ class ControlTowerPoller:
         if self._states is None:
             self._states = self._store.load_states()
         return self._states
-
-    def _send_heartbeat(self, registry: Registry, now: datetime) -> HeartbeatResponse | None:
-        """심박 전송 + 결과 meta 기록 (클라이언트 없으면 생략, 전송 예외는 실패로 처리)"""
-        if self._heartbeat_client is None:
-            return None
-        # 로컬 DB 조회 실패는 심박 실패가 아님 (빈 목록으로 전송)
-        try:
-            public_incidents = build_public_incidents(registry, self._store, now)
-        except Exception as error:
-            logger.warning("[control-tower poller] public incidents read failed : %s", type(error).__name__)
-            public_incidents = []
-        try:
-            response = self._heartbeat_client.send(registry, public_incidents, now)
-        except Exception as error:
-            logger.warning("[control-tower poller] heartbeat crashed : %s", type(error).__name__)
-            response = None
-        self._store.set_meta(META_KEY_HEARTBEAT_IS_OK, "1" if response is not None else "0")
-        if response is not None:
-            self._store.set_meta(META_KEY_HEARTBEAT_LAST_OK_AT, now.isoformat())
-        return response
-
-    def _take_external_results(self, response: HeartbeatResponse | None, now: datetime) -> dict:
-        """새 외부 결과만 꺼내고 반영한 checked_at 기억"""
-        external_results = fresh_external_results(response, now, self._last_applied_external_checked_at)
-        if external_results:
-            self._last_applied_external_checked_at = response.checked_at
-        return external_results
 
     @staticmethod
     def _advance_states(registry: Registry, previous_states: dict[str, ServiceState],
@@ -214,15 +195,17 @@ class ControlTowerPoller:
                            notification.kind, type(error).__name__)
             return False
 
-    def _record_incidents(self, transitions: list[Transition], now: datetime) -> None:
-        """장애 구간: down 진입 > 열기(첫 실패 시각), down 이탈 > 닫기(지금), 서비스별 독립"""
+    def _record_incidents(self, transitions: list[Transition], maintenance: dict[str, MaintenanceWindow],
+                          now: datetime) -> None:
+        """장애 구간: down 진입 > 열기(첫 실패 시각), down 이탈 > 닫기(지금), 점검 창 안 여부 함께 기록, 서비스별 독립"""
         for transition in transitions:
+            is_in_maintenance = is_under_maintenance(maintenance, transition.service_id, now)
             if transition.after == STATUS_DOWN:
                 self._persist(transition.service_id, lambda: self._store.open_incident(
-                    transition.service_id, transition.cause, transition.since))
+                    transition.service_id, transition.cause, transition.since, is_in_maintenance=is_in_maintenance))
             elif transition.before == STATUS_DOWN:
-                self._persist(transition.service_id,
-                              lambda: self._store.close_incident(transition.service_id, now))
+                self._persist(transition.service_id, lambda: self._store.close_incident(
+                    transition.service_id, now, is_in_maintenance=is_in_maintenance))
 
     def _save_tick(self, observations: dict[str, Observation], previous_states: dict[str, ServiceState],
                    planned_states: dict[str, ServiceState], now: datetime) -> None:
@@ -268,6 +251,13 @@ class ControlTowerPoller:
             return
         self._store.purge(now)
         self._store.set_meta(META_KEY_LAST_PURGE_DAY, today_text)
+
+
+def _first_registry_problem(error: Exception) -> str:
+    """알림 본문용 첫 문제 1줄 (그 외 예외는 종류 이름만)"""
+    if isinstance(error, RegistryError) and error.problems:
+        return error.problems[0]
+    return type(error).__name__
 
 
 def _summarize_registry_error(error: Exception) -> str:

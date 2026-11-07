@@ -1,5 +1,6 @@
 """관제소 알림 계획: 상태·전이 > 디스코드 알림 목록 + 알림 플래그 갱신 상태 (순수 함수, I/O·시계 없음)
 발송 4종: 복구, down, 재알림, 복구 후 계속 down 묶음 (up<->degraded 없음, 억제 판정은 alert_suppression)
+개별 down·복구가 bulk_alert_threshold 이상이면 각각 전역 긴급 1건으로 묶음 (R29, 재알림·복구 후 묶음 제외)
 """
 from __future__ import annotations
 
@@ -16,6 +17,7 @@ from service.control_tower.state_machine import STATUS_DOWN, ServiceState, Trans
 
 SEVERITY_CRITICAL = "critical"
 SEVERITY_RECOVERED = "recovered"
+SEVERITY_INFO = "info"
 # 인프라: 전역 관제-긴급 / 프로젝트 서비스: 프로젝트 상태 채널
 GLOBAL_SCOPE = "global"
 INFRASTRUCTURE_KIND = "alert"
@@ -37,25 +39,29 @@ class Notification:
 def plan_notifications(registry: Registry, states: dict[str, ServiceState], transitions: list[Transition],
                        maintenance: dict[str, MaintenanceWindow],
                        now: datetime) -> tuple[list[Notification], dict[str, ServiceState]]:
-    """알림 계획: 복구(전이 기준) > down 처리 판정(상태 기준, 인프라 먼저) > 개별 down·재알림 > 묶음"""
+    """알림 계획: 복구(전이 기준) > down 처리 판정(상태 기준, 인프라 먼저) > 개별 down·재알림 > 묶음
+    개별 down·복구 각각 기준 이상이면 다수 장애·다수 복구 1건 (플래그는 개별 발송과 같게 기록)"""
     recovery_by_id = {
         transition.service_id: transition for transition in transitions if transition.before == STATUS_DOWN
     }
     context = AlertContext(registry, states, recovery_by_id, maintenance, now)
-    notifications: list[Notification] = []
+    bulk_threshold = registry.alert.bulk_alert_threshold
     new_states = dict(states)
 
     # 복구 알림 (알림 시각 기록 = 자식 유예·묶음 기준)
+    recoveries: list[tuple[ServiceSpec, Notification]] = []
     for transition in recovery_by_id.values():
         recovery = _plan_recovery(context, transition)
         if recovery is not None:
-            notifications.append(recovery)
+            recoveries.append((registry.service_by_id(transition.service_id), recovery))
             new_states[transition.service_id] = replace(states[transition.service_id], last_notified_at=now)
+    notifications = _collapse_recoveries(recoveries, bulk_threshold, now)
 
     # down 처리는 복구 알림 반영 상태로 판정 (같은 틱 자식 보류)
     context = replace(context, states=dict(new_states))
 
-    # down 처리: 개별은 바로, 묶음은 기준 조상별로 모음 (등록 순서 유지)
+    # down 처리: 개별은 바로 (첫 down / 재알림 구분), 묶음은 기준 조상별로 모음 (등록 순서 유지)
+    individual_alerts: list[tuple[ServiceSpec | None, Notification]] = []  # 서비스 있음 = 첫 down, None = 재알림
     bundled_by_anchor_id: dict[str, list[ServiceSpec]] = {}
     for service in registry.infrastructure + registry.services:
         state = states.get(service.id)
@@ -67,7 +73,8 @@ def plan_notifications(registry: Registry, states: dict[str, ServiceState], tran
         elif handling.action == HANDLING_INDIVIDUAL:
             notification, new_states[service.id] = _plan_down_or_reminder(context, service, state)
             if notification is not None:
-                notifications.append(notification)
+                individual_alerts.append((None if state.is_down_notified else service, notification))
+    notifications.extend(_collapse_downs(context, individual_alerts, bulk_threshold))
 
     # 복구 후 계속 down 묶음 (포함된 자식은 알림 완료 처리 > 이후 개별 복구·재알림)
     for anchor_id, children in bundled_by_anchor_id.items():
@@ -75,6 +82,33 @@ def plan_notifications(registry: Registry, states: dict[str, ServiceState], tran
         for child in children:
             new_states[child.id] = replace(states[child.id], is_down_notified=True, last_notified_at=now)
     return notifications, new_states
+
+
+def _collapse_downs(context: AlertContext, individual_alerts: list[tuple[ServiceSpec | None, Notification]],
+                    bulk_threshold: int) -> list[Notification]:
+    """첫 down이 기준 미만 > 그대로, 이상 > 다수 장애 1건(이름 + 원인) + 재알림은 그대로"""
+    downed_services = [service for service, _ in individual_alerts if service is not None]
+    if len(downed_services) < bulk_threshold:
+        return [notification for _, notification in individual_alerts]
+    names_with_detail = [
+        f"{service.name} ({alert_texts.cause_label(context.states[service.id].cause)})" for service in downed_services]
+    bulk_down = Notification(
+        GLOBAL_SCOPE, INFRASTRUCTURE_KIND, SEVERITY_CRITICAL, alert_texts.bulk_down_title(len(downed_services)),
+        alert_texts.bulk_body(names_with_detail), tuple(service.id for service in downed_services),
+        f"bulk-down:{context.now.isoformat()}")
+    reminders = [notification for service, notification in individual_alerts if service is None]
+    return [bulk_down, *reminders]
+
+
+def _collapse_recoveries(recoveries: list[tuple[ServiceSpec, Notification]], bulk_threshold: int,
+                         now: datetime) -> list[Notification]:
+    """복구 알림이 기준 미만 > 그대로, 이상 > 다수 복구 1건 (복구 서비스 이름 목록)"""
+    if len(recoveries) < bulk_threshold:
+        return [notification for _, notification in recoveries]
+    return [Notification(
+        GLOBAL_SCOPE, INFRASTRUCTURE_KIND, SEVERITY_RECOVERED, alert_texts.bulk_recovery_title(len(recoveries)),
+        alert_texts.bulk_body([service.name for service, _ in recoveries]),
+        tuple(service.id for service, _ in recoveries), f"bulk-recovered:{now.isoformat()}")]
 
 
 def _plan_down_or_reminder(context: AlertContext, service: ServiceSpec,

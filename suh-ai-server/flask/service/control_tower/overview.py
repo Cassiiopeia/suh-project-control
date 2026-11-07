@@ -6,6 +6,9 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 from service.control_tower.check_runner import CheckResult
+from service.control_tower.meta_keys import (
+    META_KEY_HEARTBEAT_IS_OK, META_KEY_HEARTBEAT_LAST_OK_AT, META_KEY_ONBOARDING_HASH, META_KEY_REGISTRY_ERROR,
+)
 from service.control_tower.poller_steps import merge_maintenance
 from service.control_tower.registry import (
     SERVICE_STATUS_PAUSED, SERVICE_STATUS_RETIRED, MaintenanceWindow, Registry, ServiceSpec,
@@ -20,11 +23,6 @@ EVENT_LIMIT = 50
 # 점검 창 출처: 관리자 화면(해제 가능) / 등록 파일(파일에서만 변경)
 MAINTENANCE_SOURCE_ADMIN = "admin"
 MAINTENANCE_SOURCE_REGISTRY = "registry"
-# meta: 직전 심박 성공 여부 ('1' 성공, '0' 실패) / 마지막 심박 성공 시각 / 등록 파일 오류 / 온보딩 적용 해시
-META_HEARTBEAT_IS_OK = "heartbeat_is_ok"
-META_HEARTBEAT_LAST_OK_AT = "heartbeat_last_ok_at"
-META_REGISTRY_ERROR = "registry_error"
-META_ONBOARDING_HASH = "discord_onboarding_hash"
 
 
 def build_overview(runtime, now: datetime) -> dict:
@@ -38,18 +36,20 @@ def build_overview(runtime, now: datetime) -> dict:
     maintenance = merge_maintenance(registry, admin_windows)
 
     services = [
-        _service_entry(service, states.get(service.id), observations.get(service.id), maintenance.get(service.id), service.id in admin_windows, now)
+        _service_entry(service, states.get(service.id), observations.get(service.id), maintenance.get(service.id),
+                       service.id in admin_windows, now)
         for service in _listed_services(registry)
     ]
     return {
         "projects": [{"id": project.id, "name": project.name} for project in registry.projects],
         "services": services,
         "summary": _summarize(services),
-        "incidents": [_incident_entry(incident) for incident in store.recent_incidents(INCIDENT_LIMIT, now - INCIDENT_WINDOW)],
+        "incidents": [_incident_entry(incident)
+                      for incident in store.recent_incidents(INCIDENT_LIMIT, now - INCIDENT_WINDOW)],
         "events": [_event_entry(event) for event in store.recent_events(EVENT_LIMIT)],
-        "registry_error": store.get_meta(META_REGISTRY_ERROR) or None,
+        "registry_error": store.get_meta(META_KEY_REGISTRY_ERROR) or None,
         "heartbeat": _heartbeat_entry(store),
-        "onboarding": {"is_applied": bool(store.get_meta(META_ONBOARDING_HASH))},
+        "onboarding": {"is_applied": bool(store.get_meta(META_KEY_ONBOARDING_HASH))},
         "last_tick_at": _iso(snapshot.last_tick_at) if snapshot is not None else None,
     }
 
@@ -88,7 +88,7 @@ def _check_entry(check: CheckResult | None) -> dict | None:
 
 def _maintenance_entry(window: MaintenanceWindow | None, is_admin_window: bool, now: datetime) -> dict | None:
     """진행 중인 점검 창만 (만료는 null), source: admin 관리자 화면 창(해제 가능) / registry 등록 파일 창"""
-    if window is None or window.until <= now:
+    if window is None or not window.is_active_at(now):
         return None
     return {"until": _iso(window.until), "reason": window.reason,
             "source": MAINTENANCE_SOURCE_ADMIN if is_admin_window else MAINTENANCE_SOURCE_REGISTRY}
@@ -121,8 +121,8 @@ def _event_entry(event: dict) -> dict:
 
 def _heartbeat_entry(store) -> dict:
     """심박: is_ok None = 기록 없음 (Worker 미설정 포함)"""
-    is_ok_text = store.get_meta(META_HEARTBEAT_IS_OK)
-    return {"last_ok_at": store.get_meta(META_HEARTBEAT_LAST_OK_AT),
+    is_ok_text = store.get_meta(META_KEY_HEARTBEAT_IS_OK)
+    return {"last_ok_at": store.get_meta(META_KEY_HEARTBEAT_LAST_OK_AT),
             "is_ok": None if is_ok_text is None else is_ok_text == "1"}
 
 

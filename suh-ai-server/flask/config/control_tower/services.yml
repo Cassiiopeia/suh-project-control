@@ -11,6 +11,7 @@ alert:
   reminder_hours: 6      # down 지속 중 재알림 간격
   digest_hour_kst: 9     # 일일 요약 시각 (KST)
   parent_recovery_grace_minutes: 10  # 부모 복구 후 자식 알림 보류 (분), 이후 계속 down은 묶음 1건
+  bulk_alert_threshold: 5  # 한 번에 개별 down(또는 복구) 알림 5건 이상 > #관제-긴급 1건으로 묶음
 
 discord:
   roles:                          # 프로젝트마다 만들어지는 역할 이름 규칙
@@ -63,25 +64,25 @@ projects:
           external: {url: "https://web.suhsaechan.kr/"}
       - id: suhsaechan-note
         name: 노트
-        public: true
+        public: false  # 관리 도구 주소 노출 방지, 소유자 확인 후 true로 변경 가능
         depends_on: nas
         checks:
           external: {url: "https://note.suhsaechan.kr/"}
       - id: suhsaechan-chat
         name: 채팅
-        public: true
+        public: false  # 관리 도구 주소 노출 방지, 소유자 확인 후 true로 변경 가능
         depends_on: nas
         checks:
           external: {url: "https://chat.suhsaechan.kr/"}
       - id: suhsaechan-chrome
         name: 크롬
-        public: true
+        public: false  # 관리 도구 주소 노출 방지, 소유자 확인 후 true로 변경 가능
         depends_on: nas
         checks:
           external: {url: "https://chrome.suhsaechan.kr/"}
       - id: suhsaechan-file
         name: 파일
-        public: true
+        public: false  # 관리 도구 주소 노출 방지, 소유자 확인 후 true로 변경 가능
         depends_on: nas
         checks:
           external: {url: "https://file.suhsaechan.kr/"}
@@ -100,7 +101,7 @@ projects:
           external: {url: "https://lab.beta.suhsaechan.kr/"}
       - id: suhsaechan-mail
         name: 메일
-        public: true
+        public: false  # 관리 도구 주소 노출 방지, 소유자 확인 후 true로 변경 가능
         depends_on: nas
         checks:
           external: {url: "https://mail.suhsaechan.kr/"}

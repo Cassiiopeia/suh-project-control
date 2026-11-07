@@ -1,4 +1,4 @@
-"""관제소 SQLite 스키마: 테이블 8개 + 인덱스 (시각은 UTC ISO-8601 문자열)"""
+"""관제소 SQLite 스키마: 테이블 8개 + 인덱스 + 기존 DB 열 추가 (시각은 UTC ISO-8601 문자열)"""
 from __future__ import annotations
 
 SCHEMA_STATEMENTS = (
@@ -22,13 +22,14 @@ SCHEMA_STATEMENTS = (
         ok INTEGER NOT NULL,
         PRIMARY KEY (day, service_id)
     )""",
-    # 장애 구간 (ended_at NULL = 진행 중)
+    # 장애 구간 (ended_at NULL = 진행 중, is_within_maintenance: 점검 창 안에서 시작·종료 1, 아니면 0)
     """CREATE TABLE IF NOT EXISTS incident (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         service_id TEXT NOT NULL,
         cause TEXT NOT NULL,
         started_at TEXT NOT NULL,
-        ended_at TEXT
+        ended_at TEXT,
+        is_within_maintenance INTEGER NOT NULL DEFAULT 0
     )""",
     # 서비스당 진행 중 장애 1건만 허용
     """CREATE UNIQUE INDEX IF NOT EXISTS idx_incident_one_open_per_service
@@ -69,3 +70,16 @@ SCHEMA_STATEMENTS = (
     )""",
     "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
 )
+
+# 기존 DB에 없으면 추가하는 열: (테이블, 열 이름, 열 정의)
+COLUMN_MIGRATIONS = (
+    ("incident", "is_within_maintenance", "INTEGER NOT NULL DEFAULT 0"),
+)
+
+
+def apply_column_migrations(connection) -> None:
+    """COLUMN_MIGRATIONS 중 없는 열만 ALTER TABLE ADD COLUMN (반복 실행 안전)"""
+    for table_name, column_name, column_definition in COLUMN_MIGRATIONS:
+        existing_columns = {row[1] for row in connection.execute(f"PRAGMA table_info({table_name})")}
+        if column_name not in existing_columns:
+            connection.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_definition}")

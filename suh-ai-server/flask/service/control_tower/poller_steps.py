@@ -63,13 +63,13 @@ def heartbeat_check_result(is_heartbeat_ok: bool, now: datetime) -> CheckResult:
 
 def fresh_external_results(response: HeartbeatResponse | None, now: datetime,
                            last_applied_checked_at: datetime | None) -> dict[str, CheckResult]:
-    """심박 응답 > 새 외부 결과만 (심박 실패·시각 없음·오래됨·이미 반영한 checked_at > 빈 dict = 전부 모름)"""
+    """심박 응답 > 새 외부 결과만 (심박 실패·시각 없음·오래됨·반영한 checked_at 이하 > 빈 dict = 전부 모름)"""
     if response is None or response.checked_at is None:
         return {}
     if now - response.checked_at > EXTERNAL_RESULT_MAX_AGE:
         return {}
-    # Worker 크론 정체 시 같은 결과 반복 수신: 실패 연속·집계 중복 방지
-    if response.checked_at == last_applied_checked_at:
+    # Worker 크론 정체·순서 뒤바뀐 응답: 이미 반영한 시각 이하 결과는 버림 (실패 연속·집계 중복 방지)
+    if last_applied_checked_at is not None and response.checked_at <= last_applied_checked_at:
         return {}
     return response.external_results
 
@@ -124,8 +124,10 @@ def carry_over_external_observations(observations: dict[str, Observation],
     return carried
 
 
-def build_public_incidents(registry: Registry, store, now: datetime) -> list[dict]:
-    """공개·활성 서비스의 진행 중 + 최근 14일 장애 > {service_id, started_at, ended_at} (UTC ISO, 진행 중 null)"""
+def build_public_incidents(registry: Registry, store, maintenance: Mapping[str, MaintenanceWindow],
+                           now: datetime) -> list[dict]:
+    """공개·활성 서비스의 진행 중 + 최근 14일 장애 > {service_id, started_at, ended_at} (UTC ISO, 진행 중 null)
+    점검 창 안 장애 제외 2종: 점검 중 시작·종료, 진행 중인데 지금 점검 중"""
     public_service_ids = {
         service.id for service in registry.services if service.is_public and service.status == SERVICE_STATUS_ACTIVE
     }
@@ -133,8 +135,22 @@ def build_public_incidents(registry: Registry, store, now: datetime) -> list[dic
     return [
         {"service_id": incident["service_id"], "started_at": _to_utc_iso(incident["started_at"]),
          "ended_at": _to_utc_iso(incident["ended_at"])}
-        for incident in incidents if incident["service_id"] in public_service_ids
+        for incident in incidents
+        if incident["service_id"] in public_service_ids and not _is_hidden_by_maintenance(incident, maintenance, now)
     ]
+
+
+def is_under_maintenance(maintenance: Mapping[str, MaintenanceWindow], service_id: str, now: datetime) -> bool:
+    """서비스가 지금 점검 창 안인지"""
+    window = maintenance.get(service_id)
+    return window is not None and window.is_active_at(now)
+
+
+def _is_hidden_by_maintenance(incident: dict, maintenance: Mapping[str, MaintenanceWindow], now: datetime) -> bool:
+    """진행 중 > 지금 점검 중이면 숨김, 종료 > 점검 창 안에서 시작·종료했으면 숨김"""
+    if incident["ended_at"] is None:
+        return is_under_maintenance(maintenance, incident["service_id"], now)
+    return incident["is_within_maintenance"]
 
 
 def merge_maintenance(registry: Registry,

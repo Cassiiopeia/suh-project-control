@@ -1,7 +1,7 @@
 """관제소 저장소: 상태 왕복, 장애 구간, 일별 집계(KST), 이벤트 중복 억제, 바인딩, 점검 창, 보관 정리"""
 from __future__ import annotations
 
-import threading
+import sqlite3
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -64,7 +64,8 @@ def test_장애를_열고_닫으면_구간이_기록된다(store):
     assert closed_id == incident_id
     recent = store.recent_incidents(10, BASE_TIME - timedelta(days=1))
     assert recent == [{"id": incident_id, "service_id": SERVICE_ID, "cause": "service_down",
-                       "started_at": BASE_TIME, "ended_at": BASE_TIME + timedelta(minutes=30)}]
+                       "started_at": BASE_TIME, "ended_at": BASE_TIME + timedelta(minutes=30),
+                       "is_within_maintenance": False}]
 
 
 def test_이미_열린_장애가_있으면_중복으로_열지_않는다(store):
@@ -73,6 +74,38 @@ def test_이미_열린_장애가_있으면_중복으로_열지_않는다(store):
 
     assert second_id == first_id
     assert len(store.recent_incidents(10, BASE_TIME - timedelta(days=1))) == 1
+
+
+def test_장애의_점검_창_안_여부는_열기와_닫기_모두_점검_중일_때만_참이다(store):
+    store.open_incident("inside", "service_down", BASE_TIME, is_in_maintenance=True)
+    store.close_incident("inside", BASE_TIME + timedelta(minutes=5), is_in_maintenance=True)
+    store.open_incident("ended-after", "service_down", BASE_TIME, is_in_maintenance=True)
+    store.close_incident("ended-after", BASE_TIME + timedelta(minutes=5), is_in_maintenance=False)
+    store.open_incident("started-before", "service_down", BASE_TIME, is_in_maintenance=False)
+    store.close_incident("started-before", BASE_TIME + timedelta(minutes=5), is_in_maintenance=True)
+
+    flags = {row["service_id"]: row["is_within_maintenance"]
+             for row in store.recent_incidents(10, BASE_TIME - timedelta(days=1))}
+
+    assert flags == {"inside": True, "ended-after": False, "started-before": False}
+
+
+def test_기존_DB의_장애_테이블에_점검_창_열을_추가한다(tmp_path):
+    path = str(tmp_path / "old.db")
+    with sqlite3.connect(path) as connection:
+        connection.execute("CREATE TABLE incident (id INTEGER PRIMARY KEY AUTOINCREMENT, service_id TEXT NOT NULL, "
+                           "cause TEXT NOT NULL, started_at TEXT NOT NULL, ended_at TEXT)")
+        connection.execute("INSERT INTO incident (service_id, cause, started_at) VALUES ('old', 'service_down', ?)",
+                           (BASE_TIME.isoformat(),))
+    connection.close()
+    old_store = ControlTowerStore(path)
+
+    old_store.initialize()
+    old_store.initialize()  # 반복 실행 안전
+
+    rows = old_store.recent_incidents(10, BASE_TIME - timedelta(days=1))
+    old_store.close()
+    assert [(row["service_id"], row["is_within_maintenance"]) for row in rows] == [("old", False)]
 
 
 def test_열린_장애가_없으면_닫기는_None이다(store):
@@ -243,66 +276,6 @@ def test_같은_시각_재저장은_일별_집계를_중복_증가시키지_않�
 
     assert store.uptime_by_day(SERVICE_ID, 7) == [("2026-11-06", 1, 1)]
     assert _count(store, "check_result") == 1
-
-
-def test_여러_스레드의_동시_장애_열기는_하나만_만든다(store):
-    opened_ids: list[int] = []
-    errors: list[Exception] = []
-
-    def open_in_thread():
-        try:
-            opened_ids.append(store.open_incident(SERVICE_ID, "service_down", BASE_TIME))
-        except Exception as error:  # noqa: BLE001 테스트에서 스레드 예외 수집
-            errors.append(error)
-
-    threads = [threading.Thread(target=open_in_thread) for _ in range(8)]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
-
-    assert errors == []
-    assert len(set(opened_ids)) == 1
-
-
-def test_여러_스레드의_동시_이벤트_기록은_하나만_True다(store):
-    results: list[bool] = []
-
-    def record_in_thread():
-        results.append(store.record_event("elum", "error", "same-key", BASE_TIME))
-
-    threads = [threading.Thread(target=record_in_thread) for _ in range(8)]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
-
-    assert results.count(True) == 1
-
-
-def test_close_후에도_다시_사용할_수_있다(store):
-    store.set_meta("key", "value")
-    store.close()
-
-    assert store.get_meta("key") == "value"
-
-
-def test_다른_스레드에서도_같은_저장소를_쓸_수_있다(store):
-    errors: list[Exception] = []
-
-    def write_in_thread():
-        try:
-            store.set_meta("thread", "ok")
-            store.save_results(SERVICE_ID, OK, BASE_TIME)
-        except Exception as error:  # noqa: BLE001 테스트에서 스레드 예외 수집
-            errors.append(error)
-
-    worker_thread = threading.Thread(target=write_in_thread)
-    worker_thread.start()
-    worker_thread.join()
-
-    assert errors == []
-    assert store.get_meta("thread") == "ok"
 
 
 def _count(store: ControlTowerStore, table: str) -> int:

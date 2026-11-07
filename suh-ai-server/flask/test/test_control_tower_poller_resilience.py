@@ -13,7 +13,7 @@ from control_tower_poller_fixtures import (  # noqa: F401 (pytest 픽스처 재�
 from service.control_tower import poller as poller_module
 from service.control_tower.check_runner import CheckResult
 from service.control_tower.heartbeat_client import HeartbeatResponse
-from service.control_tower.poller_steps import merge_maintenance
+from service.control_tower.poller_steps import fresh_external_results, merge_maintenance
 from service.control_tower.registry import MaintenanceWindow, Registry
 
 NAS_DOWN_TITLE = "[다운] 시놀로지 NAS"
@@ -76,6 +76,20 @@ def test_같은_checked_at의_Worker_결과가_반복되면_한_번만_반영한
     assert [(total, ok) for _, total, ok in store.uptime_by_day("elum-api", 1)] == [(1, 0)]
 
 
+def test_이미_반영한_시각보다_오래된_Worker_결과는_버린다():
+    applied_at = BASE_TIME - timedelta(seconds=30)
+    older_at = BASE_TIME - timedelta(seconds=90)
+    newer_at = BASE_TIME - timedelta(seconds=10)
+
+    def response(checked_at):
+        return HeartbeatResponse({"elum-api": CheckResult(False, False, 503, 40, None, checked_at)}, checked_at)
+
+    assert fresh_external_results(response(older_at), BASE_TIME, applied_at) == {}
+    assert fresh_external_results(response(applied_at), BASE_TIME, applied_at) == {}
+    assert list(fresh_external_results(response(newer_at), BASE_TIME, applied_at)) == ["elum-api"]
+    assert list(fresh_external_results(response(older_at), BASE_TIME, None)) == ["elum-api"]
+
+
 def test_한_서비스의_기록_실패가_다른_기록과_하루_작업을_막지_않는다(
         registry_path, store, dispatcher, check_runner, clock, monkeypatch, caplog):
     original_save_results = store.save_results
@@ -86,10 +100,10 @@ def test_한_서비스의_기록_실패가_다른_기록과_하루_작업을_막
             raise sqlite3.OperationalError("database is locked")
         original_save_results(service_id, observation, now)
 
-    def open_incident_failing_for_nas(service_id, cause, started_at):
+    def open_incident_failing_for_nas(service_id, cause, started_at, **options):
         if service_id == "nas":
             raise sqlite3.OperationalError("database is locked")
-        return original_open_incident(service_id, cause, started_at)
+        return original_open_incident(service_id, cause, started_at, **options)
 
     monkeypatch.setattr(store, "save_results", save_results_failing_for_nas)
     monkeypatch.setattr(store, "open_incident", open_incident_failing_for_nas)

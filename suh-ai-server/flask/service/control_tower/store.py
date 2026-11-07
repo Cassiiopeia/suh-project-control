@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 from service.control_tower.check_runner import CheckResult
 from service.control_tower.registry import MaintenanceWindow
 from service.control_tower.state_machine import Observation, ServiceState
-from service.control_tower.store_schema import SCHEMA_STATEMENTS
+from service.control_tower.store_schema import SCHEMA_STATEMENTS, apply_column_migrations
 from service.control_tower.time_zones import KST
 
 CONNECTION_TIMEOUT_SECONDS = 10  # 쓰기 잠금 대기
@@ -92,13 +92,14 @@ class ControlTowerStore:
         connection.commit()
 
     def initialize(self) -> None:
-        """상위 폴더 생성 > 테이블·인덱스 생성"""
+        """상위 폴더 생성 > 테이블·인덱스 생성 > 기존 DB 열 추가"""
         parent_directory = os.path.dirname(self._path)
         if parent_directory:
             os.makedirs(parent_directory, exist_ok=True)
         with self._connection() as connection:
             for statement in SCHEMA_STATEMENTS:
                 connection.execute(statement)
+            apply_column_migrations(connection)
 
     # ---- 점검 결과·일별 집계 ----
 
@@ -160,35 +161,39 @@ class ControlTowerStore:
 
     # ---- 장애 구간 ----
 
-    def open_incident(self, service_id: str, cause: str, started_at: datetime) -> int:
-        """장애 열기 (이미 열린 장애가 있으면 그 id 반환)"""
+    def open_incident(self, service_id: str, cause: str, started_at: datetime,
+                      is_in_maintenance: bool = False) -> int:
+        """장애 열기 (이미 열린 장애가 있으면 그 id 반환), is_in_maintenance: 여는 시점 점검 창 안"""
         with self._write_transaction() as connection:
             existing = connection.execute(
                 "SELECT id FROM incident WHERE service_id = ? AND ended_at IS NULL", (service_id,)).fetchone()
             if existing is not None:
                 return existing["id"]
             return connection.execute(
-                "INSERT INTO incident (service_id, cause, started_at) VALUES (?,?,?)",
-                (service_id, cause, _to_text(started_at))).lastrowid
+                "INSERT INTO incident (service_id, cause, started_at, is_within_maintenance) VALUES (?,?,?,?)",
+                (service_id, cause, _to_text(started_at), int(is_in_maintenance))).lastrowid
 
-    def close_incident(self, service_id: str, ended_at: datetime) -> int | None:
-        """열린 장애 닫기 (없으면 None)"""
+    def close_incident(self, service_id: str, ended_at: datetime, is_in_maintenance: bool = False) -> int | None:
+        """열린 장애 닫기 (없으면 None), 점검 창 안 종료가 아니면 is_within_maintenance 0"""
         with self._write_transaction() as connection:
             existing = connection.execute(
                 "SELECT id FROM incident WHERE service_id = ? AND ended_at IS NULL", (service_id,)).fetchone()
             if existing is None:
                 return None
-            connection.execute("UPDATE incident SET ended_at = ? WHERE id = ?", (_to_text(ended_at), existing["id"]))
+            connection.execute(
+                "UPDATE incident SET ended_at = ?, is_within_maintenance = is_within_maintenance AND ? WHERE id = ?",
+                (_to_text(ended_at), int(is_in_maintenance), existing["id"]))
             return existing["id"]
 
     def recent_incidents(self, limit: int, since: datetime) -> list[dict]:
         """since 이후 시작했거나 진행 중인 장애, 최신순"""
         rows = self._connection().execute(
-            "SELECT id, service_id, cause, started_at, ended_at FROM incident "
+            "SELECT id, service_id, cause, started_at, ended_at, is_within_maintenance FROM incident "
             "WHERE started_at >= ? OR ended_at IS NULL ORDER BY started_at DESC, id DESC LIMIT ?",
             (_to_text(since), limit)).fetchall()
         return [{"id": row["id"], "service_id": row["service_id"], "cause": row["cause"],
-                 "started_at": _from_text(row["started_at"]), "ended_at": _from_text(row["ended_at"])}
+                 "started_at": _from_text(row["started_at"]), "ended_at": _from_text(row["ended_at"]),
+                 "is_within_maintenance": bool(row["is_within_maintenance"])}
                 for row in rows]
 
     def incidents_overlapping(self, start: datetime, end: datetime) -> list[dict]:

@@ -19,6 +19,8 @@ CAUSE_LABELS = {
     CAUSE_UNREACHABLE: "접속 불가",
 }
 UNKNOWN_CAUSE_LABEL = "알 수 없음"
+# 다수 장애·복구 본문에 나열할 최대 이름 수 (넘으면 '외 N개')
+BULK_NAME_LIMIT = 40
 
 
 def format_duration_korean(seconds: float) -> str:
@@ -61,6 +63,23 @@ def recovery_title(service_name: str) -> str:
 
 def still_down_bundle_title(anchor_name: str) -> str:
     return f"[복구 후 계속 다운] {anchor_name}"
+
+
+def bulk_down_title(service_count: int) -> str:
+    return f"[다수 장애] {service_count}개 서비스"
+
+
+def bulk_recovery_title(service_count: int) -> str:
+    return f"[다수 복구] {service_count}개 서비스"
+
+
+def bulk_body(entries: list[str]) -> str:
+    """다수 장애·복구 본문: 한 줄에 1개, 40개 넘으면 '외 N개'"""
+    lines = entries[:BULK_NAME_LIMIT]
+    remaining_count = len(entries) - len(lines)
+    if remaining_count > 0:
+        lines.append(f"외 {remaining_count}개")
+    return "\n".join(lines)
 
 
 def still_down_bundle_body(children: list[tuple[str, str | None]]) -> str:

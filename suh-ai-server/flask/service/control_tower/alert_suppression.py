@@ -67,7 +67,7 @@ def decide_down_handling(context: AlertContext, service: ServiceSpec, state: Ser
 
 def is_in_maintenance(context: AlertContext, service_id: str) -> bool:
     window = context.maintenance.get(service_id)
-    return window is not None and context.now < window.until
+    return window is not None and window.is_active_at(context.now)
 
 
 def active_ancestors(registry: Registry, service: ServiceSpec) -> list[ServiceSpec]:

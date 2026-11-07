@@ -7,6 +7,7 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Iterable
 
 # 서비스 생명주기: active 감시·알림·공개 / paused 감시만 / retired 감시 안 함
 SERVICE_STATUS_ACTIVE = "active"
@@ -68,6 +69,7 @@ class AlertPolicy:
     reminder_hours: int = 6  # down 지속 중 재알림 간격
     digest_hour_kst: int = 9  # 일일 요약 시각 (KST 시)
     parent_recovery_grace_minutes: int = 10  # 부모 복구 후 자식 알림 보류 시간 (분), 이후 계속 down은 묶음 1건
+    bulk_alert_threshold: int = 5  # 한 틱 개별 down(또는 복구) 알림이 N건 이상이면 전역 긴급 1건으로 묶음
 
 
 @dataclass(frozen=True)
@@ -86,6 +88,10 @@ class MaintenanceWindow:
     service_id: str
     until: datetime  # 시간대 포함
     reason: str = ""
+
+    def is_active_at(self, moment: datetime) -> bool:
+        """moment가 점검 창 안인지 (until 직전까지)"""
+        return moment < self.until
 
 
 @dataclass(frozen=True)
@@ -110,8 +116,10 @@ class Registry:
             service for service in self.services + self.infrastructure if service.depends_on == parent_id
         )
 
-    def to_worker_snapshot(self) -> dict:
-        """Worker 전달용 공개 필드만 (내부 점검·의존성·점검 사유 제외, id 정렬)"""
+    def to_worker_snapshot(self, maintenance: Iterable[MaintenanceWindow] | None = None) -> dict:
+        """Worker 전달용 공개 필드만 (내부 점검·의존성·점검 사유 제외, id 정렬)
+        maintenance: 등록 파일 + 관리자 화면 병합 창 (생략 시 등록 파일 창만)"""
+        windows = self.maintenance if maintenance is None else tuple(maintenance)
         return {
             "alert": {
                 "failures_to_down": self.alert.failures_to_down,
@@ -128,14 +136,14 @@ class Registry:
             ],
             "maintenance": [
                 {"service_id": window.service_id, "until": window.until.isoformat()}
-                for window in sorted(self.maintenance, key=lambda window: (window.service_id, window.until))
+                for window in sorted(windows, key=lambda window: (window.service_id, window.until))
             ],
         }
 
-    def version(self) -> str:
-        """스냅샷 정규화 JSON의 sha256 (변경 감지용)"""
+    def version(self, maintenance: Iterable[MaintenanceWindow] | None = None) -> str:
+        """스냅샷 정규화 JSON의 sha256 (변경 감지용, 같은 maintenance 인자로 만든 스냅샷 기준)"""
         canonical_json = json.dumps(
-            self.to_worker_snapshot(), sort_keys=True, ensure_ascii=False, separators=(",", ":")
+            self.to_worker_snapshot(maintenance), sort_keys=True, ensure_ascii=False, separators=(",", ":")
         )
         return hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
 

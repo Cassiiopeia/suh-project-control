@@ -12,6 +12,7 @@ from service.control_tower.discord_client import DiscordError
 from service.control_tower.discord_sync_apply import apply_sync
 from service.control_tower.discord_sync_models import GLOBAL_SCOPE, ROLE_KIND_PREFIX, SyncOperation, SyncReport
 from service.control_tower.discord_sync_plan import plan_sync
+from service.control_tower.meta_keys import META_KEY_ONBOARDING_HASH
 from service.control_tower.registry import Registry
 
 __all__ = ["SyncOperation", "SyncReport", "apply_sync", "build_onboarding_payload", "plan_sync", "sync_discord"]
@@ -28,8 +29,6 @@ ONBOARDING_EXCLUDED_PROJECT_IDS = ("infra",)
 ONBOARDING_PROMPT_TYPE_MULTIPLE_CHOICE = 0
 ONBOARDING_MODE_DEFAULT = 0
 NOTICE_CHANNEL_KIND = "notice"
-# meta: 마지막으로 성공한 온보딩 PUT payload의 sha256 (같으면 PUT 생략)
-META_KEY_ONBOARDING_HASH = "discord_onboarding_hash"
 # 동기화 동시 실행 방지: 기동 동기화와 관리자 화면 버튼이 같은 잠금을 씀
 DISCORD_SYNC_LOCK = threading.Lock()
 
