@@ -1,14 +1,33 @@
 {
   "metadata": {
-    "lastUpdated": "2026-10-31T12:21:37Z",
-    "currentVersion": "2.0.75",
+    "lastUpdated": "2026-11-07T10:52:09Z",
+    "currentVersion": "2.0.76",
     "projectType": "python",
-    "totalReleases": 71,
+    "totalReleases": 72,
     "projectTypes": [
       "python"
     ]
   },
   "releases": [
+    {
+      "version": "2.0.76",
+      "project_type": "python",
+      "project_types": [
+        "python"
+      ],
+      "date": "2026-11-07",
+      "pr_number": 151,
+      "raw_summary": "## Summary by CodeRabbit\n\n## 릴리스 노트\n\n* **문서**\n  * 저장소 첫 화면(README)을 개편하고 관리 화면 캡처와 API Key 인증 안내를 추가",
+      "parsed_changes": {
+        "문서": {
+          "title": "문서",
+          "items": [
+            "저장소 첫 화면(README)을 개편하고 관리 화면 캡처와 API Key 인증 안내를 추가"
+          ]
+        }
+      },
+      "parse_method": "markdown"
+    },
     {
       "version": "2.0.75",
       "project_type": "python",
