@@ -138,3 +138,52 @@ def test_failure_streak_reset_by_success_restarts_since():
     state, _ = _run([FAIL, OK, FAIL], _up_state())
     assert state.consecutive_failures == 1
     assert state.since == _tick_time(2)
+
+
+INTERNAL_OK_EXTERNAL_UNKNOWN = Observation(_result(), None, False)
+INTERNAL_OK_EXTERNAL_OK = Observation(_result(), _result(), True)
+EXTERNAL_ONLY_OK = Observation(None, _result(), True)
+
+
+def test_external_cause_down_ignores_ticks_without_known_external_result():
+    down_state, _ = _run([INTERNAL_OK_EXTERNAL_FAIL] * 3, _up_state())
+    state, transitions = _run([INTERNAL_OK_EXTERNAL_UNKNOWN] * 3, down_state)
+    assert state == down_state
+    assert transitions == [None] * 3
+    state, transitions = _run([INTERNAL_OK_EXTERNAL_OK] * 2, down_state)
+    assert state.status == "up"
+    assert (transitions[1].before, transitions[1].after) == ("down", "up")
+
+
+def test_unreachable_down_recovers_only_with_known_external_successes():
+    down_state, _ = _run([EXTERNAL_ONLY_FAIL] * 3, _up_state())
+    state, _ = _run([Observation(None, None, False)] * 3, down_state)
+    assert state == down_state
+    state, transitions = _run([EXTERNAL_ONLY_OK] * 2, down_state)
+    assert state.status == "up" and transitions[1] is not None
+
+
+def test_service_down_cause_recovers_on_internal_ok_with_unknown_external():
+    down_state, _ = _run([BOTH_FAIL] * 3, _up_state())
+    state, transitions = _run([INTERNAL_OK_EXTERNAL_UNKNOWN] * 2, down_state)
+    assert state.status == "up"
+    assert transitions[1] is not None
+
+
+def test_custom_policy_failures_to_down_two():
+    policy = AlertPolicy(failures_to_down=2)
+    state, first = advance(SERVICE_ID, _up_state(), FAIL, policy, _tick_time(0))
+    state, second = advance(SERVICE_ID, state, FAIL, policy, _tick_time(1))
+    assert first is None
+    assert (second.before, second.after) == ("up", "down")
+    assert second.since == _tick_time(0)
+
+
+def test_failure_between_successes_requires_two_fresh_successes():
+    down_state, _ = _run([FAIL] * 3, _up_state())
+    state, transitions = _run([OK, FAIL, OK], down_state)
+    assert state.status == "down"
+    assert transitions == [None] * 3
+    state, transition = advance(SERVICE_ID, state, OK, POLICY, _tick_time(10))
+    assert state.status == "up"
+    assert transition is not None

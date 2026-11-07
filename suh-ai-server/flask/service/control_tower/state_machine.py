@@ -55,6 +55,9 @@ def advance(service_id: str, previous: ServiceState, observation: Observation,
         return previous, None
     if any(not check.is_ok for check in checks):
         return _advance_on_failure(service_id, previous, observation, policy, now)
+    # 외부 원인 down은 확인된 외부 성공만 복구로 인정 (내부만 정상인 틱은 데이터 없음)
+    if _is_external_cause_down(previous) and not _has_known_external_result(observation):
+        return previous, None
     is_slow = any(check.is_slow for check in checks)
     return _advance_on_success(service_id, previous, is_slow, policy, now)
 
@@ -69,6 +72,16 @@ def _effective_checks(observation: Observation) -> list[CheckResult]:
     return checks
 
 
+def _is_external_cause_down(state: ServiceState) -> bool:
+    """down이며 원인이 외부 경로·도달 불가인지"""
+    return state.status == STATUS_DOWN and state.cause in (CAUSE_EXTERNAL_PATH, CAUSE_UNREACHABLE)
+
+
+def _has_known_external_result(observation: Observation) -> bool:
+    """외부 결과가 확인된 관측인지"""
+    return observation.is_external_known and observation.external is not None
+
+
 def _decide_cause(observation: Observation) -> str:
     """실패 원인: 내부 실패 > service_down, 내부 정상 > external_path, 내부 없음 > unreachable"""
     if observation.internal is None:
@@ -78,7 +91,9 @@ def _decide_cause(observation: Observation) -> str:
     return CAUSE_EXTERNAL_PATH
 
 
-def _advance_on_failure(service_id, previous, observation, policy, now):
+def _advance_on_failure(service_id: str, previous: ServiceState, observation: Observation,
+                        policy: AlertPolicy, now: datetime) -> tuple[ServiceState, Transition | None]:
+    """실패 틱 반영: 실패 연속 증가 > 첫 실패 시각 기록 > 기준 도달 시 down 전이"""
     failure_count = previous.consecutive_failures + 1
     cause = _decide_cause(observation)
 
@@ -97,7 +112,9 @@ def _advance_on_failure(service_id, previous, observation, policy, now):
     return down_state, Transition(service_id, previous.status, STATUS_DOWN, cause, first_failure_at)
 
 
-def _advance_on_success(service_id, previous, is_slow, policy, now):
+def _advance_on_success(service_id: str, previous: ServiceState, is_slow: bool,
+                        policy: AlertPolicy, now: datetime) -> tuple[ServiceState, Transition | None]:
+    """성공 틱 반영: 성공 연속 증가 > down 복구·최초 관측·up/degraded 전환 판정"""
     success_count = previous.consecutive_successes + 1
     target_status = STATUS_DEGRADED if is_slow else STATUS_UP
     state = replace(previous, consecutive_failures=0, consecutive_successes=success_count)
