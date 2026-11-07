@@ -4,7 +4,7 @@
  */
 import { runChecks } from './checks.js';
 import { watchHeartbeat } from './emergency.js';
-import { advanceTodayRollup, appendRecentResults, recentResultLimit } from './rollups.js';
+import { advanceTodayRollup, appendRecentResults, calculateRecentResultLimit } from './rollups.js';
 import {
   MetaKey, buildCheckRunInsertStatement, buildDailyRollupUpsertStatement, buildMetaUpsertStatement,
   deleteCheckRunsBefore, getMetaValues, parseJsonObject,
@@ -49,7 +49,7 @@ async function recordExternalChecks(database, nowMilliseconds, fetchImpl) {
 
   const checkedAt = toIsoUtc(nowMilliseconds);
   const recentResults = appendRecentResults(
-    parseJsonObject(meta[MetaKey.RECENT_RESULTS_JSON]), results, checkedAt, recentResultLimit(config),
+    parseJsonObject(meta[MetaKey.RECENT_RESULTS_JSON]), results, checkedAt, calculateRecentResultLimit(config),
   );
   const { todayRollup, finishedRollup } = advanceTodayRollup(
     parseJsonObject(meta[MetaKey.TODAY_ROLLUP_JSON]), results, toKstDay(nowMilliseconds),

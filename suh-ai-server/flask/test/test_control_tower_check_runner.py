@@ -51,7 +51,8 @@ def run_http(http_get, spec: CheckSpec | None = None, clock=None) -> CheckResult
 @pytest.mark.parametrize('code, expect, ok', [
     (200, (), True), (401, (), True), (404, (), True), (500, (), True),
     (502, (), False), (503, (), False), (504, (), False),
-    (404, (200,), False), (200, (200,), True)])
+    (519, (), True), (520, (), False), (521, (), False), (530, (), False), (531, (), True),
+    (404, (200,), False), (200, (200,), True), (521, (521,), True)])
 def test_is_status_ok(code, expect, ok):
     assert is_status_ok(code, expect) is ok
 

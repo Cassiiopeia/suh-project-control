@@ -35,7 +35,7 @@ DEFAULT_GLOBAL_CHANNELS = {"notice": ("everyone",), "alert": ("admin",), "digest
 class CheckSpec:
     kind: str  # 'http' | 'tcp'
     target: str  # http: URL / tcp: host:port
-    expect: tuple[int, ...] = ()  # 비어 있으면 기본 규칙 (502·503·504·연결 실패 외 정상)
+    expect: tuple[int, ...] = ()  # 비어 있으면 기본 규칙 (502·503·504·520~530·연결 실패 외 정상)
     timeout_seconds: int = 10
 
 

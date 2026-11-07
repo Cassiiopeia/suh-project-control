@@ -94,6 +94,18 @@ test('응답의 외부 결과는 최신 check_run 1행', async () => {
   assert.deepEqual(body, { need_config: false, checked_at: '2026-11-03T23:59:00.000Z', external_results: latestResults });
 });
 
+test('설정 저장 로그는 기록이 성공한 뒤에만 남긴다', async () => {
+  await sendHeartbeat(heartbeatBody({ config: SNAPSHOT }));
+  const storedLogCount = () => console.log.mock.calls
+    .filter((call) => String(call.arguments[0]).includes('config stored')).length;
+  assert.equal(storedLogCount(), 1);
+
+  database.batch = async () => { throw new Error('D1 unavailable'); };
+  const request = await createSignedHeartbeatRequest(heartbeatBody({ config: SNAPSHOT }), BASE_MILLISECONDS);
+  await assert.rejects(handleHeartbeat(request, environment, BASE_MILLISECONDS, createFakeFetch(() => null)));
+  assert.equal(storedLogCount(), 1);
+});
+
 test('공개 장애 목록을 저장한다', async () => {
   await sendHeartbeat(heartbeatBody({ config: SNAPSHOT, public_incidents: INCIDENTS }));
   assert.deepEqual(JSON.parse(database.metaValue('public_incidents_json')), INCIDENTS);

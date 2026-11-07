@@ -3,6 +3,8 @@
 name = "suh-control-tower"
 main = "src/index.js"
 compatibility_date = "2026-10-01"
+# workers.dev 주소 미사용 (심박·공개 페이지 모두 status.suhsaechan.kr)
+workers_dev = false
 
 [triggers]
 crons = ["* * * * *"]

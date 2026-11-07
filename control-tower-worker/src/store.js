@@ -14,6 +14,7 @@ export const MetaKey = Object.freeze({
   LAST_ROLLUP_DAY: 'last_rollup_day', // daily_rollup에 마지막으로 기록한 KST 날짜
   TODAY_ROLLUP_JSON: 'today_rollup_json', // {"day": KST, "services": {id: [total, ok]}}
   RECENT_RESULTS_JSON: 'recent_results_json', // {id: [{is_ok, is_slow, checked_at}, ...]} 최신순
+  WEBHOOK_MISSING_WARNED_HOUR: 'webhook_missing_warned_hour', // 웹훅 미설정 경고를 마지막으로 남긴 KST 시 (YYYY-MM-DDTHH)
 });
 
 const UPSERT_META_SQL = 'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value';
@@ -62,12 +63,6 @@ export async function getLatestCheckRun(database) {
 export async function deleteCheckRunsBefore(database, cutoffIso) {
   const outcome = await database.prepare('DELETE FROM check_run WHERE checked_at < ?').bind(cutoffIso).run();
   return outcome?.meta?.changes ?? 0;
-}
-
-/** 저장된 스냅샷 설정 > 객체 | null (없거나 손상) */
-export async function loadConfig(database) {
-  const { [MetaKey.CONFIG_JSON]: configJson } = await getMetaValues(database, [MetaKey.CONFIG_JSON]);
-  return parseJsonObject(configJson);
 }
 
 /** JSON 문자열 > 일반 객체 (배열·손상·null이면 null) */

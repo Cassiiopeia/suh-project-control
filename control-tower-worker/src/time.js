@@ -1,6 +1,8 @@
 /**
- * 시각 변환 공통: 밀리초 > ISO UTC, KST 날짜(YYYY-MM-DD), KST HH:MM, ISO > 밀리초
+ * 시각 변환 공통: 밀리초 > ISO UTC, KST 날짜(YYYY-MM-DD), KST 시(YYYY-MM-DDTHH), KST HH:MM, ISO > 밀리초
  */
+
+export const MILLISECONDS_PER_SECOND = 1000;
 
 // KST = UTC+9 (밀리초)
 const KST_OFFSET_MILLISECONDS = 9 * 60 * 60 * 1000;
@@ -15,6 +17,11 @@ export function toIsoUtc(milliseconds) {
 /** 밀리초 > KST 날짜 (예: 2026-11-04) */
 export function toKstDay(milliseconds) {
   return new Date(milliseconds + KST_OFFSET_MILLISECONDS).toISOString().slice(0, 10);
+}
+
+/** 밀리초 > KST 날짜·시 (예: 2026-11-04T09), 시간당 1회 처리 키 */
+export function toKstHourKey(milliseconds) {
+  return new Date(milliseconds + KST_OFFSET_MILLISECONDS).toISOString().slice(0, 13);
 }
 
 /** 밀리초 > KST 시:분 (예: 09:05), 모르면 --:-- */

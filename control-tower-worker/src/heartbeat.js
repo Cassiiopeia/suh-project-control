@@ -6,11 +6,10 @@ import { recoverIfEmergencyDown } from './emergency.js';
 import { verify } from './hmac.js';
 import { jsonResponse } from './http.js';
 import { MetaKey, getLatestCheckRun, getMetaValues, isPlainObject, setMetaValues } from './store.js';
-import { toIsoUtc } from './time.js';
+import { MILLISECONDS_PER_SECOND, toIsoUtc } from './time.js';
 
 // 심박 본문 최대 크기 (256KB)
 export const MAXIMUM_BODY_BYTES = 256 * 1024;
-const MILLISECONDS_PER_SECOND = 1000;
 
 /** 심박 1건 처리 > Response (401 서명 실패, 400 본문 오류, 413 크기 초과) */
 export async function handleHeartbeat(request, environment, nowMilliseconds, fetchImpl = fetch) {
@@ -38,6 +37,7 @@ export async function handleHeartbeat(request, environment, nowMilliseconds, fet
   ]);
   const { updates, isConfigNeeded } = planMetaUpdates(body, storedMeta, nowMilliseconds);
   await setMetaValues(database, updates);
+  if (MetaKey.CONFIG_JSON in updates) console.log('[control-tower worker heartbeat] config stored');
   await recoverIfEmergencyDown(environment, storedMeta, nowMilliseconds, fetchImpl);
 
   if (isConfigNeeded) return jsonResponse({ need_config: true });
@@ -53,7 +53,6 @@ function planMetaUpdates(body, storedMeta, nowMilliseconds) {
   if (isPlainObject(body.config)) {
     updates[MetaKey.CONFIG_JSON] = JSON.stringify(body.config);
     updates[MetaKey.CONFIG_VERSION] = body.config_version;
-    console.log('[control-tower worker heartbeat] config stored');
   } else if (body.config_version !== storedMeta[MetaKey.CONFIG_VERSION]) {
     isConfigNeeded = true;
   }

@@ -9,7 +9,7 @@ const MINIMUM_RECENT_RESULT_COUNT = 3;
 const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 /** 최근 결과 보관 수 = max(failures_to_down, 3) */
-export function recentResultLimit(config) {
+export function calculateRecentResultLimit(config) {
   const failuresToDown = Math.floor(Number(config?.alert?.failures_to_down));
   return Number.isFinite(failuresToDown) ? Math.max(failuresToDown, MINIMUM_RECENT_RESULT_COUNT) : MINIMUM_RECENT_RESULT_COUNT;
 }

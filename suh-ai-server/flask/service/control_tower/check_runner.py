@@ -14,8 +14,10 @@ from service.control_tower.registry import CheckSpec
 
 logger = logging.getLogger(__name__)
 
-# 기본 규칙에서 장애로 보는 상태 코드 (게이트웨이 계열)
+# 기본 규칙에서 장애로 보는 상태 코드: 게이트웨이 계열 + Cloudflare 엣지 오류 520~530 (프록시 뒤 원본 접속 불가)
 FAILURE_STATUS_CODES = (502, 503, 504)
+CLOUDFLARE_EDGE_ERROR_FIRST = 520
+CLOUDFLARE_EDGE_ERROR_LAST = 530
 MILLISECONDS_PER_SECOND = 1000
 
 # 실패 라벨 4종 (외부 예외 문구는 저장하지 않음)
@@ -41,9 +43,11 @@ def utc_now() -> datetime:
 
 
 def is_status_ok(status_code: int, expect: tuple[int, ...]) -> bool:
-    """상태 코드 정상 판정: expect 있으면 그 코드만, 없으면 502·503·504 외 전부"""
+    """상태 코드 정상 판정: expect 있으면 그 코드만, 없으면 502·503·504·520~530 외 전부 (Worker isStatusOk와 같은 표)"""
     if expect:
         return status_code in expect
+    if CLOUDFLARE_EDGE_ERROR_FIRST <= status_code <= CLOUDFLARE_EDGE_ERROR_LAST:
+        return False
     return status_code not in FAILURE_STATUS_CODES
 
 

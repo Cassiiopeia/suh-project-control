@@ -170,12 +170,20 @@ test('비상 웹훅이 실패하면 상태를 바꾸지 않고 다음 분에 다
   assert.equal(database.metaValue('emergency_state'), 'down');
 });
 
-test('웹훅 주소가 없으면 호출하지 않고 다음 분에 다시 시도한다', async () => {
+test('웹훅 주소가 없으면 호출하지 않고 매분 재시도하되 경고는 KST 시간당 1회', async () => {
   database.setMetaValue('last_heartbeat_at', new Date(BASE_MILLISECONDS).toISOString());
+  const environmentWithoutWebhook = { ...environment, DISCORD_EMERGENCY_WEBHOOK_URL: undefined };
   const fakeFetch = routedFetch();
-  await runScheduled({ ...environment, DISCORD_EMERGENCY_WEBHOOK_URL: undefined }, BASE_MILLISECONDS + 4 * MINUTE_MILLISECONDS, fakeFetch);
+  // KST 09:04, 09:05, 09:59 > 같은 시, 10:00 > 다음 시
+  for (const minute of [4, 5, 59, 60]) {
+    await runScheduled(environmentWithoutWebhook, BASE_MILLISECONDS + minute * MINUTE_MILLISECONDS, fakeFetch);
+  }
   assert.equal(fakeFetch.calls.length, 0);
   assert.equal(database.metaValue('emergency_state'), null);
+  const missingWarnings = console.warn.mock.calls
+    .filter((call) => String(call.arguments[0]).includes('webhook not configured'));
+  assert.equal(missingWarnings.length, 2);
+  assert.equal(database.metaValue('webhook_missing_warned_hour'), '2026-11-04T10');
 });
 
 test('7일 지난 check_run은 매시 정각에만 지운다', async () => {
