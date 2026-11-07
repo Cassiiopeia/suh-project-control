@@ -28,6 +28,9 @@ ONBOARDING_EXCLUDED_PROJECT_IDS = ("infra",)
 # 온보딩 질문 타입: 0 객관식 / 온보딩 모드: 0 기본
 ONBOARDING_PROMPT_TYPE_MULTIPLE_CHOICE = 0
 ONBOARDING_MODE_DEFAULT = 0
+# 온보딩 질문·옵션 id: Discord가 실제 id로 바꿔 주는 자리표시자 (옵션은 시작값 + 순번)
+ONBOARDING_PROMPT_PLACEHOLDER_ID = "1"
+ONBOARDING_OPTION_PLACEHOLDER_ID_START = 100
 NOTICE_CHANNEL_KIND = "notice"
 # 동기화 동시 실행 방지: 기동 동기화와 관리자 화면 버튼이 같은 잠금을 씀
 DISCORD_SYNC_LOCK = threading.Lock()
@@ -57,18 +60,23 @@ def sync_discord(registry: Registry, client, store, guild_id: str) -> SyncReport
 def build_onboarding_payload(registry: Registry, role_ids_by_project: dict[str, str],
                              notice_channel_id: str | None = None) -> dict:
     """온보딩 질문 1개: 프로젝트마다 옵션 1개(member 역할 부여), 역할 없는 프로젝트·인프라 제외"""
+    listed_projects = [
+        project for project in registry.projects
+        if project.id not in ONBOARDING_EXCLUDED_PROJECT_IDS and role_ids_by_project.get(project.id)
+    ]
     options = [
         {
+            "id": str(ONBOARDING_OPTION_PLACEHOLDER_ID_START + index),
             "title": project.name,
             "description": ONBOARDING_OPTION_DESCRIPTION.format(project_name=project.name),
             "role_ids": [role_ids_by_project[project.id]],
             "channel_ids": [],
         }
-        for project in registry.projects
-        if project.id not in ONBOARDING_EXCLUDED_PROJECT_IDS and role_ids_by_project.get(project.id)
+        for index, project in enumerate(listed_projects)
     ]
     return {
         "prompts": [{
+            "id": ONBOARDING_PROMPT_PLACEHOLDER_ID,
             "type": ONBOARDING_PROMPT_TYPE_MULTIPLE_CHOICE,
             "title": ONBOARDING_PROMPT_TITLE,
             "single_select": False,

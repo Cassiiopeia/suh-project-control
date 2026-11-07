@@ -95,3 +95,16 @@ def test_점검_창이_끝나면_진행_중_장애는_다시_공개된다(store)
     public_incidents = build_public_incidents(PUBLIC_REGISTRY, store, expired, now)
 
     assert [incident["service_id"] for incident in public_incidents] == ["elum-api"]
+
+
+def test_폴러는_등록_파일에_관리자_덮어쓰기를_적용한_실효_등록_정보로_감시한다(registry_path, store, dispatcher,
+                                                         check_runner, clock):
+    store.save_service_override("elum-admin", {"status": "retired", "name": "이룸 관리자(중지)"}, BASE_TIME)
+    heartbeat_client = FakeHeartbeatClient()
+    poller = make_poller(registry_path, store, dispatcher, check_runner, clock, heartbeat_client)
+
+    run_ticks(poller, clock, 1)
+
+    assert poller.current_registry().service_by_id("elum-admin").status == "retired"
+    assert poller.current_file_registry().service_by_id("elum-admin").status == "active"
+    assert "elum-admin" not in poller.snapshot().states

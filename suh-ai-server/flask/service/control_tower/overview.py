@@ -44,13 +44,13 @@ def build_overview(runtime, now: datetime) -> dict:
         "projects": [{"id": project.id, "name": project.name} for project in registry.projects],
         "services": services,
         "summary": _summarize(services),
-        "incidents": [_incident_entry(incident)
+        "incidents": [incident_entry(incident)
                       for incident in store.recent_incidents(INCIDENT_LIMIT, now - INCIDENT_WINDOW)],
         "events": [_event_entry(event) for event in store.recent_events(EVENT_LIMIT)],
         "registry_error": store.get_meta(META_KEY_REGISTRY_ERROR) or None,
         "heartbeat": _heartbeat_entry(store),
         "onboarding": {"is_applied": bool(store.get_meta(META_KEY_ONBOARDING_HASH))},
-        "last_tick_at": _iso(snapshot.last_tick_at) if snapshot is not None else None,
+        "last_tick_at": iso_text(snapshot.last_tick_at) if snapshot is not None else None,
     }
 
 
@@ -70,9 +70,9 @@ def _service_entry(service: ServiceSpec, state, observation, window: Maintenance
         "lifecycle": service.status,  # active | paused
         "status": state.status if state is not None else STATUS_UNKNOWN,
         "cause": state.cause if state is not None else None,
-        "since": _iso(state.since) if state is not None else None,
-        "internal": _check_entry(observation.internal if observation is not None else None),
-        "external": _check_entry(observation.external if is_external_known else None),
+        "since": iso_text(state.since) if state is not None else None,
+        "internal": check_entry(observation.internal if observation is not None else None),
+        "external": check_entry(observation.external if is_external_known else None),
         "is_public": service.is_public,
         # 외부 점검 주소 = 공개 도메인 (내부 점검 주소는 내부 IP라 싣지 않음)
         "url": service.external.target if service.external is not None else None,
@@ -80,19 +80,19 @@ def _service_entry(service: ServiceSpec, state, observation, window: Maintenance
     }
 
 
-def _check_entry(check: CheckResult | None) -> dict | None:
+def check_entry(check: CheckResult | None) -> dict | None:
     if check is None:
         return None
     return {"is_ok": check.is_ok, "is_slow": check.is_slow, "status_code": check.status_code,
             "latency_milliseconds": check.latency_milliseconds, "error": check.error,
-            "checked_at": _iso(check.checked_at)}
+            "checked_at": iso_text(check.checked_at)}
 
 
 def _maintenance_entry(window: MaintenanceWindow | None, is_admin_window: bool, now: datetime) -> dict | None:
     """진행 중인 점검 창만 (만료는 null), source: admin 관리자 화면 창(해제 가능) / registry 등록 파일 창"""
     if window is None or not window.is_active_at(now):
         return None
-    return {"until": _iso(window.until), "reason": window.reason,
+    return {"until": iso_text(window.until), "reason": window.reason,
             "source": MAINTENANCE_SOURCE_ADMIN if is_admin_window else MAINTENANCE_SOURCE_REGISTRY}
 
 
@@ -111,14 +111,14 @@ def _summarize(services: list[dict]) -> dict:
     return summary
 
 
-def _incident_entry(incident: dict) -> dict:
+def incident_entry(incident: dict) -> dict:
     return {"id": incident["id"], "service_id": incident["service_id"], "cause": incident["cause"],
-            "started_at": _iso(incident["started_at"]), "ended_at": _iso(incident["ended_at"])}
+            "started_at": iso_text(incident["started_at"]), "ended_at": iso_text(incident["ended_at"])}
 
 
 def _event_entry(event: dict) -> dict:
     return {"id": event["id"], "project_id": event["project_id"], "kind": event["kind"],
-            "created_at": _iso(event["created_at"])}
+            "created_at": iso_text(event["created_at"])}
 
 
 def _heartbeat_entry(store) -> dict:
@@ -128,5 +128,5 @@ def _heartbeat_entry(store) -> dict:
             "is_ok": None if is_ok_text is None else is_ok_text == "1"}
 
 
-def _iso(moment: datetime | None) -> str | None:
+def iso_text(moment: datetime | None) -> str | None:
     return moment.isoformat() if moment is not None else None

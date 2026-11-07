@@ -25,6 +25,7 @@ from service.control_tower.poller_steps import (
     monitored_services, restore_undelivered_alert_flags, run_internal_checks,
 )
 from service.control_tower.registry import MaintenanceWindow, Registry, RegistryError, load_registry
+from service.control_tower.registry_overrides import apply_overrides
 from service.control_tower.state_machine import (
     INITIAL_STATE, STATUS_DOWN, Observation, ServiceState, Transition, advance,
 )
@@ -51,7 +52,8 @@ class ControlTowerPoller:
         self._now = now
         self._interval_seconds = interval_seconds
         self._environ = environ if environ is not None else os.environ
-        self._registry: Registry | None = None
+        self._registry: Registry | None = None  # 실효 등록 정보 (등록 파일 + 관리자 화면 덮어쓰기)
+        self._file_registry: Registry | None = None  # 덮어쓰기 전 등록 파일 그대로 (관리 API 원본 비교용)
         self._recorded_registry_error: str | None = None  # None: 아직 meta 기록 전
         self._registry_error_alert: ConditionAlert | None = None  # 첫 재로드 때 meta 값으로 생성
         self._states: dict[str, ServiceState] | None = None  # 첫 틱에 저장소에서 1회 복원
@@ -70,6 +72,10 @@ class ControlTowerPoller:
     def current_registry(self) -> Registry:
         """마지막으로 읽은 등록 정보 (없으면 빈 등록 정보)"""
         return self._registry or EMPTY_REGISTRY
+
+    def current_file_registry(self) -> Registry:
+        """마지막으로 읽은 등록 파일 원본 (없으면 빈 등록 정보)"""
+        return self._file_registry or EMPTY_REGISTRY
 
     def current_states(self) -> dict[str, ServiceState]:
         return dict(self._states or {})
@@ -132,10 +138,11 @@ class ControlTowerPoller:
             self._stop_event.wait(max(0.0, self._interval_seconds - elapsed_seconds))
 
     def _reload_registry(self, now: datetime) -> Registry | None:
-        """등록 파일 재로드: 성공 > 교체, 실패 > 이전 등록 정보 유지 + 오류 종류별 로그·전역 알림 1회 (해소 시 정상화 1회)"""
+        """등록 파일 재로드 > 덮어쓰기 적용: 성공 > 교체, 실패 > 이전 등록 정보 유지 + 오류 종류별 로그·전역 알림 1회 (해소 시 정상화 1회)"""
         error_alert = self._registry_alert()  # meta 갱신 전에 직전 오류 읽기
         try:
-            registry = load_registry(self._registry_path, self._environ)
+            file_registry = load_registry(self._registry_path, self._environ)
+            registry = apply_overrides(file_registry, self._store)
         except Exception as error:
             error_text = _summarize_registry_error(error)
             if error_text != self._recorded_registry_error:
@@ -145,6 +152,7 @@ class ControlTowerPoller:
             return self._registry
         if self._recorded_registry_error:
             logger.info("[control-tower poller] registry reloaded after error")
+        self._file_registry = file_registry
         self._registry = registry
         self._record_registry_error("")
         error_alert.report(None, now)

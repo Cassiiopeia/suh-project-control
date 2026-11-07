@@ -11,10 +11,11 @@ export const STATUS_PAGE_PATHS = new Set(['/', STATUS_JSON_PATH]);
 
 // 응답 캐시 시간 (초)
 const STATUS_CACHE_SECONDS = 60;
-// 공개 응답 보안 헤더: 스크립트·외부 자원·프레임 삽입 전부 차단
+// 공개 응답 보안 헤더: 스크립트 실행·외부 자원·프레임 삽입 차단, 이미지는 같은 출처 아이콘·data:만
+// JSON-LD(type=application/ld+json)는 실행되지 않는 데이터 블록이라 script-src 허용 불필요 (default-src 'none' 유지)
 const STATUS_SECURITY_HEADERS = Object.freeze({
   'x-content-type-options': 'nosniff',
-  'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; frame-ancestors 'none'",
+  'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'",
   'referrer-policy': 'no-referrer',
 });
 

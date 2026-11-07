@@ -11,3 +11,7 @@ META_KEY_HEARTBEAT_IS_OK = "heartbeat_is_ok"
 META_KEY_REGISTRY_ERROR = "registry_error"
 # 디스코드 온보딩 적용 해시 (없으면 미적용)
 META_KEY_ONBOARDING_HASH = "discord_onboarding_hash"
+# 공개 상태 페이지 제목 / 공지 문구(빈 값 = 공지 없음) / 공지 수준 (info | warning | critical)
+META_KEY_STATUS_PAGE_TITLE = "status_page_title"
+META_KEY_STATUS_PAGE_NOTICE_TEXT = "status_page_notice_text"
+META_KEY_STATUS_PAGE_NOTICE_LEVEL = "status_page_notice_level"

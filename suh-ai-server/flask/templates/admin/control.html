@@ -4,144 +4,32 @@
 {% block content %}
 <div class="space-y-6 max-w-6xl mx-auto">
 
-  <!-- 등록 파일 오류: 비어 있으면 숨김, 이전 설정으로 계속 감시 중 -->
-  <div id="control-registry-error" class="alert alert-error text-sm" hidden>
-    <i data-lucide="alert-triangle" class="size-5"></i>
-    <span>등록 파일을 읽지 못해 이전 설정으로 감시 중입니다. <span id="control-registry-error-text" class="font-mono"></span></span>
+  <!-- 탭 3개: 현황 / 서비스 관리 / 상태 페이지 (주소 #manage, #status-page 로 바로 열기) -->
+  <div role="tablist" class="tabs tabs-box w-fit" id="control-tabs">
+    <button role="tab" class="tab tab-active" data-tab="overview"><i data-lucide="radar" class="size-4 mr-1"></i>현황</button>
+    <button role="tab" class="tab" data-tab="manage"><i data-lucide="settings-2" class="size-4 mr-1"></i>서비스 관리</button>
+    <button role="tab" class="tab" data-tab="status-page"><i data-lucide="globe" class="size-4 mr-1"></i>상태 페이지</button>
   </div>
 
-  <!-- 요약: 정상 / 장애 / 점검 / 확인 필요(paused) -->
-  <div id="control-summary" class="stats stats-vertical sm:stats-horizontal shadow border border-base-300 bg-base-100 w-full">
-    <div class="stat">
-      <div class="stat-figure text-success"><i data-lucide="circle-check" class="size-6"></i></div>
-      <div class="stat-title">정상</div>
-      <div id="control-count-ok" class="stat-value text-2xl">-</div>
-    </div>
-    <div class="stat">
-      <div class="stat-figure text-error"><i data-lucide="circle-alert" class="size-6"></i></div>
-      <div class="stat-title">장애</div>
-      <div id="control-count-down" class="stat-value text-2xl">-</div>
-    </div>
-    <div class="stat">
-      <div class="stat-figure text-info"><i data-lucide="wrench" class="size-6"></i></div>
-      <div class="stat-title">점검</div>
-      <div id="control-count-maintenance" class="stat-value text-2xl">-</div>
-    </div>
-    <div class="stat">
-      <div class="stat-figure text-warning"><i data-lucide="eye" class="size-6"></i></div>
-      <div class="stat-title">확인 필요</div>
-      <div id="control-count-needs-attention" class="stat-value text-2xl">-</div>
-      <div class="stat-desc">일시 중지(paused) 서비스</div>
-    </div>
+  <div class="space-y-6" data-tab-panel="overview">
+    {% include "admin/control/overview.html" %}
   </div>
-
-  <!-- 심박 상태: Worker 외부 점검 연결 -->
-  <div class="flex flex-wrap items-center gap-2 text-sm">
-    <span id="control-heartbeat-badge" class="badge badge-ghost gap-1 text-xs py-2 px-2.5">심박 확인 중</span>
-    <span id="control-heartbeat-detail" class="opacity-70"></span>
-    <span id="control-onboarding-badge" class="badge badge-ghost badge-sm"></span>
-    <span id="control-last-tick" class="opacity-60 text-xs ml-auto"></span>
+  <div class="space-y-6" data-tab-panel="manage" hidden>
+    {% include "admin/control/manage.html" %}
   </div>
-
-  <!-- 진행 중 장애 -->
-  <div class="card bg-base-100 shadow border border-base-300">
-    <div class="card-body">
-      <h2 class="card-title text-base flex items-center gap-2">
-        <i data-lucide="circle-alert" class="size-5 text-error"></i>진행 중 장애
-        <span id="control-incident-count" class="badge badge-ghost badge-sm">0</span>
-      </h2>
-      <div class="overflow-x-auto">
-        <table class="table table-sm">
-          <thead><tr><th>서비스</th><th>원인</th><th>시작</th><th>경과</th></tr></thead>
-          <tbody id="control-incident-body"><tr><td colspan="4" class="opacity-60">불러오는 중</td></tr></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-
-  <!-- 서비스 표: 프로젝트별 묶음, 상태 배지, 내부/외부 결과, 마지막 점검 -->
-  <div class="card bg-base-100 shadow border border-base-300">
-    <div class="card-body">
-      <h2 class="card-title text-base flex items-center gap-2">
-        <i data-lucide="radar" class="size-5 text-primary"></i>서비스 상태
-      </h2>
-      <div class="overflow-x-auto">
-        <table id="control-service-table" class="table table-sm">
-          <thead><tr><th>서비스</th><th>상태</th><th>내부 점검</th><th>외부 점검</th><th>마지막 점검</th><th>점검 창</th></tr></thead>
-          <tbody id="control-service-body"><tr><td colspan="6" class="opacity-60">불러오는 중</td></tr></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-    <!-- 점검 중 설정: 선택한 서비스의 장애 알림을 until 까지 보류 -->
-    <div class="card bg-base-100 shadow border border-base-300">
-      <div class="card-body">
-        <h2 class="card-title text-base flex items-center gap-2">
-          <i data-lucide="wrench" class="size-5 text-primary"></i>점검 중 설정
-        </h2>
-        <p class="text-xs opacity-60">선택한 시각까지 해당 서비스의 장애 알림을 보내지 않습니다. 해제는 서비스 표의 해제 버튼.</p>
-        <form id="control-maintenance-form" class="mt-3 space-y-3">
-          <label class="block w-full">
-            <span class="block text-xs opacity-70 mb-1">서비스</span>
-            <select id="control-maintenance-service" class="select select-sm w-full" required></select>
-          </label>
-          <label class="block w-full">
-            <span class="block text-xs opacity-70 mb-1">종료 시각 (이 브라우저의 시간대)</span>
-            <input id="control-maintenance-until" type="datetime-local" class="input input-sm w-full" required>
-          </label>
-          <label class="block w-full">
-            <span class="block text-xs opacity-70 mb-1">사유 (선택, 200자 이내)</span>
-            <input id="control-maintenance-reason" type="text" maxlength="200" autocomplete="off"
-                   class="input input-sm w-full" placeholder="예: 디스크 교체">
-          </label>
-          <button id="control-maintenance-submit" type="submit" class="btn btn-primary btn-sm w-full">
-            <i data-lucide="wrench" class="size-4"></i>점검 중으로 설정
-          </button>
-        </form>
-      </div>
-    </div>
-
-    <!-- 디스코드: 구조 동기화, 알림 경로 테스트 -->
-    <div class="card bg-base-100 shadow border border-base-300">
-      <div class="card-body">
-        <h2 class="card-title text-base flex items-center gap-2">
-          <i data-lucide="send" class="size-5 text-primary"></i>디스코드
-        </h2>
-        <p class="text-xs opacity-60">등록 파일 기준으로 역할·채널·온보딩을 맞춥니다. 삭제는 하지 않습니다.</p>
-        <button id="control-discord-sync" class="btn btn-outline btn-sm mt-3 w-full">
-          <i data-lucide="refresh-cw" class="size-4"></i>디스코드 동기화
-        </button>
-        <p id="control-sync-result" class="text-xs mt-1 opacity-80" hidden></p>
-        <label class="block w-full mt-3">
-          <span class="block text-xs opacity-70 mb-1">테스트 알림 대상</span>
-          <select id="control-test-alert-scope" class="select select-sm w-full"></select>
-        </label>
-        <button id="control-test-alert" class="btn btn-outline btn-sm mt-2 w-full">
-          <i data-lucide="bell-ring" class="size-4"></i>테스트 알림 보내기
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- 최근 이벤트: 앱이 보낸 신고·에러·배포 이벤트 -->
-  <div class="card bg-base-100 shadow border border-base-300">
-    <div class="card-body">
-      <h2 class="card-title text-base flex items-center gap-2">
-        <i data-lucide="list" class="size-5 text-primary"></i>최근 이벤트
-      </h2>
-      <div class="overflow-x-auto">
-        <table class="table table-sm">
-          <thead><tr><th>시각</th><th>프로젝트</th><th>종류</th></tr></thead>
-          <tbody id="control-event-body"><tr><td colspan="3" class="opacity-60">불러오는 중</td></tr></tbody>
-        </table>
-      </div>
-    </div>
+  <div class="space-y-6" data-tab-panel="status-page" hidden>
+    {% include "admin/control/status_page.html" %}
   </div>
 </div>
+{% include "admin/control/service_modal.html" %}
 {% endblock %}
 {% block extra_js %}
 <script src="{{ root }}/static/js/control-format.js?v={{ asset('js/control-format.js') }}"></script>
 <script src="{{ root }}/static/js/control.js?v={{ asset('js/control.js') }}"></script>
+<script src="{{ root }}/static/js/control-manage-actions.js?v={{ asset('js/control-manage-actions.js') }}"></script>
+<script src="{{ root }}/static/js/control-service-modal.js?v={{ asset('js/control-service-modal.js') }}"></script>
+<script src="{{ root }}/static/js/control-manage.js?v={{ asset('js/control-manage.js') }}"></script>
+<script src="{{ root }}/static/js/control-status-page.js?v={{ asset('js/control-status-page.js') }}"></script>
+<!-- 탭은 마지막: 첫 탭 표시 이벤트를 다른 스크립트가 받도록 -->
+<script src="{{ root }}/static/js/control-tabs.js?v={{ asset('js/control-tabs.js') }}"></script>
 {% endblock %}

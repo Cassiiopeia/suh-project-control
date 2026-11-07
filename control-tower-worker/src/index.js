@@ -1,9 +1,10 @@
 /**
- * Worker 진입점: fetch 라우팅(POST /api/heartbeat, GET /·/api/status.json 공개 상태, 그 외 404), 1분 크론 > runScheduled
+ * Worker 진입점: fetch 라우팅(POST /api/heartbeat, GET /·/api/status.json 공개 상태, GET 아이콘·robots·sitemap, 그 외 404), 1분 크론 > runScheduled
  */
 import { handleHeartbeat } from './heartbeat.js';
 import { jsonResponse, textResponse } from './http.js';
 import { runScheduled } from './scheduled.js';
+import { SITE_ASSET_PATHS, handleSiteAssetRequest } from './site_asset_route.js';
 import { STATUS_PAGE_PATHS, getDefaultStatusCache, handleStatusRequest } from './status_route.js';
 
 const HEARTBEAT_PATH = '/api/heartbeat';
@@ -17,6 +18,9 @@ async function routeRequest(request, environment, context) {
     }
     if (request.method === 'GET' && STATUS_PAGE_PATHS.has(pathname)) {
       return await handleStatusRequest(request, environment, Date.now(), getDefaultStatusCache(), context);
+    }
+    if (request.method === 'GET' && SITE_ASSET_PATHS.has(pathname)) {
+      return handleSiteAssetRequest(pathname, Date.now());
     }
     return textResponse('not found', 404);
   } catch (error) {

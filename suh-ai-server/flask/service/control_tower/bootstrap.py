@@ -16,7 +16,7 @@ from service.control_tower.discord_sync import DISCORD_SYNC_LOCK, sync_discord
 from service.control_tower.event_dispatcher import EventDispatcher
 from service.control_tower.heartbeat_client import HeartbeatClient
 from service.control_tower.poller import ControlTowerPoller
-from service.control_tower.registry import load_registry
+from service.control_tower.registry_overrides import load_effective_registry
 from service.control_tower.runtime import ControlTowerRuntime, set_runtime
 from service.control_tower.store import ControlTowerStore
 
@@ -45,7 +45,8 @@ def start_control_tower(environ: Mapping[str, str] = os.environ, database_path: 
                                 environ=environ)
 
     runtime = ControlTowerRuntime(registry_provider=poller.current_registry, store=store, dispatcher=dispatcher,
-                                  poller=poller, discord_client_provider=lambda: discord_client,
+                                  poller=poller, file_registry_provider=poller.current_file_registry,
+                                  discord_client_provider=lambda: discord_client,
                                   guild_id=environ.get(DISCORD_GUILD_ID_ENV) or None)
     set_runtime(runtime)
     poller.start()
@@ -78,9 +79,9 @@ def _build_heartbeat_client(environ: Mapping[str, str]) -> HeartbeatClient | Non
 
 def _sync_discord_once(registry_path: str, environ: Mapping[str, str], discord_client: DiscordClient,
                        store: ControlTowerStore) -> None:
-    """기동 시 디스코드 구조 동기화 1회 (실패는 기록만)"""
+    """기동 시 디스코드 구조 동기화 1회: 실효 등록 정보 기준 (실패는 기록만)"""
     try:
-        registry = load_registry(registry_path, environ)
+        registry = load_effective_registry(registry_path, environ, store)
         with DISCORD_SYNC_LOCK:  # 관리자 화면 버튼과 동시 실행 방지
             sync_discord(registry, discord_client, store, environ[DISCORD_GUILD_ID_ENV])
     except Exception as error:
