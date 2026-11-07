@@ -49,6 +49,14 @@ def test_overview에서_관측이_없는_서비스는_상태_unknown_결과_null
     assert batch["cause"] is None and batch["since"] is None
 
 
+def test_overview_url은_외부_점검_주소만_싣고_내부_주소는_싣지_않는다(client):
+    services = _services_by_id(client.get("/control/overview").get_json())
+
+    assert services["elum-api"]["url"] == "https://api.example.com/"
+    assert services["nas"]["url"] is None  # 내부 점검(tcp nas.local:5001)만 있는 서비스
+    assert "nas.local" not in str(services["nas"])
+
+
 def test_overview는_등록_파일_점검_창과_관리자_점검_창을_합쳐_보여준다(client, store):
     store.set_maintenance("nas", NOW + timedelta(hours=2), "디스크 교체")
     services = _services_by_id(client.get("/control/overview").get_json())
@@ -101,10 +109,11 @@ def test_overview_메타가_없으면_null_false이다(client):
     assert body["incidents"] == [] and body["events"] == []
 
 
-def test_overview는_토큰과_점검_대상_주소를_싣지_않는다(client):
+def test_overview는_토큰과_내부_점검_주소를_싣지_않는다(client):
     text = client.get("/control/overview").get_data(as_text=True)
 
-    assert "127.0.0.1" not in text and "nas.local" not in text and "api.example.com" not in text
+    # 외부 공개 주소(api.example.com)는 url로 허용, 내부 주소만 금지
+    assert "127.0.0.1" not in text and "nas.local" not in text
 
 
 def test_폴러가_없는_런타임도_overview는_등록_정보만으로_응답한다(store, dispatcher):
