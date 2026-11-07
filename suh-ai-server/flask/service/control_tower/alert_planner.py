@@ -31,6 +31,7 @@ class Notification:
     body: str
     service_ids: tuple[str, ...]  # 첫 항목 = 알림 주체, 나머지 = 영향·함께 복구·계속 down 서비스
     dedupe_key: str  # {service_id}:{down|reminder-N|recovered|still-down}:{기준 시각 iso}
+    link_url: str | None = None  # 임베드 제목 링크 (없으면 상태 페이지)
 
 
 def plan_notifications(registry: Registry, states: dict[str, ServiceState], transitions: list[Transition],

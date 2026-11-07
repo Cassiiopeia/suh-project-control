@@ -37,8 +37,9 @@ def to_embed(notification: Notification, status_page_url: str) -> dict:
     }
     if downtime_text:
         embed["fields"] = [{"name": DOWNTIME_FIELD_NAME, "value": downtime_text, "inline": True}]
-    if status_page_url:
-        embed["url"] = status_page_url
+    link_url = notification.link_url or status_page_url
+    if link_url:
+        embed["url"] = link_url
     return embed
 
 

@@ -63,3 +63,8 @@ def test_url_only_when_status_page_url_given():
 
 def test_footer_is_control_tower():
     assert to_embed(_notification(), STATUS_PAGE_URL)["footer"] == {"text": FOOTER_TEXT} and FOOTER_TEXT == "SUH 관제소"
+
+
+def test_notification_link_url_overrides_status_page_url():
+    notification = Notification("elum", "report", "info", "신고", "", (), "", link_url="https://elum.example.com/r/1")
+    assert to_embed(notification, STATUS_PAGE_URL)["url"] == "https://elum.example.com/r/1"
