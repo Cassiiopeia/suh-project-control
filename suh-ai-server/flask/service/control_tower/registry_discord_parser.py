@@ -8,12 +8,16 @@ from typing import Any
 from service.control_tower.registry_models import (
     GLOBAL_CHANNEL_KINDS, PROJECT_CHANNEL_KINDS, RESERVED_ROLE_KEYS, DiscordPolicy,
 )
-from service.control_tower.registry_parse_helpers import as_mapping, read_role_keys, read_string
+from service.control_tower.registry_parse_helpers import as_mapping, read_role_keys, read_string, report_unknown_keys
+
+# discord 섹션에서 허용하는 키
+DISCORD_KEYS = ("roles", "admin_role_name", "channel_names", "channel_visibility", "global_channels")
 
 
 def parse_discord(raw: Any, problems: list[str]) -> DiscordPolicy:
     """디스코드 정책: 기본값 위에 등록 파일 값을 종류별로 덮어씀"""
     raw_discord = as_mapping(raw, "discord", problems)
+    report_unknown_keys(raw_discord, DISCORD_KEYS, "discord", problems)
     defaults = DiscordPolicy()
     role_names = {**defaults.role_names, **as_mapping(raw_discord.get("roles"), "discord.roles", problems)}
     channel_names = {**defaults.channel_names,

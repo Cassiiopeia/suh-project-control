@@ -305,3 +305,96 @@ def test_repository_registry_file_loads(monkeypatch):
     assert len(paused_service_ids) == 12
     external_count = sum(1 for service in registry.services if service.external and service.status != "retired")
     assert external_count <= control_tower_config.MAX_EXTERNAL_CHECKS
+
+
+def test_rejects_unknown_keys_in_service_project_discord_and_check(tmp_path):
+    path = write_registry(tmp_path, """
+        discord:
+          rolez: {}
+        projects:
+          - id: elum
+            name: 이룸
+            colour: red
+            discord:
+              channelz: [status]
+            services:
+              - id: elum-api
+                name: 이룸 API
+                depend_on: nas
+                publc: true
+                checks:
+                  external: {url: "https://a.example.com/", expct: [200]}
+        infrastructure:
+          - id: nas
+            name: NAS
+            hostt: x
+    """)
+
+    with pytest.raises(RegistryError) as raised:
+        load_registry(path, {})
+
+    message = str(raised.value)
+    for typo in ("depend_on", "publc", "colour", "channelz", "expct", "hostt", "rolez"):
+        assert f"'{typo}'" in message
+
+
+def test_rejects_dependency_cycles(tmp_path):
+    path = write_registry(tmp_path, """
+        infrastructure:
+          - {id: root, name: 루트}
+        projects:
+          - id: loop
+            name: 순환
+            services:
+              - {id: svc-x, name: X, depends_on: svc-y}
+              - {id: svc-y, name: Y, depends_on: svc-x}
+              - {id: svc-ok, name: OK, depends_on: root}
+    """)
+
+    with pytest.raises(RegistryError) as raised:
+        load_registry(path, {})
+
+    message = str(raised.value)
+    assert "cycle" in message and "svc-x" in message and "svc-y" in message
+    assert "svc-ok" not in message
+
+
+def test_alert_digest_hour_accepts_midnight_and_rejects_out_of_range(tmp_path):
+    midnight = load_registry(write_registry(tmp_path, "alert: {digest_hour_kst: 0}\n"), {})
+    assert midnight.alert.digest_hour_kst == 0
+
+    for bad_hour in (24, 99, -1):
+        with pytest.raises(RegistryError) as raised:
+            load_registry(write_registry(tmp_path, f"alert: {{digest_hour_kst: {bad_hour}}}\n"), {})
+        assert "digest_hour_kst" in str(raised.value)
+
+    with pytest.raises(RegistryError) as raised:
+        load_registry(write_registry(tmp_path, "alert: {failures_to_down: 0}\n"), {})
+    assert "failures_to_down" in str(raised.value)
+
+
+def test_unreadable_registry_file_raises_registry_error(tmp_path):
+    with pytest.raises(RegistryError) as missing:
+        load_registry(str(tmp_path / "nope.yml"), {})
+    assert "nope.yml" in str(missing.value)
+
+    broken_path = write_registry(tmp_path, "projects: [unclosed\n  - secret-value\n")
+    with pytest.raises(RegistryError) as broken:
+        load_registry(broken_path, {})
+    assert "services.yml" in str(broken.value) and "line" in str(broken.value)
+    assert "secret-value" not in str(broken.value)
+
+
+def test_rejects_self_dependency_as_cycle(tmp_path):
+    path = write_registry(tmp_path, """
+        projects:
+          - id: loop
+            name: 순환
+            services:
+              - {id: svc-self, name: 자기, depends_on: svc-self}
+    """)
+
+    with pytest.raises(RegistryError) as raised:
+        load_registry(path, {})
+
+    assert "dependency cycle: svc-self -> svc-self" in str(raised.value)

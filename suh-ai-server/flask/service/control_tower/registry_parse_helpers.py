@@ -33,14 +33,29 @@ def read_string(raw: dict, key: str, where: str, problems: list[str], is_require
     return None
 
 
-def read_positive_int(raw: dict, key: str, default: int, where: str, problems: list[str]) -> int:
+def report_unknown_keys(raw: dict, allowed_keys: tuple[str, ...] | set[str], where: str, problems: list[str]) -> None:
+    """허용 목록 밖 키 기록 (오타가 조용히 무시되는 것 방지)"""
+    for unknown_key in sorted(set(raw) - set(allowed_keys), key=str):
+        problems.append(f"{where}: unknown key '{unknown_key}'")
+
+
+def read_int_in_range(raw: dict, key: str, default: int, minimum: int, maximum: int | None,
+                      where: str, problems: list[str]) -> int:
+    """정수 값 읽기 (minimum 이상, maximum 있으면 이하, 없으면 default)"""
     if key not in raw:
         return default
     value = raw[key]
-    if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+    is_in_range = isinstance(value, int) and not isinstance(value, bool) and value >= minimum \
+        and (maximum is None or value <= maximum)
+    if is_in_range:
         return value
-    problems.append(f"{where}: '{key}' must be a positive integer")
+    upper_bound = f" and <= {maximum}" if maximum is not None else ""
+    problems.append(f"{where}: '{key}' must be an integer >= {minimum}{upper_bound}")
     return default
+
+
+def read_positive_int(raw: dict, key: str, default: int, where: str, problems: list[str]) -> int:
+    return read_int_in_range(raw, key, default, 1, None, where, problems)
 
 
 def read_role_keys(value: Any, where: str, problems: list[str]) -> tuple[str, ...]:

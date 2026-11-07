@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import fields
 from datetime import date, datetime
@@ -18,14 +19,20 @@ from service.control_tower.registry_models import (
     AlertPolicy, CheckSpec, DiscordPolicy, MaintenanceWindow, ProjectSpec, Registry, ServiceSpec,
 )
 from service.control_tower.registry_parse_helpers import (
-    as_list, as_mapping, read_positive_int, read_role_keys, read_string,
+    as_list, as_mapping, read_int_in_range, read_positive_int, read_role_keys, read_string, report_unknown_keys,
 )
 
 # ${NAME} 환경변수 자리표시자
 ENV_PLACEHOLDER_PATTERN = re.compile(r"\$\{([A-Z0-9_]+)\}")
 # 최상위에서 허용하는 키
 TOP_LEVEL_KEYS = ("alert", "discord", "projects", "infrastructure", "maintenance")
+PROJECT_KEYS = ("id", "name", "discord", "services")
+PROJECT_DISCORD_KEYS = ("channels", "channel_visibility")
+SERVICE_KEYS = ("id", "name", "status", "public", "depends_on", "checks")
+CHECK_KEYS = ("url", "tcp", "expect", "timeout_seconds")
 DEFAULT_CHECK_TIMEOUT_SECONDS = 10
+# 알림 정책 값 범위 (digest_hour_kst는 0~23시, 나머지는 1 이상)
+DIGEST_HOUR_MAXIMUM = 23
 
 
 class RegistryError(Exception):
@@ -39,14 +46,12 @@ class RegistryError(Exception):
 def load_registry(path: str, environ: Mapping[str, str]) -> Registry:
     """등록 파일 로드: 읽기 > 환경변수 치환 > 파싱·검증 > Registry"""
     problems: list[str] = []
-    with open(path, encoding="utf-8") as registry_file:
-        raw_document = yaml.safe_load(registry_file) or {}
+    raw_document = _read_yaml_document(path)
     if not isinstance(raw_document, dict):
         raise RegistryError(["registry: top level must be a mapping"])
 
     document = _substitute_env_placeholders(raw_document, environ, problems, "registry", set())
-    for unknown_key in sorted(set(document) - set(TOP_LEVEL_KEYS)):
-        problems.append(f"registry: unknown top-level key '{unknown_key}'")
+    report_unknown_keys(document, TOP_LEVEL_KEYS, "registry", problems)
 
     alert = _parse_alert(document.get("alert"), problems)
     discord = parse_discord(document.get("discord"), problems)
@@ -61,6 +66,20 @@ def load_registry(path: str, environ: Mapping[str, str]) -> Registry:
     if problems:
         raise RegistryError(problems)
     return Registry(projects, services, infrastructure, alert, discord, maintenance)
+
+
+def _read_yaml_document(path: str) -> Any:
+    """파일 읽기 + YAML 파싱 (실패 시 파일명·오류 종류·줄 번호만, 내용은 노출 안 함)"""
+    file_name = os.path.basename(path)
+    try:
+        with open(path, encoding="utf-8") as registry_file:
+            return yaml.safe_load(registry_file) or {}
+    except yaml.YAMLError as error:
+        mark = getattr(error, "problem_mark", None)
+        line_text = f" at line {mark.line + 1}" if mark is not None else ""
+        raise RegistryError([f"registry file {file_name}: invalid YAML ({type(error).__name__}){line_text}"]) from None
+    except (OSError, UnicodeDecodeError) as error:
+        raise RegistryError([f"registry file {file_name}: cannot be read ({type(error).__name__})"]) from None
 
 
 def _substitute_env_placeholders(node: Any, environ: Mapping[str, str], problems: list[str],
@@ -90,13 +109,15 @@ def _substitute_env_placeholders(node: Any, environ: Mapping[str, str], problems
 def _parse_alert(raw: Any, problems: list[str]) -> AlertPolicy:
     raw_alert = as_mapping(raw, "alert", problems)
     known_keys = {policy_field.name for policy_field in fields(AlertPolicy)}
-    for unknown_key in sorted(set(raw_alert) - known_keys):
-        problems.append(f"alert: unknown key '{unknown_key}'")
+    report_unknown_keys(raw_alert, known_keys, "alert", problems)
     defaults = AlertPolicy()
-    return AlertPolicy(**{
+    values = {
         name: read_positive_int(raw_alert, name, getattr(defaults, name), "alert", problems)
-        for name in known_keys
-    })
+        for name in known_keys - {"digest_hour_kst"}
+    }
+    values["digest_hour_kst"] = read_int_in_range(
+        raw_alert, "digest_hour_kst", defaults.digest_hour_kst, 0, DIGEST_HOUR_MAXIMUM, "alert", problems)
+    return AlertPolicy(**values)
 
 
 def _parse_projects(raw: Any, discord: DiscordPolicy, problems: list[str]
@@ -107,9 +128,11 @@ def _parse_projects(raw: Any, discord: DiscordPolicy, problems: list[str]
     for index, raw_project in enumerate(as_list(raw, "projects", problems)):
         where = f"projects[{index}]"
         raw_project = as_mapping(raw_project, where, problems)
+        report_unknown_keys(raw_project, PROJECT_KEYS, where, problems)
         project_id = read_string(raw_project, "id", where, problems)
         project_name = read_string(raw_project, "name", where, problems) or project_id
         raw_discord = as_mapping(raw_project.get("discord"), f"{where}.discord", problems)
+        report_unknown_keys(raw_discord, PROJECT_DISCORD_KEYS, f"{where}.discord", problems)
 
         channel_kinds = _read_channel_kinds(raw_discord.get("channels"), where, problems)
         visibility = {**discord.channel_visibility, **parse_visibility(
@@ -137,13 +160,13 @@ def _parse_service(raw: Any, project_id: str | None, problems: list[str], where:
     raw_service = as_mapping(raw, where, problems)
     service_id = read_string(raw_service, "id", where, problems) or ""
     where = f"{where}({service_id})" if service_id else where
+    report_unknown_keys(raw_service, SERVICE_KEYS, where, problems)
     status = str(raw_service.get("status", "active"))
     if status not in SERVICE_STATUSES:
         problems.append(f"{where}: invalid status '{status}' (allowed: {', '.join(SERVICE_STATUSES)})")
     depends_on = read_string(raw_service, "depends_on", where, problems, False)
     raw_checks = as_mapping(raw_service.get("checks"), f"{where}.checks", problems)
-    for unknown_key in sorted(set(raw_checks) - {"external", "internal"}):
-        problems.append(f"{where}.checks: unknown key '{unknown_key}'")
+    report_unknown_keys(raw_checks, ("external", "internal"), f"{where}.checks", problems)
     return ServiceSpec(
         id=service_id,
         name=read_string(raw_service, "name", where, problems, False) or service_id,
@@ -161,6 +184,7 @@ def _parse_check(raw: Any, where: str, is_external: bool, problems: list[str]) -
     if raw is None:
         return None
     raw_check = as_mapping(raw, where, problems)
+    report_unknown_keys(raw_check, CHECK_KEYS, where, problems)
     timeout_seconds = read_positive_int(raw_check, "timeout_seconds", DEFAULT_CHECK_TIMEOUT_SECONDS, where, problems)
     expect = tuple(as_list(raw_check.get("expect"), f"{where}.expect", problems))
     if not all(isinstance(code, int) and not isinstance(code, bool) for code in expect):
@@ -226,8 +250,7 @@ def _check_references(projects: tuple[ProjectSpec, ...], services: tuple[Service
     for service in every_service:
         if service.depends_on and service.depends_on not in known_ids:
             problems.append(f"service '{service.id}': depends_on unknown parent '{service.depends_on}'")
-        if service.depends_on == service.id:
-            problems.append(f"service '{service.id}': depends_on itself")
+    _report_dependency_cycles(every_service, problems)
     for window in maintenance:
         if window.service_id not in known_ids:
             problems.append(f"maintenance: unknown service '{window.service_id}'")
@@ -236,6 +259,23 @@ def _check_references(projects: tuple[ProjectSpec, ...], services: tuple[Service
     if external_count > control_tower_config.MAX_EXTERNAL_CHECKS:
         problems.append(f"registry: {external_count} external checks exceed the limit of "
                         f"{control_tower_config.MAX_EXTERNAL_CHECKS}")
+
+
+def _report_dependency_cycles(services: tuple[ServiceSpec, ...], problems: list[str]) -> None:
+    """depends_on 사슬을 따라가며 순환 보고 (자기 의존 포함, 순환마다 1회)"""
+    parent_by_id = {service.id: service.depends_on for service in services}
+    reported_members: set[frozenset[str]] = set()
+    for start_id in parent_by_id:
+        path: list[str] = []
+        current_id = start_id
+        while current_id in parent_by_id and current_id not in path:
+            path.append(current_id)
+            current_id = parent_by_id[current_id]
+        if current_id in path:
+            cycle = path[path.index(current_id):]
+            if frozenset(cycle) not in reported_members:
+                reported_members.add(frozenset(cycle))
+                problems.append("dependency cycle: " + " -> ".join(cycle + [current_id]))
 
 
 def _report_duplicates(identifiers: list[str], label: str, problems: list[str]) -> None:
