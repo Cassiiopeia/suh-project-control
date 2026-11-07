@@ -100,3 +100,29 @@ test('크론: KST 날짜가 바뀌면 public_rollup_json을 daily_rollup 1회 �
   await runScheduled(environment, BEFORE_KST_MIDNIGHT_MILLISECONDS + 2 * MINUTE_MILLISECONDS, fakeFetch);
   assert.equal(dailyRollupReadCount(), 1);
 });
+
+test('크론: 공개 집계 읽기가 실패해도 점검 기록·오늘 집계는 저장하고 경고만 남김', async () => {
+  database.setMetaValue('config_json', JSON.stringify(CONFIG));
+  const originalPrepare = database.prepare.bind(database);
+  database.prepare = (sql) => {
+    if (sql.startsWith('SELECT') && sql.includes('daily_rollup')) throw new Error('D1 read failed');
+    return originalPrepare(sql);
+  };
+  const fakeFetch = createFakeFetch(() => new Response('ok', { status: 200 }));
+  await runScheduled(createEnvironment(database), BEFORE_KST_MIDNIGHT_MILLISECONDS, fakeFetch);
+
+  assert.equal(database.query('SELECT COUNT(*) AS count FROM check_run')[0].count, 1);
+  assert.deepEqual(JSON.parse(database.metaValue('today_rollup_json')).services['public-api'], [1, 1]);
+  assert.equal(database.metaValue('public_rollup_json'), null);
+  assert.ok(console.warn.mock.calls.some((call) =>
+    call.arguments[0] === '[control-tower worker rollup] public rollup rebuild failed : Error'));
+});
+
+test('크론: 손상된 public_rollup_json은 없는 것으로 보고 다시 만든다', async () => {
+  database.setMetaValue('config_json', JSON.stringify(CONFIG));
+  database.setMetaValue('public_rollup_json', '{broken');
+  insertRollupRow('2026-11-03', 'public-api', 1440, 1440);
+  const fakeFetch = createFakeFetch(() => new Response('ok', { status: 200 }));
+  await runScheduled(createEnvironment(database), BEFORE_KST_MIDNIGHT_MILLISECONDS, fakeFetch);
+  assert.deepEqual(JSON.parse(database.metaValue('public_rollup_json')), { 'public-api': [['2026-11-03', 1440, 1440]] });
+});

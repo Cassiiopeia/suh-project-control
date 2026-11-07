@@ -37,7 +37,7 @@ async function runStep(stepName, step) {
 
 /**
  * 외부 점검 > batch 1회 기록 (check_run 1행, 최근 결과, 오늘 집계, 날짜 바뀌면 전날 daily_rollup + last_rollup_day)
- * 전날 마감 또는 공개 집계 없음 > daily_rollup 90일 1회 읽어 public_rollup_json도 같은 batch에
+ * 전날 마감 또는 공개 집계 없음·손상 > daily_rollup 90일 1회 읽어 public_rollup_json도 같은 batch에 (읽기 실패는 경고 후 제외)
  * 설정 없음·점검 대상 없음 > 기록 생략
  */
 async function recordExternalChecks(database, nowMilliseconds, fetchImpl) {
@@ -67,20 +67,30 @@ async function recordExternalChecks(database, nowMilliseconds, fetchImpl) {
     statements.push(...buildFinishedRollupStatements(database, finishedRollup));
     console.log(`[control-tower worker cron] daily rollup written : day ${finishedRollup.day}`);
   }
-  // 공개 집계: 하루 1회 (첫 배포 등 값이 없으면 생길 때까지)
-  if (shouldWriteFinishedRollup || meta[MetaKey.PUBLIC_ROLLUP_JSON] === null) {
+  // 공개 집계: 하루 1회 (첫 배포·손상 등 값이 없으면 생길 때까지)
+  const isPublicRollupMissing = parseJsonObject(meta[MetaKey.PUBLIC_ROLLUP_JSON]) === null;
+  if (shouldWriteFinishedRollup || isPublicRollupMissing) {
     const writtenFinishedRollup = shouldWriteFinishedRollup ? finishedRollup : null;
-    const publicRollup = await rebuildPublicRollup(database, config, writtenFinishedRollup, nowMilliseconds);
-    statements.push(buildMetaUpsertStatement(database, MetaKey.PUBLIC_ROLLUP_JSON, JSON.stringify(publicRollup)));
+    const publicRollupStatement = await buildPublicRollupStatement(database, config, writtenFinishedRollup, nowMilliseconds);
+    if (publicRollupStatement !== null) statements.push(publicRollupStatement);
   }
   await database.batch(statements);
 }
 
-/** daily_rollup 첫 막대 날짜부터 1회 읽기 + 방금 마감한 날 > 공개 서비스 집계 (오늘 제외) */
-async function rebuildPublicRollup(database, config, finishedRollup, nowMilliseconds) {
-  const firstDay = calculateFirstStatusDay(nowMilliseconds);
-  const rollupRows = await getDailyRollupsSince(database, firstDay);
-  return buildPublicRollup(config, rollupRows, finishedRollup, firstDay, toKstDay(nowMilliseconds));
+/**
+ * daily_rollup 첫 막대 날짜부터 1회 읽기 + 방금 마감한 날 > 공개 집계(오늘 제외) meta 쓰기 문
+ * 실패 > 경고 후 null (점검 기록 batch는 그대로 진행)
+ */
+async function buildPublicRollupStatement(database, config, finishedRollup, nowMilliseconds) {
+  try {
+    const firstDay = calculateFirstStatusDay(nowMilliseconds);
+    const rollupRows = await getDailyRollupsSince(database, firstDay);
+    const publicRollup = buildPublicRollup(config, rollupRows, finishedRollup, firstDay, toKstDay(nowMilliseconds));
+    return buildMetaUpsertStatement(database, MetaKey.PUBLIC_ROLLUP_JSON, JSON.stringify(publicRollup));
+  } catch (error) {
+    console.warn(`[control-tower worker rollup] public rollup rebuild failed : ${error?.name ?? 'unknown'}`);
+    return null;
+  }
 }
 
 /** 마감 집계 > daily_rollup upsert 행들 + last_rollup_day */
