@@ -6,6 +6,8 @@
   const DEFAULT_MAINTENANCE_HOURS = 1;
   const INFRASTRUCTURE_LABEL = '인프라';
   const GLOBAL_SCOPE = 'global';
+  // 서비스 생명주기: paused = 감시만 (알림 없음, 장애 수에서 제외)
+  const PAUSED_LIFECYCLE = 'paused';
   const controlFormat = window.ControlFormat;
 
   let isLoadingOverview = false;
@@ -83,22 +85,33 @@
     return names;
   }
 
+  /** 진행 중 장애: 추적함 서비스만 세고 먼저 표시, 감시만 서비스는 아래에 흐리게 (요약 장애 수와 일치) */
   function renderIncidents(overview) {
     const names = serviceNameById(overview);
+    const lifecycles = Object.fromEntries(overview.services.map(function (service) { return [service.id, service.lifecycle]; }));
     const openIncidents = overview.incidents.filter(function (incident) { return !incident.ended_at; });
-    findElement('control-incident-count').textContent = openIncidents.length;
+    const trackedIncidents = openIncidents.filter(function (incident) { return lifecycles[incident.service_id] !== PAUSED_LIFECYCLE; });
+    const pausedIncidents = openIncidents.filter(function (incident) { return lifecycles[incident.service_id] === PAUSED_LIFECYCLE; });
+    findElement('control-incident-count').textContent = trackedIncidents.length;
     const body = findElement('control-incident-body');
     body.replaceChildren();
     if (!openIncidents.length) { body.appendChild(controlFormat.createEmptyRow(4, '진행 중인 장애가 없습니다')); return; }
-    openIncidents.forEach(function (incident) {
-      const row = document.createElement('tr');
-      row.appendChild(controlFormat.createCell(names[incident.service_id] || incident.service_id, 'font-semibold'));
-      row.appendChild(controlFormat.createCell(controlFormat.describeCause(incident.cause)));
-      row.appendChild(controlFormat.createCell(controlFormat.formatDateTime(incident.started_at)));
-      row.appendChild(controlFormat.createCell(controlFormat.formatElapsed(incident.started_at)));
-      body.appendChild(row);
-    });
+    trackedIncidents.forEach(function (incident) { body.appendChild(createIncidentRow(incident, names, false)); });
+    pausedIncidents.forEach(function (incident) { body.appendChild(createIncidentRow(incident, names, true)); });
   }
+
+  function createIncidentRow(incident, names, isPaused) {
+    const row = document.createElement('tr');
+    if (isPaused) row.className = 'opacity-50';
+    const nameCell = controlFormat.createCell(names[incident.service_id] || incident.service_id, 'font-semibold');
+    if (isPaused) nameCell.appendChild(controlFormat.createElement('span', 'badge badge-ghost badge-xs ml-2', '감시만'));
+    row.appendChild(nameCell);
+    row.appendChild(controlFormat.createCell(controlFormat.describeCause(incident.cause)));
+    row.appendChild(controlFormat.createCell(controlFormat.formatDateTime(incident.started_at)));
+    row.appendChild(controlFormat.createCell(controlFormat.formatElapsed(incident.started_at)));
+    return row;
+  }
+
 
   // 프로젝트 순서대로 묶고 인프라(project_id null)는 마지막
   function groupServicesByProject(overview) {
