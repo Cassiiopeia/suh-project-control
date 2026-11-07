@@ -11,7 +11,7 @@ import {
 } from '../test_support/status_fixtures.js';
 
 const ORIGIN = 'https://status.suhsaechan.kr';
-const EXPECTED_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; frame-ancestors 'none'";
+const EXPECTED_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'";
 
 beforeEach((context) => {
   context.mock.method(console, 'warn', () => {});
@@ -83,8 +83,9 @@ test('GET /api/status.json > 같은 필터의 모델 JSON', async () => {
   for (const hidden of HIDDEN_STRINGS) assert.equal(text.includes(hidden), false, hidden);
   const model = JSON.parse(text);
   assert.equal(model.overall.state, 'up');
-  assert.deepEqual(model.projects.map((project) => project.name), ['SUH', '이룸']);
-  const elumApi = model.projects[1].services[0];
+  assert.deepEqual(model.projects.map((project) => project.name), ['이룸', 'SUH']);
+  assert.deepEqual(model.page, { title: 'SUHSAECHAN Status', notice: null }, 'old snapshot without page');
+  const elumApi = model.projects[0].services[0];
   assert.equal(elumApi.days.length, 90);
   assert.equal(elumApi.days[88].uptime_percent, 100);
   assert.equal(elumApi.days[87].level, 'none', 'daily_rollup row ignored');
@@ -154,7 +155,7 @@ test('worker.fetch가 GET /, /api/status.json을 status 처리로 보낸다', as
   const environment = createEnvironment(createSeededDatabase());
   const pageResponse = await worker.fetch(new Request(`${ORIGIN}/`), environment, { waitUntil() {} });
   assert.equal(pageResponse.status, 200);
-  assert.ok((await pageResponse.text()).includes('<title>SUH 서비스 상태</title>'));
+  assert.ok((await pageResponse.text()).includes('<title>SUHSAECHAN Status</title>'));
   const jsonResponse = await worker.fetch(new Request(`${ORIGIN}/api/status.json`), environment, { waitUntil() {} });
   assert.equal(jsonResponse.status, 200);
   assert.ok(Array.isArray((await jsonResponse.json()).projects));

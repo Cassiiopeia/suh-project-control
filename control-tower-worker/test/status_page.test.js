@@ -4,27 +4,12 @@ import { test } from 'node:test';
 import { buildStatusModel, renderStatusPage, toUptimeLevel } from '../src/status_page.js';
 import { formatDurationLabel } from '../src/status_render.js';
 import {
-  HIDDEN_STRINGS, STATUS_NOW_MILLISECONDS, TODAY_KST, createPublicIncidents, createPublicRollup, createRecentResults,
-  createStatusConfig, createTodayRollup, recentResult,
+  HIDDEN_STRINGS, RECENT_HEARTBEAT_AT, STATUS_NOW_MILLISECONDS, TODAY_KST, buildFixtureModel, createPublicIncidents,
+  createStatusConfig, recentResult,
 } from '../test_support/status_fixtures.js';
 
 const MINUTE_MILLISECONDS = 60 * 1000;
-const RECENT_HEARTBEAT_AT = new Date(STATUS_NOW_MILLISECONDS - MINUTE_MILLISECONDS).toISOString();
 const INTERNAL_IPV4_PATTERN = /\b(?:10|127)\.\d{1,3}\.\d{1,3}\.\d{1,3}\b|192\.168\./;
-
-/** 지정한 키만 덮어씀 (null도 그대로 전달) */
-function buildFixtureModel(overrides = {}) {
-  const pick = (key, createDefault) => (key in overrides ? overrides[key] : createDefault());
-  return buildStatusModel(
-    pick('config', createStatusConfig),
-    pick('recentResults', createRecentResults),
-    pick('todayRollup', createTodayRollup),
-    pick('publicRollup', createPublicRollup),
-    pick('publicIncidents', createPublicIncidents),
-    pick('lastHeartbeatAt', () => RECENT_HEARTBEAT_AT),
-    pick('nowMilliseconds', () => STATUS_NOW_MILLISECONDS),
-  );
-}
 
 /** 모델 서비스 1개 찾기 */
 function findService(model, serviceId) {
@@ -53,11 +38,18 @@ test('비공개·paused 서비스, 내부 주소, 결과 error·장애 cause는 
   assert.equal(json.includes('http'), false, 'json has no url');
 });
 
-test('공개 서비스만 프로젝트 이름순·서비스 이름순으로 묶고 빈 프로젝트는 뺀다', () => {
+test('공개 서비스만 스냅샷 배열 순서대로 묶고 빈 프로젝트는 뺀다 (이름·id 정렬 없음)', () => {
   const model = buildFixtureModel();
-  assert.deepEqual(model.projects.map((project) => project.name), ['SUH', '이룸']);
-  assert.deepEqual(model.projects[0].services.map((service) => service.id), ['suh-blog']);
-  assert.deepEqual(model.projects[1].services.map((service) => service.name), ['이룸 API', '이룸 웹']);
+  assert.deepEqual(model.projects.map((project) => project.name), ['이룸', 'SUH']);
+  assert.deepEqual(model.projects[0].services.map((service) => service.name), ['이룸 API', '이룸 웹']);
+  assert.deepEqual(model.projects[1].services.map((service) => service.id), ['suh-blog']);
+
+  const config = createStatusConfig();
+  config.projects.reverse();
+  config.services.reverse();
+  const reversedModel = buildFixtureModel({ config });
+  assert.deepEqual(reversedModel.projects.map((project) => project.id), ['suh', 'elum']);
+  assert.deepEqual(reversedModel.projects[1].services.map((service) => service.id), ['elum-web', 'elum-api']);
 });
 
 test('상태 판정: 정상·느림·최근 1회 실패·연속 실패·데이터 없음', () => {
@@ -148,9 +140,22 @@ test('90일 막대: 오래된 날 > 오늘, 오늘은 today_rollup, 전날 미�
   assert.equal(days.length, 90);
   assert.equal(days[0].day, '2026-08-10');
   assert.equal(days[89].day, TODAY_KST);
-  assert.equal(days[89].level, 'none');
+  assert.equal(days[89].level, 'ok', 'today without rollup uses live state up');
   assert.deepEqual(days[88], { day: '2026-11-06', uptime_percent: 94, level: 'bad' });
   assert.deepEqual(days[87], { day: '2026-11-05', uptime_percent: 100, level: 'ok' });
+});
+
+test('오늘 막대: 오늘 집계·실시간 상태 중 나쁜 쪽', () => {
+  const failing = [recentResult(false), recentResult(false), recentResult(false)];
+  const todayBarOf = (recent, todayCounts) => findService(buildFixtureModel({
+    recentResults: { 'elum-api': recent },
+    todayRollup: { day: TODAY_KST, services: { 'elum-api': todayCounts } },
+  }), 'elum-api').days[89];
+  assert.equal(todayBarOf(failing, [1000, 1000]).level, 'bad', 'down now');
+  assert.equal(todayBarOf([recentResult(true, true)], [1000, 1000]).level, 'warn', 'degraded now');
+  assert.equal(todayBarOf([recentResult(true)], [1000, 900]).level, 'bad', 'bad rollup kept while up');
+  assert.equal(todayBarOf([], [0, 0]).level, 'none', 'unknown keeps rollup');
+  assert.equal(todayBarOf(failing, [1000, 1000]).uptime_percent, 100, 'percent stays rollup');
 });
 
 test('90일 가동률: 있는 날 합계 기준 소수 2자리, 데이터 없으면 null', () => {
@@ -202,21 +207,26 @@ test('등록 이름은 HTML 이스케이프', () => {
   assert.ok(html.includes('A &amp; B'));
 });
 
-test('HTML 골격: 제목·viewport·다크 모드·외부 자원 없음·360px 가로 스크롤 없음', () => {
+test('HTML 골격: viewport·다크 모드·실행 스크립트·외부 자원 없음·360px 가로 스크롤 없음', () => {
   const html = renderStatusPage(buildFixtureModel());
   assert.ok(html.startsWith('<!doctype html>'));
-  assert.ok(html.includes('<title>SUH 서비스 상태</title>'));
+  assert.ok(html.includes('<html lang="ko">'));
+  assert.ok(html.includes('<title>SUHSAECHAN Status</title>'));
   assert.ok(html.includes('<meta name="viewport" content="width=device-width, initial-scale=1">'));
   assert.ok(html.includes(':root'));
   assert.ok(html.includes('@media (prefers-color-scheme: dark)'));
-  assert.equal(/<script/i.test(html), false);
-  assert.equal(/<link|<img|src=|url\(/i.test(html), false);
-  for (const label of ['정상', '확인 중', '마지막 갱신']) assert.ok(html.includes(label), label);
+  // 스크립트는 JSON-LD 데이터 블록 1개뿐
+  assert.deepEqual([...html.matchAll(/<script[^>]*>/gi)].map((match) => match[0]), ['<script type="application/ld+json">']);
+  // 자원은 같은 출처 경로만 (외부 주소·CSS url() 없음)
+  const resourcePaths = [...html.matchAll(/(?:src|href)="([^"]*)"/g)].map((match) => match[1]);
+  assert.ok(resourcePaths.every((path) => path.startsWith('/') || path === 'https://status.suhsaechan.kr/'), `${resourcePaths}`);
+  assert.equal(/url\(/i.test(html), false);
+  for (const label of ['정상', '확인 중', '마지막 갱신', 'Powered by']) assert.ok(html.includes(label), label);
   assert.equal(html.includes('title="'), false, 'no per-cell title');
   assert.ok(html.includes('aria-label="최근 가동 기록"'));
   // 고정 폭(max-width 제외)은 360px 이하만
   const fixedWidths = [...html.matchAll(/(?<![-\w])width:\s*(\d+)px/g)].map((match) => Number(match[1]));
   assert.ok(fixedWidths.every((width) => width <= 360), `fixed widths ${fixedWidths}`);
   assert.ok(/min-width:\s*0/.test(html), 'bar cells shrink');
-  assert.ok(html.includes('class="bar-cell ok"'));
+  assert.ok(html.includes('class="bar-cell ok'));
 });
