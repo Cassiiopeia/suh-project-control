@@ -60,6 +60,11 @@
       </div>
       <ul class="menu p-4 gap-1 w-full">
         <li>
+          <a href="{{ root }}/admin/control" class="{{ 'menu-active' if active == 'control' else '' }}">
+            <i data-lucide="radar" class="size-5"></i>관제소
+          </a>
+        </li>
+        <li>
           <a href="{{ root }}/admin" class="{{ 'menu-active' if active == 'dashboard' else '' }}">
             <i data-lucide="layout-dashboard" class="size-5"></i>대시보드
           </a>
@@ -87,11 +92,6 @@
         <li>
           <a href="{{ root }}/admin/claude-login" class="{{ 'menu-active' if active == 'claude-login' else '' }}">
             <i data-lucide="key-round" class="size-5"></i>Claude 로그인
-          </a>
-        </li>
-        <li>
-          <a href="{{ root }}/admin/control" class="{{ 'menu-active' if active == 'control' else '' }}">
-            <i data-lucide="radar" class="size-5"></i>관제소
           </a>
         </li>
         <li>

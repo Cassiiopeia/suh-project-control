@@ -5,6 +5,13 @@
 <div class="space-y-6 max-w-screen-2xl mx-auto">
 
   <div class="stats stats-vertical sm:stats-horizontal shadow w-full bg-base-100">
+    {# 관제소 요약: 정상·장애 수, 클릭 시 관제소 화면 #}
+    <a href="./control" class="stat hover:bg-base-200 transition-colors">
+      <div class="stat-figure text-primary"><i data-lucide="radar" class="size-6"></i></div>
+      <div class="stat-title">관제소</div>
+      <div id="stat-control" class="stat-value text-2xl">확인중</div>
+      <div id="stat-control-desc" class="stat-desc">-</div>
+    </a>
     <div class="stat">
       <div class="stat-figure text-primary"><i data-lucide="server" class="size-6"></i></div>
       <div class="stat-title">Flask 서버</div>
@@ -91,6 +98,15 @@
   </div>
 
   <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <a href="./control" class="card bg-base-100 shadow-md hover:shadow-xl transition-shadow">
+      <div class="card-body">
+        <h2 class="card-title text-base">
+          <i data-lucide="radar" class="size-5 text-primary"></i>관제소
+          <span id="control-badge" class="badge badge-ghost badge-sm">확인중</span>
+        </h2>
+        <p class="text-sm opacity-70">서비스 상태 감시 · 장애 · 점검 창 · 디스코드 알림 동기화</p>
+      </div>
+    </a>
     <a href="./palworld" class="card bg-base-100 shadow-md hover:shadow-xl transition-shadow">
       <div class="card-body">
         <h2 class="card-title text-base">
@@ -130,14 +146,6 @@
           <i data-lucide="key-round" class="size-5 text-primary"></i>Claude 로그인
         </h2>
         <p class="text-sm opacity-70">메일 속 6자리 인증 코드 자동 확인 · 복사 · 열람 기록</p>
-      </div>
-    </a>
-    <a href="./control" class="card bg-base-100 shadow-md hover:shadow-xl transition-shadow">
-      <div class="card-body">
-        <h2 class="card-title text-base">
-          <i data-lucide="radar" class="size-5 text-primary"></i>관제소
-        </h2>
-        <p class="text-sm opacity-70">서비스 상태 감시 · 장애 · 점검 창 · 디스코드 알림 동기화</p>
       </div>
     </a>
     <a href="./models" class="card bg-base-100 shadow-md hover:shadow-xl transition-shadow">
@@ -185,4 +193,5 @@
 {% endblock %}
 {% block extra_js %}
 <script src="{{ root }}/static/js/dashboard.js?v={{ asset('js/dashboard.js') }}"></script>
+<script src="{{ root }}/static/js/dashboard-control.js?v={{ asset('js/dashboard-control.js') }}"></script>
 {% endblock %}

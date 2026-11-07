@@ -128,6 +128,7 @@
     const row = document.createElement('tr');
     const nameCell = controlFormat.createCell(service.name, 'font-semibold');
     if (service.is_public) nameCell.appendChild(controlFormat.createElement('span', 'badge badge-ghost badge-xs ml-2', '공개'));
+    if (service.url) nameCell.appendChild(createServiceLink(service.url));
     row.appendChild(nameCell);
 
     const statusCell = controlFormat.createCell(controlFormat.createStatusBadge(service));
@@ -141,6 +142,15 @@
     row.appendChild(controlFormat.createCell(checkedAt ? controlFormat.formatElapsed(checkedAt) : '-', 'text-xs'));
     row.appendChild(createMaintenanceCell(service));
     return row;
+  }
+
+  /** 서비스 실제 주소 링크 (새 탭, 표시는 https:// 생략) */
+  function createServiceLink(url) {
+    const link = controlFormat.createElement('a', 'link link-hover block text-xs font-mono font-normal opacity-60', url.replace(/^https?:\/\//, ''));
+    link.href = url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    return link;
   }
 
   function createMaintenanceCell(service) {

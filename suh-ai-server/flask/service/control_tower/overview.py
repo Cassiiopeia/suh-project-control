@@ -1,5 +1,5 @@
 """관제소 관리자 overview 조립: 등록 정보 + 폴러 스냅샷 + 저장소 > JSON 직렬화용 dict
-서비스 항목은 retired 제외, 점검 대상 주소·토큰은 싣지 않음
+서비스 항목은 retired 제외, 내부 점검 주소·토큰은 싣지 않음 (외부 공개 주소만 url로)
 """
 from __future__ import annotations
 
@@ -74,6 +74,8 @@ def _service_entry(service: ServiceSpec, state, observation, window: Maintenance
         "internal": _check_entry(observation.internal if observation is not None else None),
         "external": _check_entry(observation.external if is_external_known else None),
         "is_public": service.is_public,
+        # 외부 점검 주소 = 공개 도메인 (내부 점검 주소는 내부 IP라 싣지 않음)
+        "url": service.external.target if service.external is not None else None,
         "maintenance": _maintenance_entry(window, is_admin_window, now),
     }
 
