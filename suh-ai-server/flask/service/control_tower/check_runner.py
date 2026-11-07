@@ -81,8 +81,8 @@ def _call_target(spec: CheckSpec, http_get, open_socket) -> int | None:
     if spec.kind == "tcp":
         _connect_tcp(spec, open_socket)
         return None
-    # 리다이렉트 미추적 (응답 본문은 읽지 않음)
-    response = http_get(spec.target, timeout=spec.timeout_seconds, allow_redirects=False)
+    # 리다이렉트 미추적, stream=True로 본문 미다운로드 (헤더만 수신 후 close)
+    response = http_get(spec.target, timeout=spec.timeout_seconds, allow_redirects=False, stream=True)
     try:
         return response.status_code
     finally:
@@ -99,4 +99,5 @@ def _connect_tcp(spec: CheckSpec, open_socket) -> None:
 
 
 def _elapsed_milliseconds(started_seconds: float, monotonic) -> int:
+    """시작 시각 > 경과 시간 (밀리초, 소수점 버림)"""
     return int((monotonic() - started_seconds) * MILLISECONDS_PER_SECOND)

@@ -134,11 +134,11 @@ def test_http_check_does_not_follow_redirects():
         return FakeResponse(302)
 
     result = run_http(record_call)
-    assert calls == [("https://example.com/health", {"timeout": 7, "allow_redirects": False})]
+    assert calls == [("https://example.com/health", {"timeout": 7, "allow_redirects": False, "stream": True})]
     assert result.is_ok  # 302도 응답이 왔으므로 정상
 
 
-def test_tcp_check_success_and_refused():
+def test_tcp_check_success_closes_socket():
     opened = FakeSocket()
     calls = []
 
@@ -152,6 +152,10 @@ def test_tcp_check_success_and_refused():
     assert result == CheckResult(True, False, None, 20, None, FIXED_NOW)
     assert calls == [(("db.internal", 5432), 3)]
     assert opened.is_closed
+
+
+def test_tcp_check_refused_is_connection_error():
+    spec = CheckSpec("tcp", "db.internal:5432", (), 3)
 
     def refuse(address, timeout):
         raise ConnectionRefusedError()
