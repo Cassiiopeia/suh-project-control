@@ -1,14 +1,39 @@
 {
   "metadata": {
-    "lastUpdated": "2026-11-07T12:44:49Z",
-    "currentVersion": "2.0.81",
+    "lastUpdated": "2026-11-07T13:08:48Z",
+    "currentVersion": "2.0.82",
     "projectType": "python",
-    "totalReleases": 77,
+    "totalReleases": 78,
     "projectTypes": [
       "python"
     ]
   },
   "releases": [
+    {
+      "version": "2.0.82",
+      "project_type": "python",
+      "project_types": [
+        "python"
+      ],
+      "date": "2026-11-07",
+      "pr_number": 166,
+      "raw_summary": "## Summary by CodeRabbit\n\n## 릴리스 노트\n\n* **새 기능**\n  * 프로젝트별 디스코드 초대 링크 (들어오면 그 프로젝트 알림 자동 구독)\n\n* **개선**\n  * 숨긴 프로젝트는 디스코드 프로젝트 고르기 목록에서도 제외",
+      "parsed_changes": {
+        "새_기능": {
+          "title": "새 기능",
+          "items": [
+            "프로젝트별 디스코드 초대 링크 (들어오면 그 프로젝트 알림 자동 구독)"
+          ]
+        },
+        "개선": {
+          "title": "개선",
+          "items": [
+            "숨긴 프로젝트는 디스코드 프로젝트 고르기 목록에서도 제외"
+          ]
+        }
+      },
+      "parse_method": "markdown"
+    },
     {
       "version": "2.0.81",
       "project_type": "python",
