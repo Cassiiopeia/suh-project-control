@@ -1,14 +1,39 @@
 {
   "metadata": {
-    "lastUpdated": "2026-11-08T04:19:47Z",
-    "currentVersion": "2.0.84",
+    "lastUpdated": "2026-11-08T04:45:06Z",
+    "currentVersion": "2.0.85",
     "projectType": "python",
-    "totalReleases": 80,
+    "totalReleases": 81,
     "projectTypes": [
       "python"
     ]
   },
   "releases": [
+    {
+      "version": "2.0.85",
+      "project_type": "python",
+      "project_types": [
+        "python"
+      ],
+      "date": "2026-11-08",
+      "pr_number": 176,
+      "raw_summary": "## Summary by CodeRabbit\n\n## 릴리스 노트\n\n* **새 기능**\n  * 상태 페이지에 프로젝트 썸네일을 표시하고, 관리 화면에서 이미지 업로드·주소 가져오기·삭제로 관리\n\n* **개선**\n  * 상태 페이지의 프로젝트 묶음을 기본으로 펼쳐 서비스별 상태를 한눈에 확인",
+      "parsed_changes": {
+        "새_기능": {
+          "title": "새 기능",
+          "items": [
+            "상태 페이지에 프로젝트 썸네일을 표시하고, 관리 화면에서 이미지 업로드·주소 가져오기·삭제로 관리"
+          ]
+        },
+        "개선": {
+          "title": "개선",
+          "items": [
+            "상태 페이지의 프로젝트 묶음을 기본으로 펼쳐 서비스별 상태를 한눈에 확인"
+          ]
+        }
+      },
+      "parse_method": "markdown"
+    },
     {
       "version": "2.0.84",
       "project_type": "python",
