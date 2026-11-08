@@ -8,6 +8,8 @@ import logging
 import os
 import threading
 
+from config.logging_config import create_rotating_file_handler
+
 # Create logs directory if not exists
 logs_dir = os.path.join(os.path.dirname(__file__), 'logs')
 if not os.path.exists(logs_dir):
@@ -19,7 +21,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(message)s',
     handlers=[
-        logging.FileHandler(log_file),
+        create_rotating_file_handler(log_file),
         logging.StreamHandler()
     ]
 )
@@ -38,6 +40,11 @@ if __name__ == '__main__':
     # 감사로그 DB 마이그레이션 (yoyo — 실패해도 기동 계속)
     from config.db_config import apply_migrations
     apply_migrations()
+
+    # 감사로그 보관 정리 (365일 초과 삭제, 하루 1회, daemon thread — 실패해도 기동 계속)
+    from service.audit_retention_service import AUDIT_LOG_RETENTION_DAYS, start_audit_retention
+    start_audit_retention()
+    logger.info(f"Audit log retention started ({AUDIT_LOG_RETENTION_DAYS} days, daily purge)")
 
     # 팰월드 접속/퇴장 이벤트 폴러 + 메트릭 히스토리 적재 (daemon thread)
     from service.palworld_service import PalworldService
