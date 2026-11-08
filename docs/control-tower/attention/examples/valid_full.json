@@ -1,0 +1,45 @@
+{
+  "schema": "attention",
+  "version": "1.0",
+  "source": {
+    "app": "elum-server",
+    "app_version": "2.3.1",
+    "environment": "production",
+    "admin_base_url": "https://elum.example/admin"
+  },
+  "generated_at": "2026-11-08T12:00:00Z",
+  "poll_after_seconds": 60,
+  "items": [
+    {
+      "key": "feedback.new",
+      "label": "새 의견",
+      "kind": "count",
+      "count": 3,
+      "total": 182,
+      "level": "info",
+      "group": "사용자",
+      "description": "보호자가 앱에서 보낸 처리 전 의견",
+      "admin_url": "https://elum.example/admin/feedbacks?status=NEW",
+      "latest_at": "2026-11-08T11:58:00Z",
+      "detail": "가장 오래된 건 2일 전"
+    },
+    {
+      "key": "budget.daily",
+      "label": "오늘 AI 비용",
+      "kind": "gauge",
+      "value": 8.2,
+      "limit": 10,
+      "unit": "USD",
+      "level": "warning",
+      "admin_url": "https://elum.example/admin/ai/budget"
+    },
+    {
+      "key": "ai.provider",
+      "label": "AI 제공자 상태",
+      "kind": "state",
+      "state": "degraded",
+      "level": "warning",
+      "detail": "Gemini 응답 지연"
+    }
+  ]
+}

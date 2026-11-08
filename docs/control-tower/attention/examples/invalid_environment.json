@@ -1,0 +1,10 @@
+{
+  "schema": "attention",
+  "version": "1.0",
+  "source": {
+    "app": "x",
+    "environment": "prod"
+  },
+  "generated_at": "2026-11-08T12:00:00Z",
+  "items": []
+}

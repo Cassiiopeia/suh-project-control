@@ -1,0 +1,8 @@
+{
+  "schema": "attention",
+  "version": "1.0",
+  "source": {
+    "app": "elum-server"
+  },
+  "items": []
+}

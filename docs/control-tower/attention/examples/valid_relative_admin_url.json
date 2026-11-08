@@ -1,0 +1,21 @@
+{
+  "schema": "attention",
+  "version": "1.0",
+  "source": {
+    "app": "elum-server",
+    "app_version": "2.3.1",
+    "environment": "production",
+    "admin_base_url": "https://elum.example/admin"
+  },
+  "generated_at": "2026-11-08T12:00:00Z",
+  "items": [
+    {
+      "key": "feedback.new",
+      "label": "새 의견",
+      "kind": "count",
+      "count": 1,
+      "level": "info",
+      "admin_url": "/feedbacks?status=NEW"
+    }
+  ]
+}
