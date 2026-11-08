@@ -43,6 +43,11 @@ INTERVAL_SECONDS_MAX = 3600
 PUSH_ONLY_MIN_PERIOD_SECONDS = 300
 # 끊김 판정 기본 배수 (interval x 5)
 STALE_AFTER_INTERVAL_MULTIPLIER = 5
+# 소스 전달 방식 3종: pull 관제소가 수집, push 앱이 보냄, both 둘 다
+SOURCE_MODE_PULL = "pull"
+SOURCE_MODE_PUSH = "push"
+SOURCE_MODE_BOTH = "both"
+SOURCE_MODES = (SOURCE_MODE_PULL, SOURCE_MODE_PUSH, SOURCE_MODE_BOTH)
 
 # 소스 id: 소문자로 시작, 소문자·숫자 (구분자 "__"와 충돌하지 않게 - _ 금지)
 SOURCE_ID_PATTERN = r"^[a-z][a-z0-9]*$"

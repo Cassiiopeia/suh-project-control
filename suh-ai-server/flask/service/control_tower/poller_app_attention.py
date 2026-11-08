@@ -11,13 +11,13 @@ from typing import Mapping
 from service.control_tower.app_attention_fetch import (
     FETCH_RESULT_ERROR, FETCH_RESULT_TIMEOUT, FetchOutcome, fetch_attention,
 )
+from service.control_tower.app_attention_models import SOURCE_MODE_PUSH
 from service.control_tower.app_attention_store import AttentionSource, AttentionSourceState
 from service.control_tower.registry import Registry
 from service.control_tower.state_machine import STATUS_DOWN, ServiceState
 
 logger = logging.getLogger(__name__)
 
-SOURCE_MODE_PUSH = "push"
 # 수집 시점 여유 (주기 직전 틱에 수집)
 DUE_MARGIN = timedelta(seconds=5)
 MAX_FETCH_WORKERS = 8

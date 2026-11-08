@@ -58,7 +58,8 @@ def start_control_tower(environ: Mapping[str, str] = os.environ, database_path: 
     runtime = ControlTowerRuntime(registry_provider=poller.current_registry, store=store, dispatcher=dispatcher,
                                   poller=poller, file_registry_provider=poller.current_file_registry,
                                   discord_client_provider=lambda: discord_client,
-                                  guild_id=environ.get(DISCORD_GUILD_ID_ENV) or None)
+                                  guild_id=environ.get(DISCORD_GUILD_ID_ENV) or None,
+                                  app_attention_ingest=app_attention_ingest)
     set_runtime(runtime)
     poller.start()
     # 기본 썸네일 가져오기 (네트워크 호출이라 별도 스레드, 실패는 기록만)
