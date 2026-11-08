@@ -8,6 +8,7 @@ import threading
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 
+from service.control_tower.app_attention_store import AppAttentionStoreMixin
 from service.control_tower.check_runner import CheckResult
 from service.control_tower.invite_store import InviteStoreMixin
 from service.control_tower.override_store import OverrideStoreMixin
@@ -54,7 +55,7 @@ def _check_columns(check: CheckResult | None) -> tuple:
     return (int(check.is_ok), int(check.is_slow), check.status_code, check.latency_milliseconds, check.error)
 
 
-class ControlTowerStore(OverrideStoreMixin, InviteStoreMixin, ProjectIconStoreMixin):
+class ControlTowerStore(OverrideStoreMixin, InviteStoreMixin, ProjectIconStoreMixin, AppAttentionStoreMixin):
     def __init__(self, path: str):
         self._path = path
         self._thread_local = threading.local()
@@ -295,3 +296,4 @@ class ControlTowerStore(OverrideStoreMixin, InviteStoreMixin, ProjectIconStoreMi
             connection.execute("DELETE FROM event_log WHERE created_at < ?", (_to_text(now - EVENT_LOG_RETENTION),))
             connection.execute("DELETE FROM daily_rollup WHERE day < ?", (_kst_day(now - LONG_TERM_RETENTION),))
             connection.execute("DELETE FROM incident WHERE ended_at IS NOT NULL AND ended_at < ?", (long_term_limit,))
+        self.purge_app_attention(now)  # 이력 90일, 빠진 항목 7일
