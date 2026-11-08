@@ -114,6 +114,13 @@ try {
         Write-Host "[SUCCESS] Logs directory created"
     }
 
+    # NSSM 로그 로테이션: stdout/stderr 가 10MB 넘으면 회전 (기존·신규 서비스 공통, config/logging_config.py LOG_FILE_MAX_BYTES 와 같은 값)
+    function Set-FlaskLogRotation {
+        & nssm set $serviceName AppRotateFiles 1
+        & nssm set $serviceName AppRotateOnline 1
+        & nssm set $serviceName AppRotateBytes 10485760
+    }
+
     # Check if service exists
     $serviceExists = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
 
@@ -133,6 +140,9 @@ try {
         }
 
         Write-Host "[SUCCESS] Flask service stopped"
+
+        # 기존 서비스에도 로그 로테이션 적용 (정지 상태에서 설정, 재시작 때 반영)
+        Set-FlaskLogRotation
 
         # Restart the service
         Write-Host "[INFO] Starting Flask service..."
@@ -161,6 +171,7 @@ try {
         & nssm set $serviceName Start SERVICE_AUTO_START
         & nssm set $serviceName AppStdout "$flaskPath\logs\nssm-stdout.log"
         & nssm set $serviceName AppStderr "$flaskPath\logs\nssm-stderr.log"
+        Set-FlaskLogRotation
 
         Write-Host "[SUCCESS] Service created"
 
