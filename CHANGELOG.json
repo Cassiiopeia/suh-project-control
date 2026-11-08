@@ -1,14 +1,33 @@
 {
   "metadata": {
-    "lastUpdated": "2026-11-07T13:44:30Z",
-    "currentVersion": "2.0.83",
+    "lastUpdated": "2026-11-08T04:19:47Z",
+    "currentVersion": "2.0.84",
     "projectType": "python",
-    "totalReleases": 79,
+    "totalReleases": 80,
     "projectTypes": [
       "python"
     ]
   },
   "releases": [
+    {
+      "version": "2.0.84",
+      "project_type": "python",
+      "project_types": [
+        "python"
+      ],
+      "date": "2026-11-08",
+      "pr_number": 172,
+      "raw_summary": "## Summary by CodeRabbit\n\n## 릴리스 노트\n\n* **개선**\n  * 서버 로그가 무한히 쌓이지 않도록 10MB 단위로 회전하고, 감사로그는 1년이 지나면 자동 정리",
+      "parsed_changes": {
+        "개선": {
+          "title": "개선",
+          "items": [
+            "서버 로그가 무한히 쌓이지 않도록 10MB 단위로 회전하고, 감사로그는 1년이 지나면 자동 정리"
+          ]
+        }
+      },
+      "parse_method": "markdown"
+    },
     {
       "version": "2.0.83",
       "project_type": "python",

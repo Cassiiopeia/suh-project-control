@@ -4,8 +4,8 @@
 
 ## 릴리스 노트
 
-* **버그 수정**
-  * 관제소 진행 중 장애 목록에 감시만 서비스가 섞여 보이던 문제
+* **개선**
+  * 서버 로그가 무한히 쌓이지 않도록 10MB 단위로 회전하고, 감사로그는 1년이 지나면 자동 정리
 
 <!-- end of auto-generated comment: release notes by coderabbit.ai -->
 
