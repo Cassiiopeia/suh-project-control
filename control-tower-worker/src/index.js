@@ -1,8 +1,9 @@
 /**
- * Worker 진입점: fetch 라우팅(POST /api/heartbeat, GET /·/api/status.json 공개 상태, GET 아이콘·robots·sitemap, 그 외 404), 1분 크론 > runScheduled
+ * Worker 진입점: fetch 라우팅(POST /api/heartbeat, GET /·/api/status.json 공개 상태, GET 프로젝트 썸네일·아이콘·robots·sitemap, 그 외 404), 1분 크론 > runScheduled
  */
 import { handleHeartbeat } from './heartbeat.js';
 import { jsonResponse, textResponse } from './http.js';
+import { handleProjectIconRequest, isProjectIconPath } from './project_icon_route.js';
 import { runScheduled } from './scheduled.js';
 import { SITE_ASSET_PATHS, handleSiteAssetRequest } from './site_asset_route.js';
 import { STATUS_PAGE_PATHS, getDefaultStatusCache, handleStatusRequest } from './status_route.js';
@@ -18,6 +19,9 @@ async function routeRequest(request, environment, context) {
     }
     if (request.method === 'GET' && STATUS_PAGE_PATHS.has(pathname)) {
       return await handleStatusRequest(request, environment, Date.now(), getDefaultStatusCache(), context);
+    }
+    if (request.method === 'GET' && isProjectIconPath(pathname)) {
+      return await handleProjectIconRequest(pathname, environment);
     }
     if (request.method === 'GET' && SITE_ASSET_PATHS.has(pathname)) {
       return handleSiteAssetRequest(pathname, Date.now());

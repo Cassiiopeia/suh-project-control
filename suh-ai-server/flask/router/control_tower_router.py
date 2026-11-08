@@ -11,6 +11,7 @@ from flask import Blueprint, jsonify, request
 
 from config.control_tower_config import EVENT_TOKEN_ENV_PREFIX
 from router.control_tower_admin_api import register_admin_api
+from router.control_tower_icon_api import register_icon_api
 from router.control_tower_invite_api import register_invite_api
 from router.control_tower_manage_api import register_manage_api
 from service.control_tower.runtime import get_runtime
@@ -19,6 +20,7 @@ control_tower_bp = Blueprint('control_tower', __name__)
 register_admin_api(control_tower_bp)  # 관리자 화면 API (nginx 키 검사 대상)
 register_manage_api(control_tower_bp)  # 서비스 관리 API (nginx 키 검사 대상)
 register_invite_api(control_tower_bp)  # 프로젝트 초대 API (nginx 키 검사 대상)
+register_icon_api(control_tower_bp)  # 프로젝트 썸네일 API (nginx 키 검사 대상)
 
 TOKEN_HEADER_NAME = 'X-Control-Token'
 

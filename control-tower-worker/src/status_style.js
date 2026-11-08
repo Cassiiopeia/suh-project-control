@@ -18,6 +18,14 @@ const STATUS_BASE_CSS = `
   --color-info: #3E63DD;
   --color-brand: #F59E2B;
   --color-logo-tile: #151515;
+  --color-tile-0: #3E63DD;
+  --color-tile-1: #30A46C;
+  --color-tile-2: #D6409F;
+  --color-tile-3: #E5484D;
+  --color-tile-4: #8E4EC6;
+  --color-tile-5: #0D9B8A;
+  --color-tile-6: #C27803;
+  --color-tile-7: #5B6B7B;
   --color-on-state: #FFFFFF;
   --color-none: #DDDDE2;
   --color-background: ${PAGE_BACKGROUND_COLOR_LIGHT};
@@ -49,12 +57,21 @@ const STATUS_BASE_CSS = `
   --font-size-hero: 20px;
   --font-size-title: 18px;
   --logo-size: 36px;
+  --thumb-size: 40px;
   --bar-height: 32px;
   --page-max-width: 820px;
 }
 @media (prefers-color-scheme: dark) {
   :root {
     --color-none: #2E2E34;
+    --color-tile-0: #7C9BFF;
+    --color-tile-1: #4CC38A;
+    --color-tile-2: #F06FBE;
+    --color-tile-3: #FF7B80;
+    --color-tile-4: #B98BE6;
+    --color-tile-5: #3CC9B7;
+    --color-tile-6: #F5B94D;
+    --color-tile-7: #9FB0C0;
     --color-background: ${PAGE_BACKGROUND_COLOR_DARK};
     --color-surface: #17171A;
     --color-surface-raised: #1C1C20;

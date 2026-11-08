@@ -11,6 +11,7 @@ export const MetaKey = Object.freeze({
   CONFIG_JSON: 'config_json', // Flask 스냅샷 JSON
   CONFIG_VERSION: 'config_version', // 스냅샷 버전 (Registry.version())
   PUBLIC_INCIDENTS_JSON: 'public_incidents_json', // 공개 장애 목록 JSON
+  PROJECT_ICONS_JSON: 'project_icons_json', // 프로젝트 썸네일 {project_id: base64 webp}, 설정 실린 심박마다 전체 교체
   LAST_ROLLUP_DAY: 'last_rollup_day', // daily_rollup에 마지막으로 기록한 KST 날짜
   TODAY_ROLLUP_JSON: 'today_rollup_json', // {"day": KST, "services": {id: [total, ok]}}
   RECENT_RESULTS_JSON: 'recent_results_json', // {id: [{is_ok, is_slow, checked_at}, ...]} 최신순

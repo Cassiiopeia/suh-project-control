@@ -44,7 +44,8 @@ class HeartbeatStep:
         public_incidents = self._public_incidents(registry, maintenance, now)
         response, is_connection_failure, rejection_status = None, False, None
         try:
-            response = self._heartbeat_client.send(registry, public_incidents, now, tuple(maintenance.values()))
+            response = self._heartbeat_client.send(registry, public_incidents, now, tuple(maintenance.values()),
+                                                   project_icons=self._project_icons())
             is_connection_failure = response is None
         except HeartbeatRejectedError as error:
             rejection_status = error.rejection_status
@@ -70,6 +71,14 @@ class HeartbeatStep:
         except Exception as error:
             logger.warning("[control-tower poller] public incidents read failed : %s", type(error).__name__)
             return []
+
+    def _project_icons(self) -> dict[str, bytes]:
+        """프로젝트 썸네일 (로컬 DB 조회 실패는 심박 실패가 아님 > 썸네일 없이 전송)"""
+        try:
+            return self._store.load_project_icon_images()
+        except Exception as error:
+            logger.warning("[control-tower poller] project icons read failed : %s", type(error).__name__)
+            return {}
 
     def _record_meta(self, is_heartbeat_ok: bool, now: datetime) -> None:
         self._store.set_meta(META_KEY_HEARTBEAT_IS_OK, "1" if is_heartbeat_ok else "0")

@@ -1,15 +1,16 @@
 /**
- * POST /api/heartbeat: 크기 제한 > 서명 검증 > 본문 검사 > meta 기록(심박 시각·설정·공개 장애) > 비상 복구 > 설정 요청 또는 최신 외부 결과 응답
+ * POST /api/heartbeat: 크기 제한 > 서명 검증 > 본문 검사 > meta 기록(심박 시각·설정·프로젝트 썸네일·공개 장애) > 비상 복구 > 설정 요청 또는 최신 외부 결과 응답
  * Flask가 Worker를 부르는 단방향 (Worker는 Flask를 호출하지 않음)
  */
 import { recoverIfEmergencyDown } from './emergency.js';
 import { verify } from './hmac.js';
 import { jsonResponse } from './http.js';
+import { sanitizeProjectIcons } from './project_icons.js';
 import { MetaKey, getLatestCheckRun, getMetaValues, isPlainObject, setMetaValues } from './store.js';
 import { MILLISECONDS_PER_SECOND, toIsoUtc } from './time.js';
 
-// 심박 본문 최대 크기 (256KB)
-export const MAXIMUM_BODY_BYTES = 256 * 1024;
+// 심박 본문 최대 크기 (1MB, 설정과 프로젝트 썸네일이 함께 실림)
+export const MAXIMUM_BODY_BYTES = 1024 * 1024;
 
 /** 심박 1건 처리 > Response (401 서명 실패, 400 본문 오류, 413 크기 초과) */
 export async function handleHeartbeat(request, environment, nowMilliseconds, fetchImpl = fetch) {
@@ -45,7 +46,7 @@ export async function handleHeartbeat(request, environment, nowMilliseconds, fet
 }
 
 /**
- * 기록할 meta 계산: 심박 시각(항상), 설정 실림 > 설정·버전 저장, 버전 다름 > 설정 요청, 공개 장애(바뀐 경우만)
+ * 기록할 meta 계산: 심박 시각(항상), 설정 실림 > 설정·버전·프로젝트 썸네일 저장, 버전 다름 > 설정 요청, 공개 장애(바뀐 경우만)
  */
 function planMetaUpdates(body, storedMeta, nowMilliseconds) {
   const updates = { [MetaKey.LAST_HEARTBEAT_AT]: toIsoUtc(nowMilliseconds) };
@@ -53,6 +54,9 @@ function planMetaUpdates(body, storedMeta, nowMilliseconds) {
   if (isPlainObject(body.config)) {
     updates[MetaKey.CONFIG_JSON] = JSON.stringify(body.config);
     updates[MetaKey.CONFIG_VERSION] = body.config_version;
+    // 썸네일 묶음은 설정과 함께 올 때만 전체 교체 (묶음이 없으면 기존 유지)
+    const projectIcons = sanitizeProjectIcons(body.project_icons);
+    if (projectIcons !== null) updates[MetaKey.PROJECT_ICONS_JSON] = JSON.stringify(projectIcons);
   } else if (body.config_version !== storedMeta[MetaKey.CONFIG_VERSION]) {
     isConfigNeeded = true;
   }

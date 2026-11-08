@@ -3,6 +3,7 @@
 """
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import json
@@ -61,15 +62,18 @@ class HeartbeatClient:
         self._session = session if session is not None else requests.Session()
 
     def send(self, registry: Registry, public_incidents: list[dict], now: datetime,
-             maintenance: Iterable[MaintenanceWindow] | None = None) -> HeartbeatResponse | None:
-        """심박 1회: 전송 > need_config면 스냅샷 넣어 1회 재전송 > 외부 결과 변환
-        maintenance: 등록 파일 + 관리자 화면 병합 창 (버전·스냅샷 모두 같은 창 기준), 거절 시 HeartbeatRejectedError"""
+             maintenance: Iterable[MaintenanceWindow] | None = None,
+             project_icons: dict[str, bytes] | None = None) -> HeartbeatResponse | None:
+        """심박 1회: 전송 > need_config면 스냅샷(+썸네일) 넣어 1회 재전송 > 외부 결과 변환
+        maintenance: 등록 파일 + 관리자 화면 병합 창 (버전·스냅샷 모두 같은 창 기준), 거절 시 HeartbeatRejectedError
+        project_icons: project_id > WebP 바이트, 스냅샷을 실을 때만 base64로 동봉"""
         windows = None if maintenance is None else tuple(maintenance)
         body = {"sent_at": now.isoformat(), "config_version": registry.version(windows),
                 "public_incidents": public_incidents}
         response_body = self._post(body, now)
         if response_body is not None and response_body.get("need_config") is True:
-            response_body = self._post({**body, "config": registry.to_worker_snapshot(windows)}, now)
+            response_body = self._post({**body, "config": registry.to_worker_snapshot(windows),
+                                        "project_icons": _encode_project_icons(project_icons)}, now)
         if response_body is None:
             return None
         # 재전송 후에도 설정 요청이면 결과 없이 심박 성공으로 처리
@@ -105,6 +109,12 @@ class HeartbeatClient:
                            response.status_code)
             raise HeartbeatRejectedError(REJECTION_INVALID_RESPONSE)
         return response_body
+
+
+def _encode_project_icons(project_icons: dict[str, bytes] | None) -> dict[str, str]:
+    """project_id > WebP 바이트를 base64 문자열로 (Worker 심박 본문 형식)"""
+    return {project_id: base64.b64encode(image_bytes).decode("ascii")
+            for project_id, image_bytes in (project_icons or {}).items()}
 
 
 def _parse_response(response_body: dict) -> HeartbeatResponse:

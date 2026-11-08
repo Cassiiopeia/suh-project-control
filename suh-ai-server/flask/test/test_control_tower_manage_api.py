@@ -40,7 +40,7 @@ def test_manage는_retired_인프라_포함_목록과_출처_페이지_설정을
     assert body["page"]["title"] == "SUHSAECHAN Status" and body["page"]["preview_url"].startswith("https://")
     assert body["projects"][0] == {"id": "elum", "name": "이룸", "is_hidden": False, "sort_order": None,
                                    "source": "registry", "original_name": "이룸", "overridden_fields": [],
-                                   "invite_url": None}
+                                   "invite_url": None, "icon_data_url": None, "icon_source_url": None}
     assert body["external_checks"]["used"] == 1
     assert "nas.local" not in str(body)
 

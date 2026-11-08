@@ -110,21 +110,21 @@ test('묶음 요약: 상태·구성 요소 수·90일 묶음 가동률(서비스
   const html = renderStatusPage(model);
   assert.ok(html.includes('구성 요소 2개 · 장애'));
   assert.ok(html.includes('<span class="group-uptime">95.00%</span>'));
-  assert.equal([...html.matchAll(/<details class="group" open>/g)].length, 2, '3 groups or fewer: all open');
+  assert.equal([...html.matchAll(/<details class="group" open>/g)].length, 2, 'all groups open by default');
 });
 
-test('묶음 접기: 4개 이상이면 문제 있는 묶음만 펼침', () => {
+test('묶음 기본 펼침: 프로젝트가 많고 모두 정상이어도 전부 펼친다', () => {
   const config = createStatusConfig();
   for (const index of [1, 2, 3]) {
     config.projects.push({ id: `extra-${index}`, name: `추가 ${index}` });
     config.services.push({ id: `extra-service-${index}`, name: `추가 서비스 ${index}`, project_id: `extra-${index}`,
       status: 'active', is_public: true, external: null });
   }
-  const recentResults = { 'elum-api': [recentResult(true)], 'elum-web': [recentResult(true)], 'suh-blog': [recentResult(false)] };
+  const recentResults = { 'elum-api': [recentResult(true)], 'elum-web': [recentResult(true)], 'suh-blog': [recentResult(true)] };
   for (const index of [1, 2, 3]) recentResults[`extra-service-${index}`] = [recentResult(true)];
   const html = renderStatusPage(buildFixtureModel({ config, recentResults }));
   assert.equal([...html.matchAll(/<details class="group"/g)].length, 5);
-  assert.equal([...html.matchAll(/<details class="group" open>/g)].length, 1, 'only degraded group open');
+  assert.equal([...html.matchAll(/<details class="group" open>/g)].length, 5, 'every group open, still collapsible details');
 });
 
 test('막대 툴팁: data-tip에 날짜·가동률, 오늘은 현재 상태, 좁은 화면 숨김 30칸', () => {

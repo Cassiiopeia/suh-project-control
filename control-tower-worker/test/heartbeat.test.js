@@ -48,8 +48,12 @@ test('서명이 없거나 틀리면 401이고 아무것도 기록하지 않는�
   assert.equal(database.metaValue('last_heartbeat_at'), null);
 });
 
-test('256KB 넘는 본문은 413', async () => {
-  const body = heartbeatBody({ padding: 'x'.repeat(256 * 1024) });
+test('1MB 넘는 본문은 413, 256KB 넘어도 1MB 이하면 받는다', async () => {
+  const largeButAllowed = await sendHeartbeat(heartbeatBody({ padding: 'x'.repeat(300 * 1024) }));
+  assert.equal(largeButAllowed.status, 200);
+  database = new FakeD1Database();
+  environment = createEnvironment(database);
+  const body = heartbeatBody({ padding: 'x'.repeat(1024 * 1024) });
   const request = await createSignedHeartbeatRequest(body, BASE_MILLISECONDS);
   const response = await handleHeartbeat(request, environment, BASE_MILLISECONDS, createFakeFetch(() => null));
   assert.equal(response.status, 413);
@@ -143,4 +147,47 @@ test('복구 웹훅이 실패하면 down을 유지하고 다음 심박에서 다
   const retried = await sendHeartbeat(heartbeatBody(), BASE_MILLISECONDS + MINUTE_MILLISECONDS);
   assert.equal(webhookCalls(retried.fakeFetch).length, 1);
   assert.equal(database.metaValue('emergency_state'), 'ok');
+});
+
+// 프로젝트 썸네일 심박 (base64 문자만 들어 있으면 내용은 임의 문자열로 충분)
+const ICON_BASE64 = 'UklGRg==';
+
+test('썸네일: 설정과 함께 온 project_icons를 전체 교체로 저장한다', async () => {
+  await sendHeartbeat(heartbeatBody({ config: SNAPSHOT, project_icons: { elum: ICON_BASE64, 'suh-ai': 'AAAA' } }));
+  assert.deepEqual(JSON.parse(database.metaValue('project_icons_json')), { elum: ICON_BASE64, 'suh-ai': 'AAAA' });
+
+  await sendHeartbeat(heartbeatBody({ config: SNAPSHOT, config_version: 'v2', project_icons: { elum: 'BBBB' } }));
+  assert.deepEqual(JSON.parse(database.metaValue('project_icons_json')), { elum: 'BBBB' }, 'full replace');
+});
+
+test('썸네일: 규칙 밖 항목은 조용히 제외하고 경고만 남긴다 (본문은 로그에 없음)', async () => {
+  const tooLong = 'A'.repeat(40001);
+  await sendHeartbeat(heartbeatBody({
+    config: SNAPSHOT,
+    project_icons: { elum: ICON_BASE64, 'Bad_ID': 'AAAA', 'x': 'AAAA', 'elum-long': tooLong, 'elum-bad': 'not base64!', 'elum-number': 12 },
+  }));
+  assert.deepEqual(JSON.parse(database.metaValue('project_icons_json')), { elum: ICON_BASE64 });
+  const warnings = console.warn.mock.calls.map((call) => String(call.arguments.join(' ')));
+  assert.ok(warnings.some((text) => text.includes('project icons rejected : 5')));
+  assert.equal(warnings.some((text) => text.includes('not base64')), false);
+});
+
+test('썸네일: 50개를 넘으면 앞 50개만 받는다', async () => {
+  const icons = Object.fromEntries(Array.from({ length: 60 }, (_, index) => [`project-${index}`, 'AAAA']));
+  await sendHeartbeat(heartbeatBody({ config: SNAPSHOT, project_icons: icons }));
+  assert.equal(Object.keys(JSON.parse(database.metaValue('project_icons_json'))).length, 50);
+});
+
+test('썸네일: 설정이 없는 심박이나 묶음이 없는 설정은 기존 썸네일을 건드리지 않는다', async () => {
+  await sendHeartbeat(heartbeatBody({ config: SNAPSHOT, project_icons: { elum: ICON_BASE64 } }));
+  const before = database.metaValue('project_icons_json');
+
+  await sendHeartbeat(heartbeatBody({ project_icons: { other: 'AAAA' } }));
+  assert.equal(database.metaValue('project_icons_json'), before, 'no config > untouched');
+
+  await sendHeartbeat(heartbeatBody({ config: SNAPSHOT, config_version: 'v2' }));
+  assert.equal(database.metaValue('project_icons_json'), before, 'no project_icons > untouched');
+
+  await sendHeartbeat(heartbeatBody({ config: SNAPSHOT, config_version: 'v3', project_icons: 'broken' }));
+  assert.equal(database.metaValue('project_icons_json'), before, 'not an object > untouched');
 });

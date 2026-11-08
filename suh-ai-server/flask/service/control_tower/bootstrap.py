@@ -1,4 +1,4 @@
-"""관제소 기동 조립: 저장소 > 디스코드 클라이언트 > 발송기 > 심박 클라이언트 > 폴러 시작 > 런타임 등록 > 디스코드 동기화 1회
+"""관제소 기동 조립: 저장소 > 디스코드 클라이언트 > 발송기 > 심박 클라이언트 > 폴러 시작 > 런타임 등록 > 기본 썸네일 1회 > 디스코드 동기화 1회
 env 없는 구성 요소는 None으로 두고 나머지만 동작 (토큰 없음 > 발송 생략, Worker 설정 없음 > 외부 결과·심박 없음)
 """
 from __future__ import annotations
@@ -17,6 +17,7 @@ from service.control_tower.discord_sync import DISCORD_SYNC_LOCK, sync_discord
 from service.control_tower.event_dispatcher import EventDispatcher
 from service.control_tower.heartbeat_client import HeartbeatClient
 from service.control_tower.poller import ControlTowerPoller
+from service.control_tower.project_icon_seed import seed_default_project_icons
 from service.control_tower.registry_overrides import load_effective_registry
 from service.control_tower.runtime import ControlTowerRuntime, set_runtime
 from service.control_tower.store import ControlTowerStore
@@ -52,6 +53,9 @@ def start_control_tower(environ: Mapping[str, str] = os.environ, database_path: 
                                   guild_id=environ.get(DISCORD_GUILD_ID_ENV) or None)
     set_runtime(runtime)
     poller.start()
+    # 기본 썸네일 가져오기 (네트워크 호출이라 별도 스레드, 실패는 기록만)
+    threading.Thread(target=_seed_default_icons_once, args=(registry_path, environ, store),
+                     daemon=True, name="control-tower-icon-seed").start()
 
     if discord_client is not None:
         threading.Thread(target=_sync_discord_once, args=(registry_path, environ, discord_client, store),
@@ -77,6 +81,14 @@ def _build_heartbeat_client(environ: Mapping[str, str]) -> HeartbeatClient | Non
         logger.warning("[control-tower bootstrap] heartbeat disabled : worker url or secret is not set")
         return None
     return HeartbeatClient(worker_url, secret)
+
+
+def _seed_default_icons_once(registry_path: str, environ: Mapping[str, str], store: ControlTowerStore) -> None:
+    """기동 시 기본 썸네일 1회: 실효 등록 정보의 icon_source_url 중 아직 없는 것만"""
+    try:
+        seed_default_project_icons(load_effective_registry(registry_path, environ, store), store)
+    except Exception as error:
+        logger.warning("[control-tower icon seed] startup seed failed : %s", type(error).__name__)
 
 
 def _sync_discord_once(registry_path: str, environ: Mapping[str, str], discord_client: DiscordClient,

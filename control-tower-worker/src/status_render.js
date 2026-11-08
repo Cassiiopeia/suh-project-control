@@ -1,5 +1,5 @@
 /**
- * 공개 status HTML: 모델 > head(SEO) > 머리(로고·이름) > 전체 배너 > 공지·지연 안내 > 진행 중 장애 > 프로젝트 묶음(details) > 범례 > 14일 장애 > 바닥
+ * 공개 status HTML: 모델 > head(SEO) > 머리(로고·이름) > 전체 배너 > 공지·지연 안내 > 진행 중 장애 > 프로젝트 묶음(썸네일, 기본 펼침 details) > 범례 > 14일 장애 > 바닥
  * JS 없음 (접기는 details, 툴팁은 data-tip + CSS), 동적 문자열은 전부 escapeHtml
  */
 import { escapeHtml } from './html_escape.js';
@@ -15,8 +15,8 @@ export const DELAYED_NOTICE_TEXT = '일부 서비스 상태 확인이 지연되�
 export const POWERED_BY_TEXT = 'SUH 관제소';
 // 좁은 화면에서 숨기는 오래된 막대 수 (90칸 중 앞 30칸 > 60일 표시)
 const NARROW_HIDDEN_DAY_COUNT = 30;
-// 묶음이 이 수 이하면 전부 펼침, 넘으면 문제 있는 묶음만 펼침
-const ALWAYS_OPEN_GROUP_COUNT = 3;
+// 이름 첫 글자 타일 색 개수 (status_style.js --color-tile-0 ~ 7)
+const TILE_COLOR_COUNT = 8;
 
 // 서비스 상태 > 표시 이름
 const STATE_LABEL_BY_STATE = Object.freeze({
@@ -34,8 +34,7 @@ const KNOWN_LEVELS = new Set(LEGEND_ITEMS.map(([level]) => level));
 
 /** 모델 > HTML 문서 1장 */
 export function renderStatusPage(model) {
-  const isEveryGroupOpen = model.projects.length <= ALWAYS_OPEN_GROUP_COUNT;
-  const groups = model.projects.map((project) => renderProjectGroup(project, isEveryGroupOpen)).join('\n');
+  const groups = model.projects.map(renderProjectGroup).join('\n');
   return `<!doctype html>
 <html lang="ko">
 <head>
@@ -99,17 +98,33 @@ function renderGroupSection(groups) {
     + `<ul class="legend" aria-label="막대 색 안내">${legendItems}</ul>`;
 }
 
-/** 프로젝트 묶음: summary(상태 점·이름·구성 요소 수·묶음 가동률) > 서비스 행 */
-function renderProjectGroup(project, isEveryGroupOpen) {
-  const isOpen = isEveryGroupOpen || project.state !== 'up';
+/** 프로젝트 묶음: 기본 펼침 details, summary(화살표·썸네일·이름·구성 요소 수·묶음 가동률·상태 점) > 서비스 행 */
+function renderProjectGroup(project) {
   const stateLabel = STATE_LABEL_BY_STATE[project.state] ?? STATE_LABEL_BY_STATE.unknown;
-  return `<details class="group"${isOpen ? ' open' : ''}><summary class="group-summary">`
+  return `<details class="group" open><summary class="group-summary">`
     + `<span class="chevron" aria-hidden="true"></span>`
+    + renderProjectThumbnail(project)
     + `<span class="group-title"><span class="group-name">${escapeHtml(project.name)}</span>`
     + `<span class="group-meta">구성 요소 ${project.service_count}개 · ${escapeHtml(stateLabel)}</span></span>`
     + `<span class="group-uptime">${escapeHtml(formatUptimeText(project.uptime_percent))}</span>`
     + `<span class="dot state-${escapeHtml(project.state)}" aria-label="${escapeHtml(stateLabel)}"></span>`
     + `</summary><div class="group-body">${project.services.map(renderServiceRow).join('')}</div></details>`;
+}
+
+/** 썸네일: 이미지 주소가 있으면 img, 없으면 이름 첫 글자 타일 (색은 프로젝트 id로 고정) */
+function renderProjectThumbnail(project) {
+  if (typeof project.icon_url === 'string' && project.icon_url.startsWith('/project-icons/')) {
+    return `<img class="group-thumb" src="${escapeHtml(project.icon_url)}" width="40" height="40" loading="lazy" alt="">`;
+  }
+  const firstLetter = Array.from(String(project.name ?? '').trim())[0] ?? '?';
+  return `<span class="group-thumb group-thumb-tile tile-${pickTileColorIndex(project.id)}" aria-hidden="true">${escapeHtml(firstLetter.toUpperCase())}</span>`;
+}
+
+/** 프로젝트 id > 타일 색 번호 0 ~ 7 (같은 id는 항상 같은 색) */
+function pickTileColorIndex(projectId) {
+  let hash = 0;
+  for (const character of String(projectId ?? '')) hash = (hash * 31 + character.codePointAt(0)) % 100003;
+  return hash % TILE_COLOR_COUNT;
 }
 
 /** 서비스 행: 이름·상태 > 90일 막대(툴팁) > 캡션(기간·가동률·오늘) */

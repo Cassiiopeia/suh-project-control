@@ -220,3 +220,13 @@ def test_start는_데몬_스레드를_돌리고_stop으로_멈춘다(registry_pa
 
     assert not thread.is_alive()
     assert NAS_TARGET in check_runner.called_targets
+
+
+def test_심박에_저장소의_프로젝트_썸네일을_함께_넘긴다(registry_path, store, dispatcher, check_runner, clock):
+    store.save_project_icon("elum", b"webp-bytes", "abcdef012345", clock())
+    heartbeat_client = FakeHeartbeatClient()
+    poller = make_poller(registry_path, store, dispatcher, check_runner, clock, heartbeat_client)
+
+    run_ticks(poller, clock, 1)
+
+    assert heartbeat_client.project_icon_calls == [{"elum": b"webp-bytes"}]

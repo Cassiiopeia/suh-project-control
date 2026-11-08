@@ -51,6 +51,8 @@
     CONTROL_PROJECT_CREATE: '관제소 프로젝트 추가',
     CONTROL_STATUS_PAGE_UPDATE: '관제소 상태 페이지 변경',
     CONTROL_PROJECT_INVITE: '관제소 프로젝트 초대 발급',
+    CONTROL_PROJECT_ICON_UPDATE: '관제소 프로젝트 썸네일 변경',
+    CONTROL_PROJECT_ICON_DELETE: '관제소 프로젝트 썸네일 삭제',
   };
 
   // 카테고리 선택 시 행위 셀렉트를 해당 카테고리 것만으로 좁힌다
@@ -66,7 +68,7 @@
     CLAUDE_LOGIN: ['CLAUDE_CODE_REQUEST', 'CLAUDE_CODE_ISSUED', 'CLAUDE_CODE_VIEW'],
     CONTROL_TOWER: ['CONTROL_SERVICE_UPDATE', 'CONTROL_SERVICE_CREATE', 'CONTROL_SERVICE_DELETE',
                     'CONTROL_PROJECT_UPDATE', 'CONTROL_PROJECT_CREATE', 'CONTROL_STATUS_PAGE_UPDATE',
-                    'CONTROL_PROJECT_INVITE'],
+                    'CONTROL_PROJECT_INVITE', 'CONTROL_PROJECT_ICON_UPDATE', 'CONTROL_PROJECT_ICON_DELETE'],
   };
 
   var KST_FMT = new Intl.DateTimeFormat('ko-KR', {

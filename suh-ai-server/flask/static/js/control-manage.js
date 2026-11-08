@@ -76,6 +76,7 @@
   // 프로젝트 머리: 이름 수정, 숨김, 초대 링크, 순서, 출처
   function createProjectHeader(project, projectIndex) {
     const header = createElement('div', 'flex flex-wrap items-center gap-2');
+    header.appendChild(window.ControlManageIcon.createIconControl(project));
     header.appendChild(createNameInput(project.name, project.original_name, function (name) {
       actions.patchProject(project.id, { name: name });
     }, 'input-sm font-semibold w-48'));

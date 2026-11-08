@@ -3,6 +3,7 @@
 # 서비스 status: active 감시·알림·공개 / paused 감시만 / retired 감시 안 함
 # 외부 점검 expect 비어 있으면 '응답이 오고 502·503·504·520~530(Cloudflare 엣지 오류)이 아니면 정상'
 # 외부 점검(Worker) 상한 45개 (Cloudflare 무료 서브요청 한도)
+# 프로젝트 icon_source_url: 기본 썸네일 https 주소 (저장된 썸네일이 없을 때 기동 시 1회만 가져옴, 이후는 관리 화면에서 관리)
 
 alert:
   failures_to_down: 3    # 연속 실패 3회 > down 알림
@@ -43,6 +44,7 @@ infrastructure:                   # 다른 서비스의 부모 (depends_on 대�
 projects:
   - id: suhsaechan
     name: suhsaechan.kr
+    icon_source_url: "https://lab.suhsaechan.kr/images/logo_no_text.png"
     services:
       - id: suhsaechan-home
         name: suhsaechan.kr 홈
@@ -109,6 +111,7 @@ projects:
           external: {url: "https://mail.suhsaechan.kr/"}
   - id: suh-ai
     name: SUH AI 서버
+    icon_source_url: "https://lab.suhsaechan.kr/images/logo_no_text.png"
     services:
       - id: suh-ai-server
         name: SUH AI 서버
@@ -117,6 +120,7 @@ projects:
           external: {url: "https://ai.suhsaechan.kr/"}
   - id: elum
     name: elum
+    icon_source_url: "https://lab.suhsaechan.kr/images/elumLogo.png"
     services:
       - id: elum-api
         name: elum API
@@ -148,6 +152,7 @@ projects:
           external: {url: "https://admin.romrom.suhsaechan.kr/"}
   - id: passql
     name: passql
+    icon_source_url: "https://lab.suhsaechan.kr/images/passQLLogo.png"
     services:
       - id: passql-api
         name: passql API
@@ -163,6 +168,7 @@ projects:
           external: {url: "https://ai.passql.suhsaechan.kr/"}
   - id: pickerpicker
     name: pickerpicker
+    icon_source_url: "https://lab.suhsaechan.kr/images/pickerPickerLogo.png"
     services:
       - id: pickerpicker-web
         name: pickerpicker 웹
@@ -180,6 +186,7 @@ projects:
           internal: {url: "http://${NAS_LAN_HOST}:8001/"}
   - id: bagel
     name: bagel
+    icon_source_url: "https://lab.suhsaechan.kr/images/bagelLogo.jpeg"
     services:
       - id: bagel-web
         name: bagel 웹
