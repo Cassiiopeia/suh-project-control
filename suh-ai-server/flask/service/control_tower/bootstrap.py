@@ -11,12 +11,14 @@ from typing import Mapping
 from config.control_tower_config import (
     DATABASE_PATH, DISCORD_BOT_TOKEN_ENV, DISCORD_GUILD_ID_ENV, HMAC_SECRET_ENV, REGISTRY_PATH, WORKER_URL_ENV,
 )
+from service.control_tower.app_attention_ingest import AppAttentionIngest
 from service.control_tower.discord_client import DiscordClient
 from service.control_tower.discord_invite_attribution import InviteAttributionStep
 from service.control_tower.discord_sync import DISCORD_SYNC_LOCK, sync_discord
 from service.control_tower.event_dispatcher import EventDispatcher
 from service.control_tower.heartbeat_client import HeartbeatClient
 from service.control_tower.poller import ControlTowerPoller
+from service.control_tower.poller_app_attention import AppAttentionStep, is_any_project_service_down
 from service.control_tower.project_icon_seed import seed_default_project_icons
 from service.control_tower.registry_overrides import load_effective_registry
 from service.control_tower.runtime import ControlTowerRuntime, set_runtime
@@ -44,8 +46,14 @@ def start_control_tower(environ: Mapping[str, str] = os.environ, database_path: 
         status_page_url=environ.get(STATUS_PAGE_URL_ENV) or DEFAULT_STATUS_PAGE_URL,
     )
     invite_attribution = InviteAttributionStep(discord_client, store) if discord_client is not None else None
+    # 앱 확인할 일: 프로젝트 서비스 중 하나라도 down이면 앱 연동 끊김 알림 생략 (서비스 장애에 묻음)
+    app_attention_ingest = AppAttentionIngest(
+        store, dispatcher, lambda: poller.current_registry(),
+        lambda project_id: is_any_project_service_down(
+            poller.current_registry(), poller.snapshot().states, project_id))
     poller = ControlTowerPoller(registry_path, store, dispatcher, _build_heartbeat_client(environ),
-                                environ=environ, invite_attribution=invite_attribution)
+                                environ=environ, invite_attribution=invite_attribution,
+                                app_attention_step=AppAttentionStep(store, app_attention_ingest))
 
     runtime = ControlTowerRuntime(registry_provider=poller.current_registry, store=store, dispatcher=dispatcher,
                                   poller=poller, file_registry_provider=poller.current_file_registry,

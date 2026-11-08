@@ -43,9 +43,11 @@ EMPTY_REGISTRY = Registry(projects=(), services=())
 class ControlTowerPoller:
     def __init__(self, registry_path: str, store, dispatcher, heartbeat_client, check_runner=run_check,
                  now=utc_now, interval_seconds: float = POLL_INTERVAL_SECONDS,
-                 environ: Mapping[str, str] | None = None, invite_attribution=None):
+                 environ: Mapping[str, str] | None = None, invite_attribution=None,
+                 app_attention_step=None):
         self._registry_path = registry_path
         self._invite_attribution = invite_attribution  # InviteAttributionStep (디스코드 미설정이면 None)
+        self._app_attention_step = app_attention_step  # AppAttentionStep (없으면 앱 확인할 일 수집 안 함)
         self._store = store
         self._dispatcher = dispatcher
         self._heartbeat_step = HeartbeatStep(heartbeat_client, store, dispatcher)
@@ -87,7 +89,7 @@ class ControlTowerPoller:
         return PollerSnapshot(self._registry, view.states, view.observations, view.last_tick_at)
 
     def tick(self) -> None:
-        """틱 1회: 등록 파일 > 점검 창 > 심박 > 내부 점검 > 상태 전이 > 알림 계획·발송 > 장애 구간·저장 > 요약 > 정리 > 초대 귀속"""
+        """틱 1회: 등록 파일 > 점검 창 > 심박 > 내부 점검 > 상태 전이 > 알림 계획·발송 > 장애 구간·저장 > 요약 > 정리 > 초대 귀속 > 앱 확인할 일"""
         now = self._now()
         registry = self._reload_registry(now)
         if registry is None:
@@ -121,6 +123,9 @@ class ControlTowerPoller:
         # 초대 귀속: 예외 없음 (실패는 단계 안에서 로그)
         if self._invite_attribution is not None:
             self._invite_attribution.run(now)
+        # 앱 확인할 일 수집: 예외 없음 (단계 안에서 로그)
+        if self._app_attention_step is not None:
+            self._app_attention_step.run(now)
 
     def _publish_view(self, states: dict[str, ServiceState], observations: dict[str, Observation],
                       now: datetime) -> None:
