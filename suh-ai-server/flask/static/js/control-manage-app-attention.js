@@ -61,7 +61,7 @@
 
     // 수집: 방식 · 주기 · 끊김 판정 / 주소
     const collectCell = createElement('td', 'text-xs');
-    collectCell.style.minWidth = '14rem';
+    collectCell.style.minWidth = '11rem';
     collectCell.appendChild(createElement('div', '', attentionFormat.describeMode(source.mode) + ' · ' + source.interval_seconds
       + '초마다 · 끊김 ' + source.stale_after_seconds + '초'));
     collectCell.appendChild(createElement('div', 'font-mono opacity-60 break-all', source.url || '주소 없음 (push만)'));
@@ -109,9 +109,10 @@
   }
 
   function createRowButtons(source) {
-    // 버튼 4개를 2줄로 (표가 좁아져도 아이콘·문구가 눌리지 않게 폭 고정)
-    const wrapper = createElement('div', 'flex flex-wrap gap-1 justify-end');
-    wrapper.style.width = '12rem';
+    // 버튼 4개를 2열 2줄 격자로 (1280px 폭에서도 표가 가로로 넘치지 않게)
+    const wrapper = createElement('div', 'grid gap-1');
+    wrapper.style.gridTemplateColumns = 'repeat(2, max-content)';
+    wrapper.style.justifyContent = 'end';
     wrapper.appendChild(createTextButton('plug-zap', '연결 확인', function (button) { testSource(source, button); }));
     wrapper.appendChild(createTextButton('list-checks', '항목 설정', function () { window.ControlManageAppAttentionItems.open(source); }));
     wrapper.appendChild(createTextButton('pencil', '수정', function () {
