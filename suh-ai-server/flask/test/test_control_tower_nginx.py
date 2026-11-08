@@ -1,4 +1,4 @@
-"""관제소 nginx 설정: 키 검사 제외 경로는 이벤트 입구 1개, 본문 상한·전용 속도 제한, 공개 경로 map은 정규화 $uri 기준"""
+"""관제소 nginx 설정: 키 검사 제외 경로는 이벤트·앱 확인할 일 push 입구 2개, 본문 상한·전용 속도 제한, 공개 경로 map은 정규화 $uri 기준"""
 from __future__ import annotations
 
 import os
@@ -6,6 +6,9 @@ import re
 
 NGINX_CONF_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "config", "nginx.conf")
 EVENT_LOCATION = "= /api/flask/control/events"
+ATTENTION_LOCATION = "^~ /api/flask/control/attention/"
+# 키 검사 제외를 허용하는 location 머리 (이 목록과 정확히 일치해야 함)
+ALLOWED_EXEMPT_LOCATIONS = {EVENT_LOCATION, ATTENTION_LOCATION}
 
 
 def _read_conf() -> str:
@@ -26,10 +29,23 @@ def _public_endpoint_map(conf_text: str) -> tuple[str, str]:
     return match.group(1), match.group(2)
 
 
-def test_nginx_exempts_only_event_intake_by_exact_match():
+def test_nginx_키_검사_제외_경로는_허용_목록과_정확히_일치한다():
     exempt_locations = [location for location, body in _location_blocks(_read_conf()).items()
                         if "return 401" not in body]
-    assert exempt_locations == [EVENT_LOCATION]
+    assert len(exempt_locations) == len(ALLOWED_EXEMPT_LOCATIONS)
+    assert set(exempt_locations) == ALLOWED_EXEMPT_LOCATIONS
+
+
+def test_push_입구는_64KB_상한과_이벤트_입구_속도_제한을_쓰고_관리_API는_덮지_않는다():
+    attention_block = _location_blocks(_read_conf())[ATTENTION_LOCATION]
+    attention_prefix = ATTENTION_LOCATION.split()[1]
+
+    assert re.search(r"client_max_body_size\s+64k;", attention_block)
+    assert re.search(r"limit_req\s+zone=control_events\s+burst=10\s+nodelay;", attention_block)
+    assert "python_limit" not in attention_block
+    assert re.search(r"rewrite\s+\^/api/flask/\(\.\*\)\$\s+/\$1\s+break;", attention_block)
+    assert "/api/flask/control/attention/elum/api".startswith(attention_prefix)
+    assert not "/api/flask/control/app-attention/sources".startswith(attention_prefix)
 
 
 def test_event_intake_caps_body_and_uses_dedicated_rate_limit():

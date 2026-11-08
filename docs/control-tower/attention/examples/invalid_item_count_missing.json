@@ -1,0 +1,16 @@
+{
+  "schema": "attention",
+  "version": "1.0",
+  "source": {
+    "app": "elum-server"
+  },
+  "generated_at": "2026-11-08T12:00:00Z",
+  "items": [
+    {
+      "key": "feedback.new",
+      "label": "새 의견",
+      "kind": "count",
+      "level": "info"
+    }
+  ]
+}

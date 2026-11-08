@@ -1,4 +1,4 @@
-"""관제소 SQLite 스키마: 테이블 14개 + 인덱스 + 기존 DB 열 추가 (시각은 UTC ISO-8601 문자열)"""
+"""관제소 SQLite 스키마: 테이블 20개 + 인덱스 + 기존 DB 열 추가 (시각은 UTC ISO-8601 문자열)"""
 from __future__ import annotations
 
 SCHEMA_STATEMENTS = (
@@ -114,11 +114,84 @@ SCHEMA_STATEMENTS = (
         uses_seen INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL
     )""",
+    # 앱 확인할 일 연동 소스 (mode: pull / push / both, is_enabled 1 사용 0 중지)
+    """CREATE TABLE IF NOT EXISTS app_attention_source (
+        project_id TEXT NOT NULL,
+        source_id TEXT NOT NULL,
+        url TEXT NOT NULL,
+        is_enabled INTEGER NOT NULL,
+        mode TEXT NOT NULL,
+        interval_seconds INTEGER NOT NULL,
+        timeout_seconds INTEGER NOT NULL,
+        stale_after_seconds INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (project_id, source_id)
+    )""",
+    # 소스별 수집 상태 (last_generated_at = 마지막으로 반영한 스냅샷 시각, next_due_at = 앱이 요청한 다음 수집 시각)
+    """CREATE TABLE IF NOT EXISTS app_attention_source_state (
+        project_id TEXT NOT NULL,
+        source_id TEXT NOT NULL,
+        last_attempt_at TEXT, last_success_at TEXT,
+        last_result TEXT, last_error TEXT,
+        consecutive_failures INTEGER NOT NULL DEFAULT 0,
+        etag TEXT, last_generated_at TEXT,
+        app TEXT, app_version TEXT, environment TEXT,
+        is_baseline_done INTEGER NOT NULL DEFAULT 0,
+        failure_alerted_at TEXT,
+        next_due_at TEXT,
+        PRIMARY KEY (project_id, source_id)
+    )""",
+    # 확인할 일 항목 현재 값 (missing_since = 스냅샷에서 빠진 시각, raw_json = 앱 원본 항목)
+    """CREATE TABLE IF NOT EXISTS app_attention_item (
+        project_id TEXT NOT NULL,
+        source_id TEXT NOT NULL,
+        "key" TEXT NOT NULL,
+        kind TEXT NOT NULL, label TEXT NOT NULL, level TEXT NOT NULL,
+        "group" TEXT, description TEXT, admin_url TEXT, latest_at TEXT, detail TEXT,
+        "count" INTEGER, total INTEGER, "value" REAL, "limit" REAL, unit TEXT, state TEXT,
+        raw_json TEXT,
+        first_seen_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        missing_since TEXT,
+        PRIMARY KEY (project_id, source_id, "key")
+    )""",
+    # 관리자 항목별 설정 (NULL = 앱 값 / 기본 규칙, is_hidden 1 숨김)
+    """CREATE TABLE IF NOT EXISTS app_attention_item_override (
+        project_id TEXT NOT NULL,
+        source_id TEXT NOT NULL,
+        "key" TEXT NOT NULL,
+        is_hidden INTEGER, label TEXT, level_policy TEXT, alert_rule TEXT,
+        threshold REAL, channel_kind TEXT, mention_role TEXT,
+        PRIMARY KEY (project_id, source_id, "key")
+    )""",
+    # 항목별 알림 기준 상태 (pending_new_count = 쿨다운 중 쌓인 증가분)
+    """CREATE TABLE IF NOT EXISTS app_attention_item_alert (
+        project_id TEXT NOT NULL,
+        source_id TEXT NOT NULL,
+        "key" TEXT NOT NULL,
+        last_alerted_at TEXT, last_alerted_total INTEGER, last_alerted_count INTEGER, last_alerted_level TEXT,
+        is_threshold_exceeded INTEGER NOT NULL DEFAULT 0,
+        pending_new_count INTEGER NOT NULL DEFAULT 0,
+        last_alerted_state TEXT,
+        PRIMARY KEY (project_id, source_id, "key")
+    )""",
+    # 항목 값 이력 (값이 바뀔 때만 1행, 90일 보관)
+    """CREATE TABLE IF NOT EXISTS app_attention_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id TEXT NOT NULL,
+        source_id TEXT NOT NULL,
+        "key" TEXT NOT NULL,
+        observed_at TEXT NOT NULL,
+        "count" INTEGER, total INTEGER, "value" REAL, state TEXT, level TEXT
+    )""",
+    "CREATE INDEX IF NOT EXISTS idx_app_attention_history_observed_at ON app_attention_history (observed_at)",
 )
 
 # 기존 DB에 없으면 추가하는 열: (테이블, 열 이름, 열 정의)
 COLUMN_MIGRATIONS = (
     ("incident", "is_within_maintenance", "INTEGER NOT NULL DEFAULT 0"),
+    ("app_attention_item_alert", "last_alerted_state", "TEXT"),
 )
 
 

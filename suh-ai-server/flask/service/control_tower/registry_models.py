@@ -15,7 +15,9 @@ SERVICE_STATUS_PAUSED = "paused"
 SERVICE_STATUS_RETIRED = "retired"
 SERVICE_STATUSES = (SERVICE_STATUS_ACTIVE, SERVICE_STATUS_PAUSED, SERVICE_STATUS_RETIRED)
 # 프로젝트 디스코드 채널 종류 (미지정 시 전부)
-PROJECT_CHANNEL_KINDS = ("status", "error", "report", "deploy")
+PROJECT_CHANNEL_KINDS = ("status", "error", "report", "deploy", "attention")
+# 앱 확인할 일 알림 채널: 연동 소스가 있는 프로젝트에만 만들어짐 (동기화 계획이 판단)
+ATTENTION_CHANNEL_KIND = "attention"
 # 전역 디스코드 채널 종류
 GLOBAL_CHANNEL_KINDS = ("notice", "alert", "digest")
 # 채널 공개 대상에 항상 쓸 수 있는 예약 역할 키
@@ -23,11 +25,12 @@ RESERVED_ROLE_KEYS = ("admin", "everyone")
 
 DEFAULT_ROLE_NAMES = {"member": "{project}", "dev": "{project}-dev"}
 DEFAULT_CHANNEL_NAMES = {
-    "status": "상태", "error": "에러", "report": "신고", "deploy": "배포",
+    "status": "상태", "error": "에러", "report": "신고", "deploy": "배포", "attention": "확인할일",
     "notice": "공지", "alert": "관제-긴급", "digest": "관제-요약",
 }
 DEFAULT_CHANNEL_VISIBILITY = {
     "status": ("member", "dev"), "deploy": ("member", "dev"), "error": ("dev",), "report": ("dev",),
+    "attention": ("dev",),
 }
 DEFAULT_GLOBAL_CHANNELS = {"notice": ("everyone",), "alert": ("admin",), "digest": ("admin",)}
 # 공개 상태 페이지 기본 제목 / 공지 수준 (info 안내, warning 주의, critical 긴급)

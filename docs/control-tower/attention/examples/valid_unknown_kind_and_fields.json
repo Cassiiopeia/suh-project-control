@@ -1,0 +1,28 @@
+{
+  "schema": "attention",
+  "version": "1.3",
+  "source": {
+    "app": "elum-server"
+  },
+  "generated_at": "2026-11-08T12:00:00Z",
+  "items": [
+    {
+      "key": "custom.sync",
+      "label": "동기화",
+      "kind": "progress",
+      "level": "info",
+      "percent": 40,
+      "detail": "모르는 kind"
+    },
+    {
+      "key": "feedback.new",
+      "label": "새 의견",
+      "kind": "count",
+      "count": 1,
+      "level": "info"
+    }
+  ],
+  "future_field": {
+    "a": 1
+  }
+}

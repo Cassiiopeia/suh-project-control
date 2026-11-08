@@ -24,6 +24,7 @@ discord:
     deploy: [member, dev]
     error: [dev]
     report: [dev]
+    attention: [dev]              # 앱 확인할 일: 연동 소스가 있는 프로젝트에만 채널 생성
   global_channels:
     notice: {visible_to: [everyone]}
     alert: {visible_to: [admin]}    # #관제-긴급

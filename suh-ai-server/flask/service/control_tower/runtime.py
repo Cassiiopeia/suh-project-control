@@ -17,6 +17,7 @@ class ControlTowerRuntime:
     guild_id: str | None = None  # 디스코드 동기화 대상 서버 ID
     # 덮어쓰기 전 등록 파일 원본 (없으면 registry_provider 값을 원본으로 봄)
     file_registry_provider: Callable[[], Registry] | None = None
+    app_attention_ingest: object | None = None  # AppAttentionIngest (push 입구·연결 확인용, 폴러와 같은 인스턴스)
 
 
 _runtime: ControlTowerRuntime | None = None

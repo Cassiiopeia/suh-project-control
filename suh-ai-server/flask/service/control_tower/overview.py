@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
+from service.control_tower.app_attention_view import build_app_attention_summary
 from service.control_tower.check_runner import CheckResult
 from service.control_tower.meta_keys import (
     META_KEY_HEARTBEAT_IS_OK, META_KEY_HEARTBEAT_LAST_OK_AT, META_KEY_ONBOARDING_HASH, META_KEY_REGISTRY_ERROR,
@@ -26,7 +27,7 @@ MAINTENANCE_SOURCE_REGISTRY = "registry"
 
 
 def build_overview(runtime, now: datetime) -> dict:
-    """overview 본문: 서비스 > 요약 > 장애 > 이벤트 > 심박·등록 오류·온보딩"""
+    """overview 본문: 서비스 > 요약(앱 확인할 일 포함) > 장애 > 이벤트 > 심박·등록 오류·온보딩"""
     store = runtime.store
     snapshot = runtime.poller.snapshot() if runtime.poller is not None else None
     registry = runtime.registry_provider()
@@ -44,6 +45,7 @@ def build_overview(runtime, now: datetime) -> dict:
         "projects": [{"id": project.id, "name": project.name} for project in registry.projects],
         "services": services,
         "summary": _summarize(services),
+        "app_attention_summary": build_app_attention_summary(store),
         "incidents": [incident_entry(incident)
                       for incident in store.recent_incidents(INCIDENT_LIMIT, now - INCIDENT_WINDOW)],
         "events": [_event_entry(event) for event in store.recent_events(EVENT_LIMIT)],

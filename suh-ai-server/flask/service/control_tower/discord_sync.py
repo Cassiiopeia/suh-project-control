@@ -51,7 +51,10 @@ def sync_discord(registry: Registry, client, store, guild_id: str) -> SyncReport
         logger.warning("[control-tower discord sync] listing failed : status %s", error.status_code)
         return SyncReport(errors=[f"list: status {error.status_code} {error.reason}".rstrip()])
 
-    operations = plan_sync(registry, current_channels, current_roles, guild_id, store.all_bindings())
+    # 앱 확인할 일 소스가 있는 프로젝트 (attention 채널 계획 대상)
+    attention_project_ids = frozenset(source.project_id for source in store.list_attention_sources())
+    operations = plan_sync(registry, current_channels, current_roles, guild_id, store.all_bindings(),
+                           attention_project_ids)
     report = apply_sync(client, store, operations)
     report.is_onboarding_applied = _apply_onboarding(registry, client, store)
     logger.info("[control-tower discord sync] done : created %d, updated %d, archived %d, errors %d, onboarding %s",

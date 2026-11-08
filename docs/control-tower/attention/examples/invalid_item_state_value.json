@@ -1,0 +1,17 @@
+{
+  "schema": "attention",
+  "version": "1.0",
+  "source": {
+    "app": "elum-server"
+  },
+  "generated_at": "2026-11-08T12:00:00Z",
+  "items": [
+    {
+      "key": "ai.provider",
+      "label": "AI",
+      "kind": "state",
+      "state": "broken",
+      "level": "warning"
+    }
+  ]
+}

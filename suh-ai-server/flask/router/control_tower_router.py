@@ -3,17 +3,17 @@
 """
 from __future__ import annotations
 
-import hmac
-import os
 from datetime import datetime, timezone
 
 from flask import Blueprint, jsonify, request
 
-from config.control_tower_config import EVENT_TOKEN_ENV_PREFIX
 from router.control_tower_admin_api import register_admin_api
+from router.control_tower_app_attention_api import register_app_attention_api
+from router.control_tower_app_attention_intake import register_app_attention_intake
 from router.control_tower_icon_api import register_icon_api
 from router.control_tower_invite_api import register_invite_api
 from router.control_tower_manage_api import register_manage_api
+from service.control_tower.app_attention_tokens import event_token_env_name, is_presented_token_valid
 from service.control_tower.runtime import get_runtime
 
 control_tower_bp = Blueprint('control_tower', __name__)
@@ -21,6 +21,8 @@ register_admin_api(control_tower_bp)  # 관리자 화면 API (nginx 키 검사 �
 register_manage_api(control_tower_bp)  # 서비스 관리 API (nginx 키 검사 대상)
 register_invite_api(control_tower_bp)  # 프로젝트 초대 API (nginx 키 검사 대상)
 register_icon_api(control_tower_bp)  # 프로젝트 썸네일 API (nginx 키 검사 대상)
+register_app_attention_api(control_tower_bp)  # 앱 확인할 일 관리 API (nginx 키 검사 대상)
+register_app_attention_intake(control_tower_bp)  # 앱 확인할 일 push 입구 (nginx 키 검사 제외, 프로젝트 토큰)
 
 TOKEN_HEADER_NAME = 'X-Control-Token'
 
@@ -48,8 +50,5 @@ def receive_event():
 
 
 def _is_token_valid(project_id: str, presented_token: str) -> bool:
-    """토큰 env 없음 > 거부, 있으면 상수 시간 비교"""
-    expected_token = os.environ.get(EVENT_TOKEN_ENV_PREFIX + project_id.upper().replace('-', '_'), '')
-    if not expected_token:
-        return False
-    return hmac.compare_digest(expected_token.encode('utf-8'), presented_token.encode('utf-8'))
+    """토큰 env(현재·_PREVIOUS) 둘 다 없음 > 거부, 있으면 상수 시간 비교"""
+    return is_presented_token_valid(event_token_env_name(project_id), presented_token)
