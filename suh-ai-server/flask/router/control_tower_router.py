@@ -3,17 +3,15 @@
 """
 from __future__ import annotations
 
-import hmac
-import os
 from datetime import datetime, timezone
 
 from flask import Blueprint, jsonify, request
 
-from config.control_tower_config import EVENT_TOKEN_ENV_PREFIX
 from router.control_tower_admin_api import register_admin_api
 from router.control_tower_icon_api import register_icon_api
 from router.control_tower_invite_api import register_invite_api
 from router.control_tower_manage_api import register_manage_api
+from service.control_tower.app_attention_tokens import event_token_env_name, is_presented_token_valid
 from service.control_tower.runtime import get_runtime
 
 control_tower_bp = Blueprint('control_tower', __name__)
@@ -48,8 +46,5 @@ def receive_event():
 
 
 def _is_token_valid(project_id: str, presented_token: str) -> bool:
-    """토큰 env 없음 > 거부, 있으면 상수 시간 비교"""
-    expected_token = os.environ.get(EVENT_TOKEN_ENV_PREFIX + project_id.upper().replace('-', '_'), '')
-    if not expected_token:
-        return False
-    return hmac.compare_digest(expected_token.encode('utf-8'), presented_token.encode('utf-8'))
+    """토큰 env(현재·_PREVIOUS) 둘 다 없음 > 거부, 있으면 상수 시간 비교"""
+    return is_presented_token_valid(event_token_env_name(project_id), presented_token)
