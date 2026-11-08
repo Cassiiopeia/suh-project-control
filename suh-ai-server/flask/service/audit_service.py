@@ -67,6 +67,9 @@ class AuditAction(str, Enum):
     CONTROL_PROJECT_CREATE = "CONTROL_PROJECT_CREATE"
     CONTROL_STATUS_PAGE_UPDATE = "CONTROL_STATUS_PAGE_UPDATE"
     CONTROL_PROJECT_INVITE = "CONTROL_PROJECT_INVITE"
+    # 관제소 프로젝트 썸네일: 업로드·주소 가져오기·삭제
+    CONTROL_PROJECT_ICON_UPDATE = "CONTROL_PROJECT_ICON_UPDATE"
+    CONTROL_PROJECT_ICON_DELETE = "CONTROL_PROJECT_ICON_DELETE"
 
 
 def record(category: AuditCategory, action: AuditAction, actor_ip: str, detail: dict = None, *,

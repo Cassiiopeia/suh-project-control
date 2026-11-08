@@ -99,6 +99,27 @@ def parse_new_service(payload) -> tuple[dict, list[str]]:
     return values, invalid_fields
 
 
+# 썸네일 업로드 본문 base64 최대 길이 (원본 2MB의 base64 여유분)
+ICON_BASE64_MAX_LENGTH = 3_000_000
+
+
+def parse_icon_request(payload) -> tuple[dict, list[str]]:
+    """PUT 썸네일 검증: image_base64(파일 업로드) 또는 source_url(https 주소) 중 정확히 하나"""
+    if not isinstance(payload, dict):
+        return {}, ["body"]
+    invalid_fields = [key for key in payload if key not in ("image_base64", "source_url")]
+    provided_keys = [key for key in ("image_base64", "source_url") if payload.get(key) is not None]
+    if len(provided_keys) != 1:
+        return {}, invalid_fields + ["image_base64|source_url"]
+    key = provided_keys[0]
+    value = payload[key]
+    is_valid = (isinstance(value, str) and 0 < len(value) <= ICON_BASE64_MAX_LENGTH) if key == "image_base64" else (
+        is_valid_url(value) and value.startswith("https://"))
+    if not is_valid:
+        invalid_fields.append(key)
+    return ({key: value} if not invalid_fields else {}), invalid_fields
+
+
 def parse_new_project(payload) -> tuple[dict, list[str]]:
     """POST 프로젝트 검증: 필수 id·name"""
     payload = payload if isinstance(payload, dict) else {}

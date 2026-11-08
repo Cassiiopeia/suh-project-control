@@ -155,7 +155,7 @@ def test_스냅샷은_page_공지와_order를_더하고_기존_필드를_유지�
     snapshot = effective.to_worker_snapshot()
 
     assert snapshot["page"] == {"title": "SUH 상태", "notice": {"text": "오늘 밤 점검", "level": "critical"}}
-    assert snapshot["projects"] == [{"id": "elum", "name": "이룸", "order": 0}]
+    assert snapshot["projects"] == [{"id": "elum", "name": "이룸", "order": 0, "icon_version": None}]
     assert set(snapshot["services"][0]) == {"id", "order", "name", "project_id", "status", "is_public", "external"}
     assert set(snapshot) == {"page", "alert", "projects", "services", "maintenance"}
     assert effective.version() != REGISTRY.version()

@@ -1,4 +1,4 @@
-"""관제소 SQLite 스키마: 테이블 13개 + 인덱스 + 기존 DB 열 추가 (시각은 UTC ISO-8601 문자열)"""
+"""관제소 SQLite 스키마: 테이블 14개 + 인덱스 + 기존 DB 열 추가 (시각은 UTC ISO-8601 문자열)"""
 from __future__ import annotations
 
 SCHEMA_STATEMENTS = (
@@ -98,6 +98,13 @@ SCHEMA_STATEMENTS = (
         name TEXT NOT NULL,
         sort_order INTEGER,
         created_at TEXT NOT NULL
+    )""",
+    # 프로젝트 썸네일 (128px WebP 바이트, content_hash = 상태 페이지 캐시 버전)
+    """CREATE TABLE IF NOT EXISTS project_icon (
+        project_id TEXT PRIMARY KEY,
+        image_webp BLOB NOT NULL,
+        content_hash TEXT NOT NULL,
+        updated_at TEXT NOT NULL
     )""",
     # 프로젝트별 디스코드 초대 (channel_id = 프로젝트 status 채널, uses_seen = 마지막 귀속 처리 때 사용 횟수)
     """CREATE TABLE IF NOT EXISTS project_invite (

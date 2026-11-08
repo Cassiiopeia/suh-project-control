@@ -259,3 +259,32 @@ def test_rejects_self_dependency_as_cycle(tmp_path):
         load_registry(path, {})
 
     assert "dependency cycle: svc-self -> svc-self" in str(raised.value)
+
+
+def test_프로젝트_icon_source_url은_https만_받는다(tmp_path):
+    path = write_registry(tmp_path, """
+        projects:
+          - id: elum
+            name: 이룸
+            icon_source_url: "https://lab.example.com/elum.png"
+          - id: romrom
+            name: 롬롬
+    """)
+
+    registry = load_registry(path, {})
+
+    assert [project.icon_source_url for project in registry.projects] == ["https://lab.example.com/elum.png", None]
+
+
+def test_http_icon_source_url은_검증_오류(tmp_path):
+    path = write_registry(tmp_path, """
+        projects:
+          - id: elum
+            name: 이룸
+            icon_source_url: "http://lab.example.com/elum.png"
+    """)
+
+    with pytest.raises(RegistryError) as error:
+        load_registry(path, {})
+
+    assert "icon_source_url" in str(error.value)

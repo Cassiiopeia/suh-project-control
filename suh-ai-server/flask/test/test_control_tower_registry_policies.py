@@ -83,7 +83,7 @@ def test_worker_snapshot_excludes_internal_checks_and_secrets(tmp_path):
     assert snapshot == {
         "page": {"title": "SUHSAECHAN Status", "notice": None},
         "alert": {"failures_to_down": 3, "slow_milliseconds": 5000},
-        "projects": [{"id": "elum", "name": "이룸", "order": 0}],
+        "projects": [{"id": "elum", "name": "이룸", "order": 0, "icon_version": None}],
         "services": [
             {"id": "elum-web", "order": 0, "name": "이룸 웹", "project_id": "elum", "status": "active",
              "is_public": False, "external": None},

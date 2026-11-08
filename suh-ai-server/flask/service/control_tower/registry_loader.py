@@ -26,7 +26,7 @@ from service.control_tower.registry_parse_helpers import (
 ENV_PLACEHOLDER_PATTERN = re.compile(r"\$\{([A-Z0-9_]+)\}")
 # 최상위에서 허용하는 키
 TOP_LEVEL_KEYS = ("alert", "discord", "projects", "infrastructure", "maintenance")
-PROJECT_KEYS = ("id", "name", "discord", "services")
+PROJECT_KEYS = ("id", "name", "icon_source_url", "discord", "services")
 PROJECT_DISCORD_KEYS = ("channels", "channel_visibility")
 SERVICE_KEYS = ("id", "name", "status", "public", "depends_on", "checks")
 CHECK_KEYS = ("url", "tcp", "expect", "timeout_seconds")
@@ -139,10 +139,23 @@ def _parse_projects(raw: Any, discord: DiscordPolicy, problems: list[str]
             raw_discord.get("channel_visibility"), f"{where}.discord.channel_visibility",
             PROJECT_CHANNEL_KINDS, allowed_role_keys, problems)}
         if project_id:
-            projects.append(ProjectSpec(project_id, project_name, channel_kinds, visibility))
+            icon_source_url = _read_icon_source_url(raw_project, where, problems)
+            projects.append(ProjectSpec(project_id, project_name, channel_kinds, visibility,
+                                        icon_source_url=icon_source_url))
         for service_index, raw_service in enumerate(as_list(raw_project.get("services"), f"{where}.services", problems)):
             services.append(_parse_service(raw_service, project_id, problems, f"{where}.services[{service_index}]"))
     return tuple(projects), tuple(services)
+
+
+def _read_icon_source_url(raw_project: dict, where: str, problems: list[str]) -> str | None:
+    """icon_source_url 생략 가능, 있으면 https:// 주소만"""
+    icon_source_url = raw_project.get("icon_source_url")
+    if icon_source_url is None:
+        return None
+    if not isinstance(icon_source_url, str) or not icon_source_url.startswith("https://"):
+        problems.append(f"{where}.icon_source_url: must be an https:// url")
+        return None
+    return icon_source_url
 
 
 def _read_channel_kinds(raw: Any, where: str, problems: list[str]) -> tuple[str, ...]:

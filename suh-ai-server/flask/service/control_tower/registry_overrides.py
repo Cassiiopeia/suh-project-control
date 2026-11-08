@@ -64,7 +64,8 @@ def _merge_projects(registry: Registry, overrides: RegistryOverrides) -> list[Pr
         _custom_project_spec(custom, registry) for custom in overrides.custom_projects
         if custom.id not in registry_project_ids
     ]
-    return [_override_project(project, overrides.project_overrides.get(project.id))
+    return [replace(_override_project(project, overrides.project_overrides.get(project.id)),
+                    icon_version=overrides.project_icon_versions.get(project.id))
             for project in list(registry.projects) + custom_projects]
 
 

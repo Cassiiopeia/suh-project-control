@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 from service.control_tower.check_runner import CheckResult
 from service.control_tower.invite_store import InviteStoreMixin
 from service.control_tower.override_store import OverrideStoreMixin
+from service.control_tower.project_icon_store import ProjectIconStoreMixin
 from service.control_tower.registry import MaintenanceWindow
 from service.control_tower.state_machine import Observation, ServiceState
 from service.control_tower.store_schema import SCHEMA_STATEMENTS, apply_column_migrations
@@ -53,7 +54,7 @@ def _check_columns(check: CheckResult | None) -> tuple:
     return (int(check.is_ok), int(check.is_slow), check.status_code, check.latency_milliseconds, check.error)
 
 
-class ControlTowerStore(OverrideStoreMixin, InviteStoreMixin):
+class ControlTowerStore(OverrideStoreMixin, InviteStoreMixin, ProjectIconStoreMixin):
     def __init__(self, path: str):
         self._path = path
         self._thread_local = threading.local()

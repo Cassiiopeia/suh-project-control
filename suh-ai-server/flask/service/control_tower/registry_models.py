@@ -64,6 +64,8 @@ class ProjectSpec:
     # 채널 종류 > 볼 수 있는 역할 키 (전역 기본값 + 프로젝트 덮어쓰기 반영 완료)
     channel_visibility: dict[str, tuple[str, ...]] = field(default_factory=dict)
     is_hidden: bool = False  # 관리자 화면에서 숨김 > 공개 페이지 제외 (감시·알림은 유지)
+    icon_source_url: str | None = None  # 기본 썸네일 가져올 https 주소 (등록 파일, 저장소에 이미지 없을 때 1회만)
+    icon_version: str | None = None  # 저장된 썸네일 내용 해시 12자 (없으면 썸네일 없음, 스냅샷에 실림)
 
 
 @dataclass(frozen=True)
@@ -142,7 +144,7 @@ class Registry:
                 "slow_milliseconds": self.alert.slow_milliseconds,
             },
             "projects": [
-                {"id": project.id, "name": project.name, "order": order}
+                {"id": project.id, "name": project.name, "order": order, "icon_version": project.icon_version}
                 for order, project in enumerate(listed_projects)
             ],
             "services": [

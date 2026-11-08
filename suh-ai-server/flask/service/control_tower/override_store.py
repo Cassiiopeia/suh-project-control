@@ -74,7 +74,7 @@ class OverrideStoreMixin:
             for row in connection.execute("SELECT * FROM custom_project ORDER BY created_at, id").fetchall()
         )
         return RegistryOverrides(service_overrides, custom_services, project_overrides, custom_projects,
-                                 self.load_status_page())
+                                 self.load_status_page(), self.load_project_icon_versions())
 
     # ---- 덮어쓰기 (changes 값 None = 그 칸 지움, 전부 비면 행 삭제) ----
 

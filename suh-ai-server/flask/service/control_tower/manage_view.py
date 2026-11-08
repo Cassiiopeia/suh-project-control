@@ -2,6 +2,7 @@
 목록(manage)은 외부 주소만, 상세(service detail)는 내부 점검 대상까지 (관리자 전용)"""
 from __future__ import annotations
 
+import base64
 import os
 from dataclasses import dataclass
 from datetime import datetime
@@ -60,10 +61,11 @@ def build_manage(runtime, context: ManageContext) -> dict:
     states = _current_states(runtime)
     page = context.effective.page
     invites = runtime.store.all_project_invites()
+    icon_images = runtime.store.load_project_icon_images()
     return {
         "page": {"title": page.title, "notice_text": page.notice_text, "notice_level": page.notice_level,
                  "preview_url": os.environ.get(STATUS_PAGE_URL_ENV) or DEFAULT_STATUS_PAGE_URL},
-        "projects": [_project_entry(project, context, invites.get(project.id))
+        "projects": [_project_entry(project, context, invites.get(project.id), icon_images.get(project.id))
                      for project in context.effective.projects],
         "services": [_service_entry(service, context, states)
                      for service in context.effective.services + context.effective.infrastructure],
@@ -100,8 +102,9 @@ def _current_states(runtime) -> dict:
     return dict(snapshot.states) if snapshot is not None else {}
 
 
-def _project_entry(project, context: ManageContext, invite=None) -> dict:
-    """invite_url: 디스코드 초대 링크 (없으면 null)"""
+def _project_entry(project, context: ManageContext, invite=None, icon_image: bytes | None = None) -> dict:
+    """invite_url: 디스코드 초대 링크 (없으면 null), icon_data_url: 썸네일 data URL (없으면 null),
+    icon_source_url: 등록 파일의 기본 이미지 주소 (없으면 null)"""
     override = context.overrides.project_overrides.get(project.id)
     original = next((item for item in context.file_registry.projects if item.id == project.id), None)
     custom = next((item for item in context.overrides.custom_projects if item.id == project.id), None)
@@ -112,7 +115,16 @@ def _project_entry(project, context: ManageContext, invite=None) -> dict:
         "original_name": original.name if original is not None else (custom.name if custom else project.name),
         "overridden_fields": override.overridden_fields() if override else [],
         "invite_url": invite.url if invite is not None else None,
+        "icon_data_url": _to_webp_data_url(icon_image),
+        "icon_source_url": original.icon_source_url if original is not None else None,
     }
+
+
+def _to_webp_data_url(image_bytes: bytes | None) -> str | None:
+    """WebP 바이트 > data URL (관리 화면 미리보기용, 이미지 요청은 API 키 헤더를 못 붙여 본문에 실음)"""
+    if image_bytes is None:
+        return None
+    return "data:image/webp;base64," + base64.b64encode(image_bytes).decode("ascii")
 
 
 def _service_entry(service: ServiceSpec, context: ManageContext, states: dict) -> dict:

@@ -3,6 +3,7 @@
  * 모델 = /api/status.json 본문 그대로 (점검 주소·원인 없음, 공개 서비스·프로젝트의 등록 파일 id는 포함), HTML은 status_render.js
  */
 import { HEARTBEAT_SILENCE_SECONDS } from './emergency.js';
+import { buildProjectIconUrl } from './project_icons.js';
 import { isPubliclyVisibleService, listStatusDays } from './public_rollup.js';
 import { readPageSettings } from './status_page_settings.js';
 import { isPlainObject } from './store.js';
@@ -110,7 +111,7 @@ function selectVisibleProjects(config) {
 }
 
 /**
- * 묶음 요약: 서비스 행 > {project: {id, name, state, uptime_percent, service_count, services}, totalCount, okCount}
+ * 묶음 요약: 서비스 행 > {project: {id, name, icon_url, state, uptime_percent, service_count, services}, totalCount, okCount}
  * 묶음 상태 = 서비스 상태 중 우선순위 최상위, 묶음 가동률 = 서비스 90일 합계 기준
  */
 function summarizeProjectGroup(project, serviceRows) {
@@ -125,6 +126,7 @@ function summarizeProjectGroup(project, serviceRows) {
     project: {
       id: project.id,
       name: project.name,
+      icon_url: buildProjectIconUrl(project),
       state: judgeOverallState(services.map((service) => service.state)),
       uptime_percent: toUptimePercent(totalCount, okCount),
       service_count: services.length,

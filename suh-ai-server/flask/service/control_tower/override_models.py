@@ -68,6 +68,7 @@ class RegistryOverrides:
     project_overrides: dict[str, ProjectOverride] = field(default_factory=dict)
     custom_projects: tuple[CustomProject, ...] = ()
     page: StatusPage = field(default_factory=StatusPage)
+    project_icon_versions: dict[str, str] = field(default_factory=dict)  # project_id > 썸네일 내용 해시 12자
 
 
 EMPTY_OVERRIDES = RegistryOverrides()

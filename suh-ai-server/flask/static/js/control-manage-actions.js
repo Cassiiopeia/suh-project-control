@@ -16,6 +16,10 @@
     discord_not_configured: '디스코드 봇이 설정되지 않았습니다',
     discord_not_synced: '디스코드 동기화를 먼저 실행하세요 (상태 채널·역할 없음)',
     discord_failed: '디스코드 요청에 실패했습니다',
+    invalid_image: '이미지를 읽을 수 없습니다 (PNG·JPEG·WebP·GIF·ICO)',
+    image_too_large: '이미지가 너무 큽니다 (2MB 이하)',
+    icon_fetch_failed: '이미지 주소를 가져오지 못했습니다 (https 공개 주소만 가능)',
+    no_icon: '삭제할 썸네일이 없습니다',
   };
   // 서비스 id 규칙 (서버 검증과 같음)
   const IDENTIFIER_PATTERN = /^[a-z0-9][a-z0-9-]{1,40}$/;
