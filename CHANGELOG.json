@@ -1,14 +1,42 @@
 {
   "metadata": {
-    "lastUpdated": "2026-11-08T05:11:22Z",
-    "currentVersion": "2.0.86",
+    "lastUpdated": "2026-11-08T06:18:17Z",
+    "currentVersion": "2.0.87",
     "projectType": "python",
-    "totalReleases": 82,
+    "totalReleases": 83,
     "projectTypes": [
       "python"
     ]
   },
   "releases": [
+    {
+      "version": "2.0.87",
+      "project_type": "python",
+      "project_types": [
+        "python"
+      ],
+      "date": "2026-11-08",
+      "pr_number": 181,
+      "raw_summary": "## Summary by CodeRabbit\n\n## 릴리스 노트\n\n* **새 기능**\n  * 앱의 확인할 일(새 의견, 신고, AI 이상, 비용 등)을 관제소에서 모아 보는 \"앱 확인할 일\" 화면 추가\n  * 관리 화면에서 앱 연동 등록, 연결 확인, 항목별 표시·이름·수준·알림 규칙 설정\n  * 앱 확인할 일이 생기면 프로젝트별 디스코드 확인할일 채널로 알림, 긴급은 관제-긴급 채널에도 알림\n  * 관리자 대시보드에 앱 확인할 일 카드, 일일 요약에 앱 확인할 일 섹션 추가\n\n* **문서**\n  * 앱 연동 규격(attention v1)과 연동 가이드 추가",
+      "parsed_changes": {
+        "새_기능": {
+          "title": "새 기능",
+          "items": [
+            "앱의 확인할 일(새 의견, 신고, AI 이상, 비용 등)을 관제소에서 모아 보는 \"앱 확인할 일\" 화면 추가",
+            "관리 화면에서 앱 연동 등록, 연결 확인, 항목별 표시·이름·수준·알림 규칙 설정",
+            "앱 확인할 일이 생기면 프로젝트별 디스코드 확인할일 채널로 알림, 긴급은 관제-긴급 채널에도 알림",
+            "관리자 대시보드에 앱 확인할 일 카드, 일일 요약에 앱 확인할 일 섹션 추가"
+          ]
+        },
+        "문서": {
+          "title": "문서",
+          "items": [
+            "앱 연동 규격(attention v1)과 연동 가이드 추가"
+          ]
+        }
+      },
+      "parse_method": "markdown"
+    },
     {
       "version": "2.0.86",
       "project_type": "python",
