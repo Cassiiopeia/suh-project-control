@@ -107,6 +107,18 @@
         <p class="text-sm opacity-70">서비스 상태 감시 · 장애 · 점검 창 · 디스코드 알림 동기화</p>
       </div>
     </a>
+    <!-- 앱 확인할 일: 주의 이상 배지 + 프로젝트 줄 최대 5개 (dashboard-app-attention.js) -->
+    <a href="./control" class="card bg-base-100 shadow-md hover:shadow-xl transition-shadow">
+      <div class="card-body">
+        <h2 class="card-title text-base">
+          <i data-lucide="clipboard-list" class="size-5 text-primary"></i>앱 확인할 일
+          <span id="app-attention-badge" class="badge badge-ghost badge-sm">확인중</span>
+        </h2>
+        <ul id="app-attention-projects" class="space-y-1">
+          <li class="text-sm opacity-70">불러오는 중</li>
+        </ul>
+      </div>
+    </a>
     <a href="./palworld" class="card bg-base-100 shadow-md hover:shadow-xl transition-shadow">
       <div class="card-body">
         <h2 class="card-title text-base">
@@ -194,4 +206,6 @@
 {% block extra_js %}
 <script src="{{ root }}/static/js/dashboard.js?v={{ asset('js/dashboard.js') }}"></script>
 <script src="{{ root }}/static/js/dashboard-control.js?v={{ asset('js/dashboard-control.js') }}"></script>
+<script src="{{ root }}/static/js/control-app-attention-format.js?v={{ asset('js/control-app-attention-format.js') }}"></script>
+<script src="{{ root }}/static/js/dashboard-app-attention.js?v={{ asset('js/dashboard-app-attention.js') }}"></script>
 {% endblock %}

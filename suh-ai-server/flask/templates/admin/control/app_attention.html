@@ -1,0 +1,14 @@
+{# 관제소 현황 탭: 앱 확인할 일 (프로젝트별 카드 > 그룹별 항목, 정상 항목 접기, 연동 끊김 줄). control-app-attention.js가 채움 #}
+<div class="card bg-base-100 shadow border border-base-300">
+  <div class="card-body">
+    <h2 class="card-title text-base flex flex-wrap items-center gap-2">
+      <i data-lucide="clipboard-list" class="size-5 text-primary"></i>앱 확인할 일
+      <span id="control-app-attention-count" class="badge badge-ghost badge-sm">-</span>
+      <span id="control-app-attention-failing" class="badge badge-ghost badge-sm" hidden></span>
+    </h2>
+    <p class="text-xs opacity-60">각 앱이 알려 준 처리할 일입니다. 항목을 누르면 앱 관리자 화면이 새 탭으로 열립니다.</p>
+    <div id="control-app-attention-projects" class="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-2">
+      <div class="opacity-60 text-sm">불러오는 중</div>
+    </div>
+  </div>
+</div>

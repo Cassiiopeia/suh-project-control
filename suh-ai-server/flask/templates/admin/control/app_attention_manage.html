@@ -1,0 +1,21 @@
+{# 관제소 서비스 관리 탭: 앱 연동 (확인할 일 소스 목록·추가·수정·삭제·연결 확인·항목 설정). control-manage-app-attention.js가 채움 #}
+<div class="card bg-base-100 shadow border border-base-300">
+  <div class="card-body">
+    <div class="flex flex-wrap items-center gap-2">
+      <h2 class="card-title text-base flex items-center gap-2">
+        <i data-lucide="plug" class="size-5 text-primary"></i>앱 연동
+        <span id="control-attention-source-count" class="badge badge-ghost badge-sm">-</span>
+      </h2>
+      <button id="control-attention-source-add" type="button" class="btn btn-primary btn-sm ml-auto">
+        <i data-lucide="plus" class="size-4"></i>추가
+      </button>
+    </div>
+    <p class="text-xs opacity-60">앱이 알려 주는 확인할 일(새 의견, 검수 대기, 비용 등)을 가져오는 소스입니다. 저장하면 다음 점검(60초 안)부터 수집합니다. 토큰 값은 서버 .env에만 두고 화면에는 설정 여부만 보입니다.</p>
+    <div class="overflow-x-auto">
+      <table class="table table-sm">
+        <thead><tr><th>소스</th><th>수집</th><th>토큰</th><th>마지막 결과</th><th></th></tr></thead>
+        <tbody id="control-attention-source-body"><tr><td colspan="5" class="opacity-60">불러오는 중</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
