@@ -12,19 +12,23 @@ from service.control_tower.discord_sync_models import (
     ROLE_OVERWRITE_TYPE, VIEW_CHANNEL_PERMISSION, SyncOperation, role_reference,
 )
 from service.control_tower.registry import ProjectSpec, Registry
+from service.control_tower.registry_models import ATTENTION_CHANNEL_KIND
 
 
 def plan_sync(registry: Registry, current_channels: list[dict], current_roles: list[dict], guild_id: str,
-              bindings: dict[tuple[str, str], str]) -> list[SyncOperation]:
-    """동기화 계획: 역할 > 카테고리 > 전역 채널 > 프로젝트 채널 > 보관 (변경 없으면 빈 목록)"""
-    planner = _SyncPlanner(registry, current_channels, current_roles, guild_id, bindings)
+              bindings: dict[tuple[str, str], str],
+              attention_project_ids: frozenset[str] = frozenset()) -> list[SyncOperation]:
+    """동기화 계획: 역할 > 카테고리 > 전역 채널 > 프로젝트 채널 > 보관 (변경 없으면 빈 목록)
+    attention_project_ids: 앱 확인할 일 소스가 있는 프로젝트 (이 프로젝트만 attention 채널 계획)"""
+    planner = _SyncPlanner(registry, current_channels, current_roles, guild_id, bindings, attention_project_ids)
     return planner.plan()
 
 
 class _SyncPlanner:
     def __init__(self, registry: Registry, current_channels: list[dict], current_roles: list[dict], guild_id: str,
-                 bindings: dict[tuple[str, str], str]):
+                 bindings: dict[tuple[str, str], str], attention_project_ids: frozenset[str]):
         self._registry = registry
+        self._attention_project_ids = attention_project_ids
         self._policy = registry.discord
         self._channels = current_channels
         self._channel_by_id = {str(channel["id"]): channel for channel in current_channels}
@@ -48,11 +52,16 @@ class _SyncPlanner:
         for kind, visible_role_keys in self._policy.global_channels.items():
             self._plan_channel(GLOBAL_SCOPE, kind, visible_role_keys, parent_scope=None)
         for project in self._registry.projects:
-            for kind in project.channel_kinds:
+            for kind in self._planned_channel_kinds(project):
                 visible_role_keys = project.channel_visibility.get(kind, self._policy.channel_visibility.get(kind, ()))
                 self._plan_channel(project.id, kind, visible_role_keys, parent_scope=project.id)
         self._plan_archives()
         return self._operations
+
+    def _planned_channel_kinds(self, project: ProjectSpec) -> tuple[str, ...]:
+        """프로젝트 채널 종류 중 이번에 계획할 것 (attention은 소스 있는 프로젝트만, 없어진 뒤 기존 채널은 건드리지 않음)"""
+        return tuple(kind for kind in project.channel_kinds
+                     if kind != ATTENTION_CHANNEL_KIND or project.id in self._attention_project_ids)
 
     # ---- 역할 ----
 

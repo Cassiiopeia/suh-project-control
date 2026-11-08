@@ -22,7 +22,7 @@ def test_loads_defaults_and_inherits_project(tmp_path):
     assert elum_api.external.kind == "http"
     assert elum_api.external.expect == (200,)
     assert elum_api.external.timeout_seconds == 10
-    assert registry.projects[0].channel_kinds == ("status", "error", "report", "deploy")
+    assert registry.projects[0].channel_kinds == ("status", "error", "report", "deploy", "attention")
     assert registry.discord.admin_role_name == "관리자"
     assert registry.discord.global_channels["alert"] == ("admin",)
 
