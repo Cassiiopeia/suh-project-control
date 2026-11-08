@@ -1,14 +1,39 @@
 {
   "metadata": {
-    "lastUpdated": "2026-11-08T04:45:06Z",
-    "currentVersion": "2.0.85",
+    "lastUpdated": "2026-11-08T05:11:22Z",
+    "currentVersion": "2.0.86",
     "projectType": "python",
-    "totalReleases": 81,
+    "totalReleases": 82,
     "projectTypes": [
       "python"
     ]
   },
   "releases": [
+    {
+      "version": "2.0.86",
+      "project_type": "python",
+      "project_types": [
+        "python"
+      ],
+      "date": "2026-11-08",
+      "pr_number": 179,
+      "raw_summary": "## Summary by CodeRabbit\n\n## 릴리스 노트\n\n* **버그 수정**\n  * 서버가 쓰는 라이브러리의 보안 취약점(Dependabot 경고 67건)을 해결한 버전으로 올림\n\n* **기타**\n  * 관리자 화면 빌드 도구 의존성 보안 패치 및 설치 주소 정리",
+      "parsed_changes": {
+        "버그_수정": {
+          "title": "버그 수정",
+          "items": [
+            "서버가 쓰는 라이브러리의 보안 취약점(Dependabot 경고 67건)을 해결한 버전으로 올림"
+          ]
+        },
+        "기타": {
+          "title": "기타",
+          "items": [
+            "관리자 화면 빌드 도구 의존성 보안 패치 및 설치 주소 정리"
+          ]
+        }
+      },
+      "parse_method": "markdown"
+    },
     {
       "version": "2.0.85",
       "project_type": "python",
