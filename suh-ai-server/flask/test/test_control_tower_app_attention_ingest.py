@@ -249,3 +249,12 @@ def test_preview는_DB와_발송을_바꾸지_않고_요약을_돌려준다(stor
     assert invalid["result"] == "invalid" and invalid["error_label"] in invalid["errors"]
     failed = ingest.preview(source, FetchOutcome("unauthorized", None, None, "token_missing"))
     assert (failed["result"], failed["error_label"], failed["items"]) == ("unauthorized", "token_missing", [])
+
+
+def test_generated_at이_5분_넘게_미래면_invalid로_기록하고_이후_스냅샷을_막지_않는다(store, ingest, source):
+    ingest.ingest(source, _ok(0), _at(0))
+    report = ingest.ingest(source, _ok(30, items=[_feedback(99, 99)]), _at(1))
+    state = store.get_attention_source_state("elum", "api")
+    assert (report.result, state.last_error, state.last_generated_at) == ("invalid", "future_generated_at", _at(0))
+    assert ingest.ingest(source, _ok(2, items=[_feedback(4, 11)]), _at(2)).result == "ok"
+    assert _stored_count(store) == 4

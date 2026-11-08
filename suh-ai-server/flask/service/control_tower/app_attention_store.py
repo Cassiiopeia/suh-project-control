@@ -3,103 +3,16 @@
 from __future__ import annotations
 
 import dataclasses
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Iterable, Mapping
 
+from service.control_tower.app_attention_store_models import (  # noqa: F401  (모델 공개 위치)
+    AttentionItemAlertState, AttentionItemOverride, AttentionSource, AttentionSourceState, StoredAttentionItem,
+    new_attention_source_state,
+)
+
 ATTENTION_HISTORY_RETENTION = timedelta(days=90)
 ATTENTION_MISSING_ITEM_RETENTION = timedelta(days=7)  # 스냅샷에서 빠진 항목 보관 (앱 배포 실수 보호)
-
-
-@dataclass(frozen=True)
-class AttentionSource:
-    project_id: str
-    source_id: str
-    url: str
-    is_enabled: bool
-    mode: str  # pull, push, both
-    interval_seconds: int
-    timeout_seconds: int
-    stale_after_seconds: int
-    created_at: datetime
-    updated_at: datetime
-
-
-@dataclass(frozen=True)
-class AttentionSourceState:
-    project_id: str
-    source_id: str
-    last_attempt_at: datetime | None
-    last_success_at: datetime | None
-    last_result: str | None  # FETCH_RESULTS 분류
-    last_error: str | None
-    consecutive_failures: int
-    etag: str | None
-    last_generated_at: datetime | None  # 마지막으로 반영한 스냅샷 시각
-    app: str | None
-    app_version: str | None
-    environment: str | None
-    is_baseline_done: bool  # 첫 성공 반영 후 True (그 전 스냅샷은 알림 없이 기준선)
-    failure_alerted_at: datetime | None  # 연동 끊김 알림을 보낸 시각 (복구 시 알림 후 None)
-    next_due_at: datetime | None = None  # 앱이 poll_after_seconds로 요청한 다음 수집 시각
-
-
-@dataclass(frozen=True)
-class StoredAttentionItem:
-    project_id: str
-    source_id: str
-    key: str
-    kind: str
-    label: str
-    level: str
-    group: str | None
-    description: str | None
-    admin_url: str | None
-    latest_at: datetime | None
-    detail: str | None
-    count: int | None
-    total: int | None
-    value: float | None
-    limit: float | None
-    unit: str | None
-    state: str | None
-    raw_json: str | None
-    first_seen_at: datetime
-    updated_at: datetime
-    missing_since: datetime | None  # 스냅샷에서 빠진 시각 (None = 현재 보고 중)
-
-
-@dataclass(frozen=True)
-class AttentionItemOverride:
-    project_id: str
-    source_id: str
-    key: str
-    is_hidden: bool | None = None
-    label: str | None = None
-    level_policy: str | None = None
-    alert_rule: str | None = None
-    threshold: float | None = None
-    channel_kind: str | None = None
-    mention_role: str | None = None  # 스펙 5.4 열 (알림 멘션 역할, 지금은 저장만)
-
-
-@dataclass(frozen=True)
-class AttentionItemAlertState:
-    project_id: str
-    source_id: str
-    key: str
-    last_alerted_at: datetime | None = None
-    last_alerted_total: int | None = None
-    last_alerted_count: int | None = None
-    last_alerted_level: str | None = None
-    is_threshold_exceeded: bool = False
-    pending_new_count: int = 0  # new 쿨다운 중 쌓인 증가분
-
-
-def new_attention_source_state(project_id: str, source_id: str) -> AttentionSourceState:
-    """아직 수집한 적 없는 소스의 빈 상태"""
-    return AttentionSourceState(project_id, source_id, None, None, None, None, 0, None, None, None, None, None,
-                                False, None)
 
 
 def _to_text(moment: datetime) -> str:
@@ -282,6 +195,25 @@ class AppAttentionStoreMixin:
                 [_to_column(getattr(state, name)) for name in attempt_columns] + [project_id, source_id])
             if updated.rowcount == 0:
                 _replace_row(connection, "app_attention_source_state", state)
+
+    # ---- 발송 실패 되돌림 (다음 처리에서 다시 평가) ----
+
+    def save_attention_alert_states(self, project_id: str, source_id: str,
+                                    alert_states: Iterable[AttentionItemAlertState]) -> None:
+        """알림 기준 일부 교체 (나머지 key 유지). 소스가 없으면 무시"""
+        with self._write_transaction() as connection:
+            if not _source_exists(connection, project_id, source_id):
+                return
+            for alert_state in alert_states:
+                _replace_row(connection, "app_attention_item_alert", alert_state)
+
+    def save_attention_failure_alerted_at(self, project_id: str, source_id: str,
+                                          failure_alerted_at: datetime | None) -> None:
+        """끊김 알림 시각만 교체 (상태 행이 없으면 무시)"""
+        with self._write_transaction() as connection:
+            connection.execute(
+                "UPDATE app_attention_source_state SET failure_alerted_at = ? WHERE project_id = ? AND source_id = ?",
+                (_to_column(failure_alerted_at), project_id, source_id))
 
     # ---- 보관 정리 ----
 

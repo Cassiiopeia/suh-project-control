@@ -41,6 +41,14 @@ class AlertLine:
 
 
 @dataclass(frozen=True)
+class ItemAlertEvaluation:
+    """항목 전체 평가 결과"""
+    lines: list[AlertLine]
+    next_states: dict[str, AttentionItemAlertState]  # 발송 성공·줄 없음일 때 저장할 기준 (key > 기준)
+    undelivered_states: dict[str, AttentionItemAlertState]  # 줄 있는 key만: 발송 실패 시 저장할 기준 (처리 전 기준 유지)
+
+
+@dataclass(frozen=True)
 class _Baseline:
     """항목 1건의 비교 기준 (알림 기준 우선, 없으면 이전 저장 항목)"""
     total: int | None
@@ -53,11 +61,12 @@ class _Baseline:
 
 def evaluate_item_alerts(effective_items: list[EffectiveItem], previous_items: dict[str, StoredAttentionItem],
                          alert_states: dict[str, AttentionItemAlertState], is_baseline: bool, is_production: bool,
-                         now: datetime) -> tuple[list[AlertLine], dict[str, AttentionItemAlertState]]:
-    """항목 전체 평가: 항목별 기준 > 규칙별 줄 판정 > 다음 기준 (숨김·off·ok·기준선·비production도 기준은 갱신)
+                         now: datetime) -> ItemAlertEvaluation:
+    """항목 전체 평가: 항목별 기준 > 규칙별 줄 판정 > 다음 기준·발송 실패 시 기준 (숨김·off·ok·기준선·비production도 기준은 갱신)
     기준이 전혀 없는 새 key는 이번 값을 기준으로만 저장 (알림 없음)"""
     lines: list[AlertLine] = []
     next_states: dict[str, AttentionItemAlertState] = {}
+    undelivered_states: dict[str, AttentionItemAlertState] = {}
     can_alert = not is_baseline and is_production
     for effective in effective_items:
         key = effective.item.key
@@ -70,8 +79,9 @@ def evaluate_item_alerts(effective_items: list[EffectiveItem], previous_items: d
         line, next_state = _evaluate_one(effective, baseline, alert_state, is_alertable, now)
         if line is not None:
             lines.append(line)
+            undelivered_states[key] = _hold_undelivered_state(effective, baseline, alert_state, next_state)
         next_states[key] = next_state
-    return lines, next_states
+    return ItemAlertEvaluation(lines, next_states, undelivered_states)
 
 
 def evaluate_source_health(source: AttentionSource, state: AttentionSourceState | None, is_project_down: bool,
@@ -109,7 +119,8 @@ def _resolve_baseline(effective: EffectiveItem, previous_item: StoredAttentionIt
                              previous_item.count if previous_item else None),
         level=_first_present(alert_state.last_alerted_level if alert_state else None,
                              _previous_effective_level(effective, previous_item)),
-        state=previous_item.state if previous_item is not None else None,
+        state=_first_present(alert_state.last_alerted_state if alert_state else None,
+                             previous_item.state if previous_item else None),
         value=previous_value,
         is_threshold_exceeded=is_threshold_exceeded,
     )
@@ -121,8 +132,8 @@ def _evaluate_one(effective: EffectiveItem, baseline: _Baseline | None, alert_st
     item = effective.item
     is_exceeded = _is_threshold_exceeded(item.value, effective.threshold)
     next_state = replace(alert_state, last_alerted_total=item.total, last_alerted_count=item.count,
-                         last_alerted_level=effective.level, is_threshold_exceeded=is_exceeded,
-                         pending_new_count=0)
+                         last_alerted_level=effective.level, last_alerted_state=item.state,
+                         is_threshold_exceeded=is_exceeded, pending_new_count=0)
     if not is_alertable:
         return None, next_state
 
@@ -148,13 +159,7 @@ def _evaluate_new(effective: EffectiveItem, baseline: _Baseline, alert_state: At
                   now: datetime) -> tuple[AlertLine | None, AttentionItemAlertState]:
     """new: 증가분(total 둘 다 있으면 total 차이, 아니면 count 차이) > 쿨다운 안이면 누적, 지나면 누적+증가분 1줄"""
     item = effective.item
-    if item.total is not None and baseline.total is not None:
-        increase = item.total - baseline.total
-    elif item.count is not None and baseline.count is not None:
-        increase = item.count - baseline.count
-    else:
-        increase = 0
-    pending_count = alert_state.pending_new_count + max(increase, 0)
+    pending_count = alert_state.pending_new_count + _new_increase(effective, baseline)
     is_in_cooldown = alert_state.last_alerted_at is not None \
         and now - alert_state.last_alerted_at < NEW_ALERT_COOLDOWN
     # 유효 수준 ok: 줄 없음, 누적도 버림
@@ -168,6 +173,28 @@ def _evaluate_new(effective: EffectiveItem, baseline: _Baseline, alert_state: At
         text += f", 지금 {current_count}{item.unit or DEFAULT_COUNT_UNIT}"
     line = _build_line(effective, effective.level, text, is_recovery=False)
     return line, replace(next_state, last_alerted_at=now)
+
+
+def _new_increase(effective: EffectiveItem, baseline: _Baseline) -> int:
+    """new 증가분: total 둘 다 있으면 total 차이, 아니면 count 차이 (줄어든 것은 0)"""
+    item = effective.item
+    if item.total is not None and baseline.total is not None:
+        return max(item.total - baseline.total, 0)
+    if item.count is not None and baseline.count is not None:
+        return max(item.count - baseline.count, 0)
+    return 0
+
+
+def _hold_undelivered_state(effective: EffectiveItem, baseline: _Baseline, alert_state: AttentionItemAlertState,
+                            next_state: AttentionItemAlertState) -> AttentionItemAlertState:
+    """발송 실패 시 기준: 보낸 시각 유지 + new는 이번 증가분까지 pending_new_count에 누적,
+    그 외 규칙은 처리 전 비교 기준(수준·상태·기준 넘김) 유지 > 다음 처리에서 같은 줄 재평가"""
+    if effective.rule == ALERT_RULE_NEW:
+        pending_count = alert_state.pending_new_count + _new_increase(effective, baseline)
+        return replace(next_state, last_alerted_at=alert_state.last_alerted_at, pending_new_count=pending_count)
+    return replace(alert_state, last_alerted_total=baseline.total, last_alerted_count=baseline.count,
+                   last_alerted_level=baseline.level, last_alerted_state=baseline.state,
+                   is_threshold_exceeded=baseline.is_threshold_exceeded)
 
 
 def _evaluate_threshold(effective: EffectiveItem, baseline: _Baseline, is_exceeded: bool) -> AlertLine | None:

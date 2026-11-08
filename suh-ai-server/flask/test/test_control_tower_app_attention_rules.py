@@ -54,11 +54,11 @@ class _Sequence:
     def evaluate(self, item: AttentionItem, now: datetime, is_baseline: bool = False,
                  is_production: bool = True) -> list[AlertLine]:
         effective = resolve_effective_item(item, self.override)
-        lines, next_states = evaluate_item_alerts([effective], self.previous_items, self.alert_states, is_baseline,
-                                                  is_production, now)
-        self.alert_states.update(next_states)
+        evaluation = evaluate_item_alerts([effective], self.previous_items, self.alert_states, is_baseline,
+                                          is_production, now)
+        self.alert_states.update(evaluation.next_states)
         self.previous_items[item.key] = _stored(item)
-        return lines
+        return evaluation.lines
 
 
 def _line(level: str = "warning", channel_kind: str = DEFAULT_CHANNEL_KIND, key: str = "feedback.new",
@@ -156,10 +156,10 @@ def test_기준선이나_비production이면_알리지_않고_기준만_현재�
 
 
 def test_처음_보는_key는_기준만_저장하고_알리지_않는다():
-    lines, next_states = evaluate_item_alerts([resolve_effective_item(_count_item(count=50, total=50), None)], {}, {},
-                                              False, True, BASE_TIME)
-    assert lines == []
-    assert next_states["feedback.new"].last_alerted_total == 50
+    evaluation = evaluate_item_alerts([resolve_effective_item(_count_item(count=50, total=50), None)], {}, {},
+                                      False, True, BASE_TIME)
+    assert evaluation.lines == [] and evaluation.undelivered_states == {}
+    assert evaluation.next_states["feedback.new"].last_alerted_total == 50
 
 
 def test_숨김_off_유효수준_ok는_알리지_않지만_기준은_갱신한다():
@@ -189,7 +189,10 @@ def test_유효_설정은_덮어쓰기가_앱_값과_기본_규칙보다_우선�
 def test_알림은_채널별_1건으로_묶고_critical이_있으면_전역_긴급을_추가한다():
     lines = [_line("warning"), _line("critical", key="batch.status", admin_url=None, text="상태 ok > down"),
              _line("info", channel_kind="report", key="report.weekly")]
-    notifications = build_item_notifications(PROJECT_ID, "elum", SOURCE_ID, lines, "tick1")
+    item_notifications = build_item_notifications(PROJECT_ID, "elum", SOURCE_ID, lines, "tick1")
+    notifications = [item_notification.notification for item_notification in item_notifications]
+    assert [item_notification.keys for item_notification in item_notifications] == [
+        ("feedback.new", "batch.status"), ("report.weekly",), ("batch.status",)]
     by_target = {(notification.scope, notification.kind): notification for notification in notifications}
     assert set(by_target) == {(PROJECT_ID, DEFAULT_CHANNEL_KIND), (PROJECT_ID, "report"),
                               (GLOBAL_SCOPE, INFRASTRUCTURE_KIND)}
@@ -206,7 +209,8 @@ def test_알림은_채널별_1건으로_묶고_critical이_있으면_전역_긴�
 
 
 def test_critical_없으면_전역_긴급이_없고_warning이_최고_심각도다():
-    notifications = build_item_notifications(PROJECT_ID, "elum", SOURCE_ID, [_line("info"), _line("warning")], "t")
+    notifications = [item_notification.notification for item_notification in
+                     build_item_notifications(PROJECT_ID, "elum", SOURCE_ID, [_line("info"), _line("warning")], "t")]
     assert [(notification.scope, notification.severity) for notification in notifications] == [(PROJECT_ID, "warning")]
 
 
@@ -214,7 +218,7 @@ def test_본문이_한도를_넘으면_높은_수준_줄부터_남기고_외_N�
     long_text = "가" * 300
     lines = [_line("info", key=f"item.info{index}", text=long_text) for index in range(30)]
     lines.append(_line("critical", key="item.critical", text=long_text))
-    notification = build_item_notifications(PROJECT_ID, "elum", SOURCE_ID, lines, "t")[0]
+    notification = build_item_notifications(PROJECT_ID, "elum", SOURCE_ID, lines, "t")[0].notification
     assert len(notification.body) <= DESCRIPTION_MAX_LENGTH
     body_lines = notification.body.split("\n")
     assert body_lines[-1] == f"외 {31 - (len(body_lines) - 1)}건"
@@ -225,7 +229,7 @@ def test_본문이_한도를_넘으면_높은_수준_줄부터_남기고_외_N�
 def test_링크_이름의_대괄호와_주소의_괄호는_마크다운이_깨지지_않게_바꾼다():
     line = AlertLine(key="a.b", label="[중요] 의견", level="info", admin_url="https://x.example/a_(b)", text="+1",
                      channel_kind=DEFAULT_CHANNEL_KIND, is_recovery=False)
-    notification = build_item_notifications(PROJECT_ID, "elum", SOURCE_ID, [line], "t")[0]
+    notification = build_item_notifications(PROJECT_ID, "elum", SOURCE_ID, [line], "t")[0].notification
     assert notification.body == "• [\\[중요\\] 의견](https://x.example/a_%28b%29) +1"
 
 

@@ -2,6 +2,8 @@
 순수 함수. 본문은 임베드 본문 한도 안 (넘치면 높은 수준 줄부터 남기고 "외 N건")"""
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from service.control_tower.alert_planner import (
     GLOBAL_SCOPE, INFRASTRUCTURE_KIND, SEVERITY_CRITICAL, SEVERITY_INFO, SEVERITY_RECOVERED, Notification,
 )
@@ -23,8 +25,15 @@ LINK_LABEL_ESCAPES = {"[": "\\[", "]": "\\]"}
 LINK_URL_ESCAPES = {"(": "%28", ")": "%29"}
 
 
+@dataclass(frozen=True)
+class ItemNotification:
+    """항목 알림 1건 + 담긴 줄의 key (발송 실패 시 되돌릴 대상)"""
+    notification: Notification
+    keys: tuple[str, ...]
+
+
 def build_item_notifications(project_id: str, project_name: str, source_id: str, lines: list[AlertLine],
-                             dedupe_suffix: str) -> list[Notification]:
+                             dedupe_suffix: str) -> list[ItemNotification]:
     """알림 줄 > 채널 종류별 1건 (등장 순서) + critical 줄 있으면 전역 긴급 1건 (critical 줄만)"""
     lines_by_channel_kind: dict[str, list[AlertLine]] = {}
     for line in lines:
@@ -32,13 +41,13 @@ def build_item_notifications(project_id: str, project_name: str, source_id: str,
     title = f"{project_name} 확인할 일"
     dedupe_prefix = f"attention:{project_id}:{source_id}:{dedupe_suffix}"
     notifications = [
-        _build_notification(project_id, channel_kind, title, channel_lines, f"{dedupe_prefix}:{channel_kind}")
+        _build_item_notification(project_id, channel_kind, title, channel_lines, f"{dedupe_prefix}:{channel_kind}")
         for channel_kind, channel_lines in lines_by_channel_kind.items()
     ]
     critical_lines = [line for line in lines if line.level == LEVEL_CRITICAL]
     if critical_lines:
-        notifications.append(_build_notification(GLOBAL_SCOPE, INFRASTRUCTURE_KIND, title, critical_lines,
-                                                  f"{dedupe_prefix}:{GLOBAL_SCOPE}"))
+        notifications.append(_build_item_notification(GLOBAL_SCOPE, INFRASTRUCTURE_KIND, title, critical_lines,
+                                                       f"{dedupe_prefix}:{GLOBAL_SCOPE}"))
     return notifications
 
 
@@ -56,6 +65,12 @@ def build_source_health_notification(project_id: str, project_name: str, source_
         title=f"{project_name} 확인할 일 {status_text}", body=body, service_ids=(),
         dedupe_key=f"attention:{project_id}:{source_id}:{verdict}",
     )
+
+
+def _build_item_notification(scope: str, kind: str, title: str, lines: list[AlertLine],
+                             dedupe_key: str) -> ItemNotification:
+    return ItemNotification(_build_notification(scope, kind, title, lines, dedupe_key),
+                            tuple(line.key for line in lines))
 
 
 def _build_notification(scope: str, kind: str, title: str, lines: list[AlertLine], dedupe_key: str) -> Notification:

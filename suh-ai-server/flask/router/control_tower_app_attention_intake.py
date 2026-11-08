@@ -22,6 +22,10 @@ def register_app_attention_intake(blueprint: Blueprint) -> None:
                            _receive_snapshot, methods=["POST"])
 
 
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 def _error(code: str, status_code: int):
     return jsonify({"error": code}), status_code
 
@@ -54,7 +58,7 @@ def _receive_snapshot(project_id: str, source_id: str):
         return _error("source_disabled", 403)
 
     report = runtime.app_attention_ingest.ingest(source, FetchOutcome(FETCH_RESULT_OK, document, None, None),
-                                                 datetime.now(timezone.utc))
+                                                 _now())
     logger.info("[control-tower app-attention] push accepted : %s/%s result=%s dropped=%d",
                 project_id, source_id, report.result, len(report.dropped_items))
     return jsonify({"result": report.result,

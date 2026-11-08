@@ -173,6 +173,7 @@ SCHEMA_STATEMENTS = (
         last_alerted_at TEXT, last_alerted_total INTEGER, last_alerted_count INTEGER, last_alerted_level TEXT,
         is_threshold_exceeded INTEGER NOT NULL DEFAULT 0,
         pending_new_count INTEGER NOT NULL DEFAULT 0,
+        last_alerted_state TEXT,
         PRIMARY KEY (project_id, source_id, "key")
     )""",
     # 항목 값 이력 (값이 바뀔 때만 1행, 90일 보관)
@@ -190,6 +191,7 @@ SCHEMA_STATEMENTS = (
 # 기존 DB에 없으면 추가하는 열: (테이블, 열 이름, 열 정의)
 COLUMN_MIGRATIONS = (
     ("incident", "is_within_maintenance", "INTEGER NOT NULL DEFAULT 0"),
+    ("app_attention_item_alert", "last_alerted_state", "TEXT"),
 )
 
 

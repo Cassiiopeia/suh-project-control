@@ -198,7 +198,7 @@ kind별
 - 한 프로젝트에 소스 여러 개 가능 (예: elum의 api 서버, 배치 서버). 식별: `(project_id, source_id)`.
 - 등록은 **관제소 관리자 화면에서**(DB 저장). services.yml은 건드리지 않음 (`PROJECT_KEYS` 확장 불필요).
 - 소스의 프로젝트는 관제소에 등록된 프로젝트만 허용 (services.yml + #159 관리 화면에서 추가한 프로젝트). 새 앱은 관리 화면에서 프로젝트를 추가하면 되므로 재배포 없음. 채널, 다운 억제는 기존 프로젝트 구조 그대로. [내 결정]
-- 토큰 값은 DB에 두지 않고 환경변수(`CONTROL_PULL_TOKEN_<PROJECT>_<SOURCE>`, `_PREVIOUS`)만 사용. 화면에는 "설정됨 / 없음"만.
+- 토큰 값은 DB에 두지 않고 환경변수(`CONTROL_PULL_TOKEN_<PROJECT>__<SOURCE>`, `_PREVIOUS`)만 사용. 화면에는 "설정됨 / 없음"만.
 - 소스 설정 필드: `url`(https 또는 내부망 http, `${ENV}` 치환 허용), `is_enabled`, `mode`(`pull` / `push` / `both`), `interval_seconds`(기본 60, 60~3600, 폴러 틱이 60초라 그 아래는 의미 없음), `timeout_seconds`(기본 5, 1~10), `stale_after_seconds`(기본 interval×5).
 
 ### 5.3 수집 (pull) 과 받기 (push) 의 공통 처리

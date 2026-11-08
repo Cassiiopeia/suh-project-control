@@ -159,7 +159,7 @@ def _read_icon_source_url(raw_project: dict, where: str, problems: list[str]) ->
 
 
 def _read_channel_kinds(raw: Any, where: str, problems: list[str]) -> tuple[str, ...]:
-    """discord.channels 생략 시 4종 전부"""
+    """discord.channels 생략 시 PROJECT_CHANNEL_KINDS 전부"""
     if raw is None:
         return PROJECT_CHANNEL_KINDS
     channel_kinds = read_role_keys(raw, f"{where}.discord.channels", problems)

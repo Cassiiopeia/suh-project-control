@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 
@@ -11,6 +11,7 @@ from control_tower_admin_fixtures import REGISTRY, dispatcher, store  # noqa: F4
 from control_tower_app_attention_api_fixtures import (  # noqa: F401
     BASE_TIME, attention_client, feedback_item, ingest, ingest_snapshot, save_source, snapshot_document,
 )
+from router import control_tower_app_attention_intake
 from service.control_tower.app_attention_fetch import FetchOutcome
 from service.control_tower.app_attention_store import new_attention_source_state
 from service.control_tower.app_attention_view import build_app_attention_summary
@@ -25,6 +26,12 @@ PUSH_PATH = "/control/attention/elum/api"
 def event_token(monkeypatch):
     monkeypatch.setenv(EVENT_TOKEN_ENV, CURRENT_TOKEN)
     monkeypatch.delenv(EVENT_TOKEN_ENV + "_PREVIOUS", raising=False)
+
+
+@pytest.fixture(autouse=True)
+def fixed_clock(monkeypatch):
+    # 스냅샷 시각(BASE_TIME 기준) 뒤로 고정 (실제 시계면 미래 시각 거부에 걸림)
+    monkeypatch.setattr(control_tower_app_attention_intake, "_now", lambda: BASE_TIME + timedelta(minutes=10))
 
 
 def _push(client, body, token: str = CURRENT_TOKEN, path: str = PUSH_PATH):

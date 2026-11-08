@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import dataclasses
+import sqlite3
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -253,3 +254,23 @@ def test_기존_테이블이_있는_db를_다시_초기화해도_안전하다(st
     store.save_attention_source(_source())
     store.initialize()
     assert store.get_attention_source(PROJECT_ID, SOURCE_ID) is not None
+
+
+def test_last_alerted_state_열이_없는_기존_알림_기준_표에_열을_추가하고_행을_유지한다(tmp_path):
+    path = str(tmp_path / "old.db")
+    with sqlite3.connect(path) as connection:
+        connection.execute('CREATE TABLE app_attention_item_alert (project_id TEXT NOT NULL, source_id TEXT NOT NULL, '
+                           '"key" TEXT NOT NULL, last_alerted_at TEXT, last_alerted_total INTEGER, '
+                           'last_alerted_count INTEGER, last_alerted_level TEXT, '
+                           'is_threshold_exceeded INTEGER NOT NULL DEFAULT 0, '
+                           'pending_new_count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (project_id, source_id, "key"))')
+        connection.execute("INSERT INTO app_attention_item_alert (project_id, source_id, \"key\", pending_new_count) "
+                           "VALUES (?, ?, 'feedback.new', 2)", (PROJECT_ID, SOURCE_ID))
+    connection.close()
+    old_store = ControlTowerStore(path)
+    old_store.initialize()
+    old_store.initialize()  # 반복 실행 안전
+
+    alert_state = old_store.load_attention_alert_states(PROJECT_ID, SOURCE_ID)["feedback.new"]
+    old_store.close()
+    assert (alert_state.pending_new_count, alert_state.last_alerted_state) == (2, None)
