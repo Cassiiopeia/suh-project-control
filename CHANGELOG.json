@@ -1,14 +1,39 @@
 {
   "metadata": {
-    "lastUpdated": "2026-11-10T12:35:05Z",
-    "currentVersion": "2.0.90",
+    "lastUpdated": "2026-11-10T12:46:01Z",
+    "currentVersion": "2.0.91",
     "projectType": "python",
-    "totalReleases": 86,
+    "totalReleases": 87,
     "projectTypes": [
       "python"
     ]
   },
   "releases": [
+    {
+      "version": "2.0.91",
+      "project_type": "python",
+      "project_types": [
+        "python"
+      ],
+      "date": "2026-11-10",
+      "pr_number": 189,
+      "raw_summary": "## Summary by CodeRabbit\n\n## 릴리스 노트\n\n* **버그 수정**\n  * 암호화 라이브러리 보안 취약점 4건 해소\n\n* **문서**\n  * 감사로그 IP 문제 구현 보고서 추가",
+      "parsed_changes": {
+        "버그_수정": {
+          "title": "버그 수정",
+          "items": [
+            "암호화 라이브러리 보안 취약점 4건 해소"
+          ]
+        },
+        "문서": {
+          "title": "문서",
+          "items": [
+            "감사로그 IP 문제 구현 보고서 추가"
+          ]
+        }
+      },
+      "parse_method": "markdown"
+    },
     {
       "version": "2.0.90",
       "project_type": "python",
