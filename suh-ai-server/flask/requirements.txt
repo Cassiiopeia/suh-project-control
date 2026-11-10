@@ -4,7 +4,7 @@ requests==2.34.2
 waitress==3.0.2
 flask-swagger-ui==4.11.1
 psycopg2-binary==2.9.10
-cryptography==47.0.0
+cryptography==50.0.0
 yoyo-migrations==9.0.0
 python-dotenv==1.2.4
 psutil==7.2.2
