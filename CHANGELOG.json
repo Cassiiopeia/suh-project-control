@@ -1,14 +1,40 @@
 {
   "metadata": {
-    "lastUpdated": "2026-11-10T12:27:06Z",
-    "currentVersion": "2.0.89",
+    "lastUpdated": "2026-11-10T12:35:05Z",
+    "currentVersion": "2.0.90",
     "projectType": "python",
-    "totalReleases": 85,
+    "totalReleases": 86,
     "projectTypes": [
       "python"
     ]
   },
   "releases": [
+    {
+      "version": "2.0.90",
+      "project_type": "python",
+      "project_types": [
+        "python"
+      ],
+      "date": "2026-11-10",
+      "pr_number": 187,
+      "raw_summary": "## Summary by CodeRabbit\n\n## 릴리스 노트\n\n* **버그 수정**\n  * 감사로그에 실제 접속 기기 IP 대신 127.0.0.1만 기록되던 문제 수정\n  * Claude 로그인 최근 기록에서 방금 한 요청이 빠지던 문제 수정\n\n* **개선**\n  * Claude 로그인 최근 기록 표의 IP·브라우저 열 폭을 줄여 결과 열이 잘리지 않게 함",
+      "parsed_changes": {
+        "버그_수정": {
+          "title": "버그 수정",
+          "items": [
+            "감사로그에 실제 접속 기기 IP 대신 127.0.0.1만 기록되던 문제 수정",
+            "Claude 로그인 최근 기록에서 방금 한 요청이 빠지던 문제 수정"
+          ]
+        },
+        "개선": {
+          "title": "개선",
+          "items": [
+            "Claude 로그인 최근 기록 표의 IP·브라우저 열 폭을 줄여 결과 열이 잘리지 않게 함"
+          ]
+        }
+      },
+      "parse_method": "markdown"
+    },
     {
       "version": "2.0.89",
       "project_type": "python",
