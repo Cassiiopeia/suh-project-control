@@ -7,7 +7,7 @@ from email.utils import format_datetime
 import pytest
 
 from service.claude_login_mail_client import (
-    MailClientError, extract_magic_link, find_new_magic_link_mail)
+    MailClientError, extract_magic_link, find_new_magic_link_mail, verify_login)
 
 MAGIC_LINK = 'https://claude.ai/magic-link#abc:ZGVm'
 # 실제 메일 구조: 추적 링크 여러 개 + 매직링크 원문
@@ -137,3 +137,16 @@ def test_since_date_is_one_day_before_accept_after():
     find_with(fake, accept_after=datetime(2026, 10, 26, 0, 10, tzinfo=timezone.utc))
     search_call = next(call for call in fake.calls if call[0] == 'search')
     assert '25-Oct-2026' in search_call
+
+
+def test_verify_login_opens_inbox_readonly_and_logs_out():
+    fake = FakeImap([])
+    verify_login('me@gmail.com', 'app-password', imap_factory=fake)
+    assert ('login', 'me@gmail.com') in fake.calls
+    assert ('select', 'INBOX', True) in fake.calls
+    assert fake.calls[-1] == ('logout',)
+
+
+def test_verify_login_failure_raises_mail_client_error():
+    with pytest.raises(MailClientError):
+        verify_login('me@gmail.com', 'wrong', imap_factory=FakeImap([], is_login_failing=True))

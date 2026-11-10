@@ -2,79 +2,111 @@
 {% block title %}Claude 로그인 | SUH AI Server{% endblock %}
 {% block page_title %}Claude 로그인 인증 코드{% endblock %}
 {% block content %}
-<div class="space-y-6 max-w-4xl mx-auto">
+<div class="space-y-6 max-w-6xl mx-auto">
 
-  <!-- 미설정 안내: Gmail 주소·앱 비밀번호 환경변수 없으면 대기 불가 -->
-  <div id="config-warning" class="alert alert-warning text-sm" hidden>
+  <!-- 미설정 안내: 암호화 비밀 문구 없으면 계정 등록·대기 불가 -->
+  <div id="secret-warning" class="alert alert-warning text-sm" hidden>
     <i data-lucide="alert-triangle" class="size-5"></i>
-    <span>Gmail 접속 정보가 설정되지 않았습니다. 서버의 <span class="font-mono">flask/.env</span> 에
-      <span class="font-mono">CLAUDE_LOGIN_GMAIL_ADDRESS</span> /
-      <span class="font-mono">CLAUDE_LOGIN_GMAIL_APP_PASSWORD</span> 를 추가하세요.</span>
+    <span>계정 암호화 비밀 문구가 설정되지 않았습니다. 서버의 <span class="font-mono">flask/.env</span> 에
+      <span class="font-mono">CLAUDE_LOGIN_ACCOUNT_SECRET</span> 을 추가하세요.</span>
+  </div>
+  <!-- DB 접속 실패 안내 -->
+  <div id="store-warning" class="alert alert-error text-sm" hidden>
+    <i data-lucide="database" class="size-5"></i>
+    <span>계정 DB에 접속하지 못했습니다. <span class="font-mono">AUDIT_DATABASE_URL</span> 과 DB 상태를 확인하세요.</span>
   </div>
 
-  <div class="alert text-sm">
-    <i data-lucide="info" class="size-5"></i>
-    <span>Claude 로그인 화면에서 이메일(<span id="account" class="font-mono">-</span>)을 입력한 뒤 이 화면에서 기다리세요.
-      메일이 오면 서버가 자동으로 열어 6자리 코드를 보여줍니다.</span>
+  <!-- 탭: 코드 받기 / 계정 관리 -->
+  <div role="tablist" class="tabs tabs-box w-fit">
+    <button role="tab" class="tab tab-active" data-tab="codes">
+      <i data-lucide="key-round" class="size-4 mr-1"></i>코드 받기
+    </button>
+    <button role="tab" class="tab" data-tab="accounts">
+      <i data-lucide="users" class="size-4 mr-1"></i>계정 관리<span id="account-count" class="badge badge-sm ml-1">0</span>
+    </button>
   </div>
 
-  <!-- 코드 카드: 6자리 + 복사 + 메일 수신 시각 -->
-  <div class="card bg-base-100 shadow border border-base-300">
-    <div class="card-body items-center text-center gap-3">
-      <div class="flex items-center gap-2">
-        <span id="job-badge" class="badge badge-ghost gap-1 text-xs py-2 px-2.5">대기 전</span>
-        <span id="expires-in" class="badge badge-outline badge-sm" hidden></span>
+  <!-- 코드 받기 탭 -->
+  <section id="tab-codes" class="space-y-6">
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <div class="alert text-sm py-2 flex-1 min-w-72">
+        <i data-lucide="info" class="size-5"></i>
+        <span>Claude 로그인 화면에서 이메일을 입력하고 기다리세요. 사용 중인 계정을 동시에 기다리고, 메일이 온 계정 카드에 코드가 뜹니다.</span>
       </div>
-      <div id="login-code" class="font-mono text-6xl font-bold tracking-[0.3em] py-2 select-all">------</div>
-      <div class="text-sm">
-        <i data-lucide="mail" class="size-4 inline-block align-[-2px] opacity-60"></i>
-        <span id="mail-received" class="opacity-80">메일을 기다리는 중</span>
-      </div>
-      <div class="flex flex-wrap justify-center gap-2.5 mt-1">
-        <button id="code-copy" class="btn btn-primary" disabled>
-          <i data-lucide="copy" class="size-4"></i><span id="code-copy-label">코드 복사</span>
-        </button>
-        <button id="wait-again" class="btn btn-outline" hidden>
-          <i data-lucide="rotate-ccw" class="size-4"></i>다시 기다리기
-        </button>
-      </div>
-      <p id="failure-message" class="text-sm text-error" hidden></p>
-      <img id="failure-screenshot" class="rounded-box border border-base-300 max-w-full mt-2" alt="코드 화면 캡처" hidden>
+      <button id="wait-all" class="btn btn-outline btn-sm"><i data-lucide="rotate-ccw" class="size-4"></i>전체 다시 기다리기</button>
     </div>
-  </div>
 
-  <!-- 진행 단계: 메일 대기 > 메일 수신 > 링크 열기 > 코드 획득 -->
-  <div class="card bg-base-100 shadow border border-base-300">
-    <div class="card-body">
-      <h2 class="card-title text-base">
-        <i data-lucide="list-checks" class="size-5 text-primary"></i>진행 단계
-      </h2>
-      <ul id="steps" class="steps steps-vertical lg:steps-horizontal w-full mt-2">
-        <li class="step" data-step="waiting">메일 대기<span class="block text-xs opacity-60 step-time"></span></li>
-        <li class="step" data-step="received">메일 수신<span class="block text-xs opacity-60 step-time"></span></li>
-        <li class="step" data-step="opening">링크 열기<span class="block text-xs opacity-60 step-time"></span></li>
-        <li class="step" data-step="issued">코드 획득<span class="block text-xs opacity-60 step-time"></span></li>
-      </ul>
+    <div id="code-cards" class="grid gap-4 md:grid-cols-2 xl:grid-cols-3"></div>
+    <div id="no-accounts" class="card bg-base-100 border border-dashed border-base-300" hidden>
+      <div class="card-body items-center text-center">
+        <i data-lucide="user-plus" class="size-8 opacity-50"></i>
+        <p class="text-sm opacity-70">등록된 사용 중 계정이 없습니다. 계정 관리 탭에서 Gmail 계정을 추가하세요.</p>
+      </div>
     </div>
-  </div>
 
-  <!-- 최근 감사로그: 요청·발급·열람 (IP·브라우저) -->
-  <div class="card bg-base-100 shadow border border-base-300">
+    <!-- 최근 감사로그: 요청·발급·열람·계정 변경 -->
+    <div class="card bg-base-100 shadow border border-base-300">
+      <div class="card-body">
+        <h2 class="card-title text-base flex justify-between">
+          <span class="flex items-center gap-2"><i data-lucide="shield-check" class="size-5 text-primary"></i>최근 기록</span>
+          <a href="./audit" class="link text-xs font-normal opacity-70">감사로그 전체 보기</a>
+        </h2>
+        <div class="overflow-x-auto">
+          <table class="table table-sm">
+            <thead><tr><th>시각</th><th>계정</th><th>행위</th><th>IP</th><th>브라우저</th><th>결과</th></tr></thead>
+            <tbody id="recent-logs"><tr><td colspan="6" class="opacity-60">불러오는 중</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 계정 관리 탭 -->
+  <section id="tab-accounts" class="card bg-base-100 shadow border border-base-300" hidden>
     <div class="card-body">
       <h2 class="card-title text-base flex justify-between">
-        <span class="flex items-center gap-2"><i data-lucide="shield-check" class="size-5 text-primary"></i>최근 기록</span>
-        <a href="./audit" class="link text-xs font-normal opacity-70">감사로그 전체 보기</a>
+        <span class="flex items-center gap-2"><i data-lucide="users" class="size-5 text-primary"></i>Gmail 계정</span>
+        <button id="account-add" class="btn btn-primary btn-sm"><i data-lucide="plus" class="size-4"></i>계정 추가</button>
       </h2>
+      <p class="text-xs opacity-70">앱 비밀번호는 암호화해서 DB에 저장하고 다시 보여주지 않습니다.</p>
       <div class="overflow-x-auto">
         <table class="table table-sm">
-          <thead><tr><th>시각</th><th>행위</th><th>IP</th><th>브라우저</th><th>결과</th></tr></thead>
-          <tbody id="recent-logs"><tr><td colspan="5" class="opacity-60">불러오는 중</td></tr></tbody>
+          <thead><tr><th>이름</th><th>Gmail 주소</th><th>상태</th><th>사용</th><th>마지막 성공</th><th></th></tr></thead>
+          <tbody id="account-rows"><tr><td colspan="6" class="opacity-60">불러오는 중</td></tr></tbody>
         </table>
       </div>
     </div>
-  </div>
+  </section>
 </div>
+
+<!-- 계정 추가·수정 창 -->
+<dialog id="account-modal" class="modal">
+  <form id="account-form" class="modal-box">
+    <h3 id="account-modal-title" class="font-bold text-lg flex items-center gap-2">
+      <i data-lucide="user-plus" class="size-5 text-primary"></i><span>계정 추가</span>
+    </h3>
+    <div class="space-y-3 mt-4">
+      <label class="floating-label w-full"><span>표시 이름</span>
+        <input id="account-display-name" class="input w-full" placeholder="표시 이름 (예: 회사)" maxlength="100" required></label>
+      <label class="floating-label w-full"><span>Gmail 주소</span>
+        <input id="account-gmail-address" type="email" class="input w-full font-mono" placeholder="Gmail 주소" maxlength="320" required></label>
+      <label class="floating-label w-full"><span>앱 비밀번호 (16자리)</span>
+        <input id="account-app-password" type="password" class="input w-full font-mono" placeholder="앱 비밀번호 16자리" autocomplete="new-password"></label>
+      <p id="account-password-hint" class="text-xs opacity-70">Google 계정 &gt; 보안 &gt; 2단계 인증 &gt; 앱 비밀번호(myaccount.google.com/apppasswords)에서 발급합니다. 저장 전에 Gmail 접속을 시험합니다.</p>
+      <p id="account-form-error" class="text-sm text-error" hidden></p>
+    </div>
+    <div class="modal-action">
+      <button type="button" id="account-cancel" class="btn btn-ghost">취소</button>
+      <button type="submit" id="account-submit" class="btn btn-primary">
+        <span id="account-submit-spinner" class="loading loading-spinner loading-sm" hidden></span>
+        <i data-lucide="plug" class="size-4"></i>접속 확인 후 저장
+      </button>
+    </div>
+  </form>
+  <form method="dialog" class="modal-backdrop"><button>닫기</button></form>
+</dialog>
 {% endblock %}
 {% block extra_js %}
 <script src="{{ root }}/static/js/claude-login.js?v={{ asset('js/claude-login.js') }}"></script>
+<script src="{{ root }}/static/js/claude-login-accounts.js?v={{ asset('js/claude-login-accounts.js') }}"></script>
 {% endblock %}

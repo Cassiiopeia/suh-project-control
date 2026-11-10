@@ -1,5 +1,6 @@
 """
-Claude 로그인 6자리 코드 조회 설정: 대기·유효시간 상수, Gmail 접속 정보(환경변수)
+Claude 로그인 6자리 코드 조회 설정: 대기·유효시간 상수, 계정 암호화 비밀 문구(환경변수)
+계정(Gmail 주소·앱 비밀번호)은 DB claude_login_account 에서 관리
 """
 import os
 
@@ -16,18 +17,13 @@ CODE_SEARCH_TIMEOUT_SECONDS = 15
 # Chromium 설치 위치 고정 (배포 스크립트 설치 <-> NSSM 서비스 실행 계정 공통)
 PLAYWRIGHT_BROWSERS_DIRECTORY = r"C:\AI\playwright-browsers"
 
-# .env: Claude 로그인 메일을 받는 Gmail 주소 / 앱 비밀번호(16자리, IMAP 읽기용)
-ENV_GMAIL_ADDRESS = "CLAUDE_LOGIN_GMAIL_ADDRESS"
-ENV_GMAIL_APP_PASSWORD = "CLAUDE_LOGIN_GMAIL_APP_PASSWORD"
+# .env: 앱 비밀번호 암호화 비밀 문구 (DB 밖 보관, 서버 이전 시 같은 값으로 복호화)
+ENV_ACCOUNT_SECRET = "CLAUDE_LOGIN_ACCOUNT_SECRET"
 
 
-def get_gmail_address():
-    return os.environ.get(ENV_GMAIL_ADDRESS) or None
+def get_account_secret():
+    return os.environ.get(ENV_ACCOUNT_SECRET) or None
 
 
-def get_gmail_app_password():
-    return os.environ.get(ENV_GMAIL_APP_PASSWORD) or None
-
-
-def is_configured() -> bool:
-    return bool(get_gmail_address() and get_gmail_app_password())
+def is_secret_configured() -> bool:
+    return bool(get_account_secret())

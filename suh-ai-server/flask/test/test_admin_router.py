@@ -117,8 +117,11 @@ def test_claude_login_page_renders(client):
     body = resp.get_data(as_text=True)
     assert 'Claude 로그인' in body
     assert 'claude-login.js' in body
-    assert 'code-copy' in body
-    assert 'mail-received' in body
+    assert 'claude-login-accounts.js' in body
+    # 탭 2개: 코드 받기 카드 영역 / 계정 관리 표·추가 창
+    assert 'code-cards' in body
+    assert 'account-rows' in body
+    assert 'account-modal' in body
     assert not EMOJI_RE.search(body)
 
 

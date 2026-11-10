@@ -37,6 +37,24 @@ def extract_magic_link(html: str):
     return found.group(1) if found else None
 
 
+def verify_login(address, app_password, imap_factory=imaplib.IMAP4_SSL):
+    """IMAP 로그인 + 받은편지함 읽기 전용 열기 (계정 등록 전 확인, 실패 시 MailClientError)"""
+    try:
+        mailbox = imap_factory(GMAIL_IMAP_HOST, timeout=IMAP_TIMEOUT_SECONDS)
+        mailbox.login(address, app_password)
+    except (imaplib.IMAP4.error, OSError) as error:
+        raise MailClientError(f"imap login failed: {type(error).__name__}") from error
+    try:
+        mailbox.select("INBOX", readonly=True)
+    except (imaplib.IMAP4.error, OSError) as error:
+        raise MailClientError(f"imap select failed: {type(error).__name__}") from error
+    finally:
+        try:
+            mailbox.logout()
+        except (imaplib.IMAP4.error, OSError):
+            pass
+
+
 def find_new_magic_link_mail(address, app_password, accept_after: datetime,
                              processed_message_ids: set, imap_factory=imaplib.IMAP4_SSL):
     """accept_after 이후 수신 + 미처리 메일 중 최신 1건 (없으면 None)"""
