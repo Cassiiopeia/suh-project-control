@@ -73,6 +73,9 @@
       startPolling();
     } catch (e) {
       console.warn('claude login request failed:', e);
+    } finally {
+      // 요청 감사 기록 뒤에 조회 (먼저 조회하면 방금 요청이 목록에서 빠짐, 성공·실패 공통)
+      loadRecentLogs();
     }
   }
 
@@ -219,8 +222,8 @@
           '<td class="whitespace-nowrap font-mono text-xs">' + escapeHtml(DATE_TIME_FORMAT.format(new Date(row.occurred_at))) + '</td>' +
           '<td class="text-xs">' + escapeHtml(describeAuditAccount(row.detail)) + '</td>' +
           '<td>' + escapeHtml(ACTION_LABELS[row.action] || row.action) + '</td>' +
-          '<td class="font-mono text-xs">' + escapeHtml(row.client_ip || '-') + '</td>' +
-          '<td class="text-xs max-w-56 truncate" title="' + escapeHtml(row.user_agent || '') + '">' + escapeHtml(row.user_agent || '-') + '</td>' +
+          '<td class="font-mono text-xs break-all min-w-28">' + escapeHtml(row.client_ip || '-') + '</td>' +
+          '<td class="text-xs max-w-40 truncate" title="' + escapeHtml(row.user_agent || '') + '">' + escapeHtml(row.user_agent || '-') + '</td>' +
           '<td>' + (row.success ? '<span class="badge badge-success badge-xs">성공</span>' : '<span class="badge badge-error badge-xs">실패</span>') + '</td>' +
         '</tr>').join('')
         : '<tr><td colspan="6" class="opacity-60">기록 없음</td></tr>';
@@ -251,7 +254,7 @@
     el('code-cards').addEventListener('click', onCardButtonPressed);
     el('wait-all').addEventListener('click', () => requestCodes('manual'));
     // 계정 추가·사용 전환 > 새 계정도 바로 대기 (진행 중 계정은 서버가 유지)
-    document.addEventListener('claude-login:accounts-changed', () => { requestCodes('auto'); loadRecentLogs(); });
+    document.addEventListener('claude-login:accounts-changed', () => requestCodes('auto'));
     // 남은 시간·"n분 전" 1초마다 갱신, 유효시간 지나면 다시 조회해 코드 숨김
     setInterval(() => {
       const isAnyExpired = currentStates.some((state) => state.code && state.expires_at && new Date(state.expires_at) <= Date.now());
@@ -265,6 +268,5 @@
       });
     }, 1000);
     requestCodes('auto');
-    loadRecentLogs();
   });
 })();

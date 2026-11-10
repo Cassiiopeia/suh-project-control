@@ -82,5 +82,8 @@ if __name__ == '__main__':
         # 기본 120초로는 벤치마크 중 reasoning 모델 추론이 끝나기 전에 연결이 끊긴다.
         # 상위 Nginx(1800s) 및 Ollama 벤치마크 클라이언트 상한과 맞춘다.
         channel_timeout=1800,
-        url_scheme='http'
+        url_scheme='http',
+        # waitress 3.x 기본값 True > X-Forwarded-For 삭제 > 감사로그 IP 127.0.0.1 (#186)
+        # nginx 가 넘긴 원본 헤더 유지, IP 해석은 util/audit_helper.client_info 가 담당
+        clear_untrusted_proxy_headers=False,
     )
