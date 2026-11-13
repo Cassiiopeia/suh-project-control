@@ -1,5 +1,5 @@
 """디스코드 구조 동기화 계획 (순수): 등록 파일 <-> 현재 역할·카테고리·채널 비교 > 작업 목록
-삭제 없음, 등록에서 빠진 프로젝트 카테고리는 보관(이름 접두사 + 관리자만), 보기 권한 비트만 관리
+삭제 없음, 등록에서 빠진 프로젝트 카테고리·사용자 정의 종류 채널은 보관(이름 접두사 + 관리자만), 보기 권한 비트만 관리
 """
 from __future__ import annotations
 
@@ -12,13 +12,16 @@ from service.control_tower.discord_sync_models import (
     ROLE_OVERWRITE_TYPE, VIEW_CHANNEL_PERMISSION, SyncOperation, role_reference,
 )
 from service.control_tower.registry import ProjectSpec, Registry
-from service.control_tower.registry_models import ATTENTION_CHANNEL_KIND
+from service.control_tower.registry_models import ATTENTION_CHANNEL_KIND, RESERVED_EVENT_KINDS
+
+# 텍스트 채널 보관 접두사 (디스코드 저장 형태, 공백 > '-': '[보관]-')
+ARCHIVED_TEXT_CHANNEL_PREFIX = re.sub(r"\s+", "-", ARCHIVE_NAME_PREFIX.lower())
 
 
 def plan_sync(registry: Registry, current_channels: list[dict], current_roles: list[dict], guild_id: str,
               bindings: dict[tuple[str, str], str],
               attention_project_ids: frozenset[str] = frozenset()) -> list[SyncOperation]:
-    """동기화 계획: 역할 > 카테고리 > 전역 채널 > 프로젝트 채널 > 보관 (변경 없으면 빈 목록)
+    """동기화 계획: 역할 > 카테고리 > 전역 채널 > 프로젝트 채널 > 사용자 정의 종류 채널 > 보관 (변경 없으면 빈 목록)
     attention_project_ids: 앱 확인할 일 소스가 있는 프로젝트 (이 프로젝트만 attention 채널 계획)"""
     planner = _SyncPlanner(registry, current_channels, current_roles, guild_id, bindings, attention_project_ids)
     return planner.plan()
@@ -40,6 +43,9 @@ class _SyncPlanner:
         self._role_id_by_reference: dict[str, str] = {}
         self._category_id_by_project: dict[str, str] = {}
         self._managed_overwrite_ids: set[str] = set()
+        # 등록 프로젝트 id > 현재 사용자 정의 종류 이름 (제거된 종류 판정용)
+        self._event_kind_names_by_project = {project.id: {event_kind.kind for event_kind in project.event_kinds}
+                                             for project in registry.projects}
         # 등록된 프로젝트·전역 키가 이미 쓰는 채널 id (다른 키의 이름 매칭·보관 대상에서 제외)
         self._claimed_channel_ids = self._collect_live_bound_channel_ids()
         self._operations: list[SyncOperation] = []
@@ -55,7 +61,13 @@ class _SyncPlanner:
             for kind in self._planned_channel_kinds(project):
                 visible_role_keys = project.channel_visibility.get(kind, self._policy.channel_visibility.get(kind, ()))
                 self._plan_channel(project.id, kind, visible_role_keys, parent_scope=project.id)
+        # 사용자 정의 종류: 기본 채널이 먼저 바인딩을 잡은 뒤 계획 (같은 이름 기본 채널을 가져가지 않음)
+        for project in self._registry.projects:
+            for event_kind in project.event_kinds:
+                self._plan_channel(project.id, event_kind.kind, event_kind.visible_to, parent_scope=project.id,
+                                   name=event_kind.channel_name)
         self._plan_archives()
+        self._plan_removed_event_kind_archives()
         return self._operations
 
     def _planned_channel_kinds(self, project: ProjectSpec) -> tuple[str, ...]:
@@ -98,10 +110,18 @@ class _SyncPlanner:
         return {self._guild_id} | set(self._role_id_by_reference.values()) | bound_role_ids
 
     def _collect_live_bound_channel_ids(self) -> set[str]:
-        """등록된 프로젝트·전역 scope에 바인딩된 카테고리·채널 id (보관 대상 프로젝트 바인딩 제외)"""
+        """등록된 프로젝트·전역 scope에 바인딩된 카테고리·채널 id (보관 대상 프로젝트·제거된 사용자 정의 종류 제외)"""
         live_scopes = {project.id for project in self._registry.projects} | {GLOBAL_SCOPE}
         return {discord_id for (scope, kind), discord_id in self._bindings.items()
-                if scope in live_scopes and not kind.startswith(ROLE_KIND_PREFIX)}
+                if scope in live_scopes and not kind.startswith(ROLE_KIND_PREFIX)
+                and not self._is_removed_event_kind(scope, kind)}
+
+    def _is_removed_event_kind(self, scope: str, kind: str) -> bool:
+        """등록 프로젝트 바인딩 중 사용자 정의 종류였는데 지금 event_kinds에 없는 것 (예약 종류·역할은 아님)"""
+        event_kind_names = self._event_kind_names_by_project.get(scope)
+        if event_kind_names is None or kind in RESERVED_EVENT_KINDS or kind.startswith(ROLE_KIND_PREFIX):
+            return False
+        return kind not in event_kind_names
 
     # ---- 카테고리·채널 ----
 
@@ -119,9 +139,10 @@ class _SyncPlanner:
         self._plan_update(ACTION_UPDATE_CHANNEL, project.id, CATEGORY_KIND, project.name, category,
                           self._managed_overwrites(category, project.id, visible_role_keys))
 
-    def _plan_channel(self, scope: str, kind: str, visible_role_keys: tuple[str, ...], parent_scope: str | None) -> None:
-        """채널 매칭 (바인딩 id > 같은 부모 안 같은 이름), 없으면 생성, 다르면 수정"""
-        name = _text_channel_name(self._policy.channel_names.get(kind, kind))
+    def _plan_channel(self, scope: str, kind: str, visible_role_keys: tuple[str, ...], parent_scope: str | None,
+                      name: str | None = None) -> None:
+        """채널 매칭 (바인딩 id > 같은 부모 안 같은 이름), 없으면 생성, 다르면 수정 (name 생략 시 channel_names 조회)"""
+        name = _text_channel_name(name if name is not None else self._policy.channel_names.get(kind, kind))
         parent_id = self._category_id_by_project.get(parent_scope) if parent_scope else None
         is_parent_pending = parent_scope is not None and parent_id is None
         candidates = [] if is_parent_pending else [
@@ -171,6 +192,17 @@ class _SyncPlanner:
                     continue
                 self._plan_update(ACTION_ARCHIVE_CHANNEL, scope, self._bound_kind(scope, str(channel["id"])),
                                   str(channel.get("name", "")), channel, self._managed_overwrites(channel, scope, ()))
+
+    def _plan_removed_event_kind_archives(self) -> None:
+        """등록 프로젝트에서 빠진 사용자 정의 종류 채널 > 보관 이름, 관리자만 (다른 키가 이름으로 가져간 채널 제외)"""
+        for (scope, kind), channel_id in sorted(self._bindings.items()):
+            if not self._is_removed_event_kind(scope, kind) or channel_id in self._claimed_channel_ids:
+                continue
+            channel = self._channel_by_id.get(channel_id)
+            if channel is None:
+                continue
+            self._plan_update(ACTION_ARCHIVE_CHANNEL, scope, kind, _archived_text_channel_name(str(channel["name"])),
+                              channel, self._managed_overwrites(channel, scope, ()))
 
     def _bound_kind(self, scope: str, channel_id: str) -> str | None:
         return next((kind for (bound_scope, kind), discord_id in self._bindings.items()
@@ -272,6 +304,12 @@ def _is_same_name(channel: dict, name: str) -> bool:
 def _archived_name(name: str) -> str:
     """보관 접두사 1회만: '샘플' > '[보관] 샘플'"""
     return name if name.startswith(ARCHIVE_NAME_PREFIX) else ARCHIVE_NAME_PREFIX + name
+
+
+def _archived_text_channel_name(name: str) -> str:
+    """텍스트 채널 보관 이름 (디스코드 저장 형태, 접두사 1회만): '옛종류' > '[보관]-옛종류'"""
+    text_name = _text_channel_name(name)
+    return text_name if text_name.startswith(ARCHIVED_TEXT_CHANNEL_PREFIX) else ARCHIVED_TEXT_CHANNEL_PREFIX + text_name
 
 
 def _other_permission_bits(overwrite: dict | None) -> tuple[int, int]:
