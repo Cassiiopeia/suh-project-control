@@ -31,7 +31,7 @@ from html.entities import html5
 import re
 from typing import Optional
 
-from apprise.common import NotifyFormat
+from ..common import NotifyFormat
 
 # Characters we can apply a new line to if found
 PUNCTUATION_CHARS = ".!?:;"

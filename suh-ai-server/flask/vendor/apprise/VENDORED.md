@@ -10,4 +10,7 @@
 
 ## 고친 목록
 
-(첫 커밋은 원본 그대로. 수정 사항은 아래에 기록)
+- `manager_plugins.py`, `manager_config.py`, `manager_attachment.py`: `module_name_prefix`를 `f"apprise.{_id}"`에서 `f"{__package__}.{_id}"`로 변경 (플러그인을 `vendor.apprise.plugins.*`로 불러오기 위함)
+- `utils/format.py:34`: `from apprise.common import NotifyFormat`를 `from ..common import NotifyFormat`로 변경 (상대 import)
+
+그 외 파일은 원본과 동일. 원본 의존성 중 requirements.txt에 새로 고정한 것: markdown, requests-oauthlib(+oauthlib), click, certifi

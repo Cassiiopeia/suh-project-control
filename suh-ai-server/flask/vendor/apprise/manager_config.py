@@ -45,7 +45,7 @@ class ConfigurationManager(PluginManager):
     _id = "config"
 
     # Our Module Python path name
-    module_name_prefix = f"apprise.{_id}"
+    module_name_prefix = f"{__package__}.{_id}"
 
     # The module path to scan
     module_path = join(abspath(dirname(__file__)), _id)
