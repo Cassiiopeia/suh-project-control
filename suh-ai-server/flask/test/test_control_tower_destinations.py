@@ -287,3 +287,57 @@ def test_changed_secret_records_decrypt_failure(store, monkeypatch):
     monkeypatch.setattr(destination_delivery, "_send_with_apprise", lambda url, title, body: True)
     DestinationDeliverer(store, _run_now, OTHER_SECRET_ENVIRON).deliver(_notification())
     assert _results_by_id(store)[destination_id] == "skipped:decrypt_failed"
+
+
+# ---- 복호화 캐시·손상된 암호문 ----
+
+def _count_decrypt_calls(monkeypatch) -> list[int]:
+    decrypt_calls = []
+    original_decrypt = destination_delivery.decrypt_secret_text
+
+    def counting_decrypt(*arguments):
+        decrypt_calls.append(1)
+        return original_decrypt(*arguments)
+
+    monkeypatch.setattr(destination_delivery, "decrypt_secret_text", counting_decrypt)
+    return decrypt_calls
+
+
+def test_second_delivery_reuses_decrypted_url(store, monkeypatch):
+    _add_destination(store, "elum", "report", DISCORD_URL)
+    decrypt_calls = _count_decrypt_calls(monkeypatch)
+    sent_urls = []
+    monkeypatch.setattr(destination_delivery, "_send_with_apprise", lambda url, title, body: sent_urls.append(url)
+                        or True)
+    deliverer = DestinationDeliverer(store, _run_now, SECRET_ENVIRON)
+    deliverer.deliver(_notification())
+    deliverer.deliver(_notification())
+    assert sent_urls == [DISCORD_URL, DISCORD_URL]
+    assert len(decrypt_calls) == 1
+    assert DISCORD_TOKEN not in repr(deliverer.__dict__)
+
+
+def test_changed_blob_is_decrypted_again(store, monkeypatch):
+    destination_id = _add_destination(store, "elum", "report", DISCORD_URL)
+    decrypt_calls = _count_decrypt_calls(monkeypatch)
+    sent_urls = []
+    monkeypatch.setattr(destination_delivery, "_send_with_apprise", lambda url, title, body: sent_urls.append(url)
+                        or True)
+    deliverer = DestinationDeliverer(store, _run_now, SECRET_ENVIRON)
+    deliverer.deliver(_notification())
+    new_url = "discord://999/replaced-token"
+    new_blob, _ = encrypt_destination_url(new_url, SECRET_ENVIRON)
+    with store._connection() as connection:
+        connection.execute("UPDATE project_event_destination SET url_encrypted = ? WHERE destination_id = ?",
+                           (new_blob, destination_id))
+    deliverer.deliver(_notification())
+    assert sent_urls == [DISCORD_URL, new_url]
+    assert len(decrypt_calls) == 2
+
+
+def test_malformed_blob_records_decrypt_failure(store, monkeypatch):
+    destination_id = store.insert_destination("elum", "report", "broken", b"short", secret_cipher.ENCRYPTION_SCHEME,
+                                              "discord://…", NOW)
+    monkeypatch.setattr(destination_delivery, "_send_with_apprise", lambda url, title, body: True)
+    DestinationDeliverer(store, _run_now, SECRET_ENVIRON).deliver(_notification())
+    assert _results_by_id(store)[destination_id] == "skipped:decrypt_failed"

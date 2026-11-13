@@ -15,10 +15,11 @@ from config.control_tower_config import CONTROL_TOWER_SECRET_ENV
 from service.control_tower.alert_planner import GLOBAL_SCOPE, Notification
 from service.control_tower.check_runner import utc_now
 from service.control_tower.destination_store import Destination
+from service.control_tower.destination_url_cache import DecryptedUrlCache
 from service.control_tower.event_dispatcher import to_channel_kind
 from service.control_tower.log_text import sanitize_log_value
 from service.control_tower.project_event_tokens import SECRET_MISSING_WARNING_INTERVAL_SECONDS
-from service.secret_cipher import ENCRYPTION_SCHEME, SecretCipherError, decrypt_secret_text, encrypt_secret_text
+from service.secret_cipher import ENCRYPTION_SCHEME, decrypt_secret_text, encrypt_secret_text
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,7 @@ URL_HINT_ELLIPSIS = "…"
 URL_HINT_SUFFIX_LENGTH = 4
 URL_HINT_MIN_REMAINDER_LENGTH = 8
 # Apprise 자체 로그 전부 차단 (CRITICAL보다 위): 플러그인 로그 일부가 URL 조각을 담음 > 결과는 우리 로그·결과 코드로만
+# 앱 루트 로그 수준은 INFO 이상 유지 (urllib3 DEBUG 로그가 웹훅 경로·토큰을 그대로 출력)
 APPRISE_LOGGER_NAME = "apprise"
 APPRISE_SILENCED_LOG_LEVEL = logging.CRITICAL + 1
 DELIVERY_THREAD_NAME = "control-tower-destination-deliver"
@@ -128,6 +130,7 @@ class DestinationDeliverer:
         self._now_provider = now_provider
         self._secret_missing_warning_lock = threading.Lock()
         self._last_secret_missing_warning_monotonic: float | None = None
+        self._decrypted_url_cache = DecryptedUrlCache()
 
     def deliver(self, notification: Notification) -> None:
         """전역 알림 제외 > 받을 곳 조회 > 비밀값 확인(없으면 생략 기록) > 받을 곳마다 백그라운드 발송"""
@@ -148,7 +151,7 @@ class DestinationDeliverer:
     def _deliver_one(self, destination: Destination, url_key: str, title: str, body: str) -> None:
         """복호화 > 발송 > 결과 기록 > 로그 (스레드 연결은 성공·실패 공통으로 닫음)"""
         try:
-            result = _send_to_destination(destination, url_key, title, body)
+            result = self._send_to_destination(destination, url_key, title, body)
             self._store.record_destination_result(destination.destination_id, result, self._now_provider())
             _log_result(destination, result)
         except Exception as error:
@@ -156,6 +159,31 @@ class DestinationDeliverer:
                            destination.destination_id, type(error).__name__)
         finally:
             self._store.close_thread_connection()
+
+    def _send_to_destination(self, destination: Destination, url_key: str, title: str, body: str) -> str:
+        """받을 곳 1개 발송 > 결과 코드 (URL 원문은 이 메서드·캐시 밖으로 나가지 않음)"""
+        url = self._decrypt_url(destination, url_key)
+        if url is None:
+            return RESULT_DECRYPT_FAILED
+        try:
+            is_sent = _send_with_apprise(url, title, body)
+        except Exception as error:
+            return RESULT_ERROR_PREFIX + type(error).__name__
+        return RESULT_SENT if is_sent else RESULT_FAILED
+
+    def _decrypt_url(self, destination: Destination, url_key: str) -> str | None:
+        """캐시 확인 > 없으면 복호화 후 저장 (비밀값 변경·손상·형식 오류 전부 None)"""
+        cache_key = DecryptedUrlCache.to_cache_key(destination.destination_id, destination.url_encrypted, url_key)
+        url = self._decrypted_url_cache.get(cache_key)
+        if url is not None:
+            return url
+        try:
+            url = decrypt_secret_text(destination.url_encrypted, destination.encryption_scheme, url_key)
+        except Exception:
+            # 예외 종류 무관 (SecretCipherError·ValueError·UnicodeDecodeError), 메시지는 기록하지 않음
+            return None
+        self._decrypted_url_cache.put(cache_key, url)
+        return url
 
     def _skip_for_missing_secret(self, notification: Notification, destinations: list[Destination]) -> None:
         """비밀값 없음: 받을 곳마다 생략 기록 + 경고 (간격 제한)"""
@@ -176,19 +204,6 @@ class DestinationDeliverer:
                 return False
             self._last_secret_missing_warning_monotonic = current_monotonic
             return True
-
-
-def _send_to_destination(destination: Destination, url_key: str, title: str, body: str) -> str:
-    """받을 곳 1개 발송 > 결과 코드 (URL 원문은 이 함수 밖으로 나가지 않음)"""
-    try:
-        url = decrypt_secret_text(destination.url_encrypted, destination.encryption_scheme, url_key)
-    except SecretCipherError:
-        return RESULT_DECRYPT_FAILED
-    try:
-        is_sent = _send_with_apprise(url, title, body)
-    except Exception as error:
-        return RESULT_ERROR_PREFIX + type(error).__name__
-    return RESULT_SENT if is_sent else RESULT_FAILED
 
 
 def _log_result(destination: Destination, result: str) -> None:
