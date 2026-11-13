@@ -25,11 +25,12 @@ GLOBAL_CHANNEL_KINDS = ("notice", "alert", "digest")
 # 채널 공개 대상에 항상 쓸 수 있는 예약 역할 키
 RESERVED_ROLE_KEYS = ("admin", "everyone")
 
-# 이벤트 접수 기본 종류 (프로젝트 사용자 정의 종류 이름으로 쓸 수 없음)
+# 앱 이벤트 접수 기본 종류 (이벤트 접수 허용 목록, 사용자 정의 종류 이름으로 쓸 수 없음)
 EVENT_KIND_INFO = "info"
+EVENT_KINDS = ("report", "error", "deploy", "status", EVENT_KIND_INFO)
 # 사용자 정의 알림 종류 이름으로 쓸 수 없는 예약어 (role: 접두는 검증 함수가 별도 확인)
 RESERVED_EVENT_KINDS = frozenset(
-    PROJECT_CHANNEL_KINDS + GLOBAL_CHANNEL_KINDS + (EVENT_KIND_INFO, CATEGORY_KIND))
+    PROJECT_CHANNEL_KINDS + GLOBAL_CHANNEL_KINDS + EVENT_KINDS + (CATEGORY_KIND,))
 # 사용자 정의 알림 종류 공개 대상으로 지정 가능한 역할 키 (관리자는 항상 볼 수 있어 저장 안 함)
 EVENT_KIND_VISIBLE_ROLE_KEYS = ("dev", "member")
 # 사용자 정의 알림 종류 기본 공개 대상

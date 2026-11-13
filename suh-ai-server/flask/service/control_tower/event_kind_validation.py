@@ -19,6 +19,8 @@ DEFAULT_CHANNEL_NAME_PLACEHOLDER = "-"
 
 def parse_new_event_kind(payload: dict) -> tuple[EventKindSpec | None, list[str]]:
     """검증 > 기본값 채움 (channel_name = kind, visible_to = dev) / 잘못된 칸 하나라도 있으면 (None, 칸 목록)"""
+    if not isinstance(payload, dict):
+        return None, ["kind"]
     kind = payload.get("kind")
     # channel_name 생략 시 종류 이름 사용 (종류가 잘못이면 kind 오류만 보고)
     channel_name = payload.get("channel_name", kind if is_valid_event_kind(kind) else DEFAULT_CHANNEL_NAME_PLACEHOLDER)
@@ -48,5 +50,7 @@ def is_valid_channel_name(value) -> bool:
 
 def is_valid_visible_to(value) -> bool:
     """dev·member 부분집합 리스트, 중복 없음 (빈 리스트 = 관리자만)"""
-    return (isinstance(value, list) and len(set(value)) == len(value)
-            and all(role_key in EVENT_KIND_VISIBLE_ROLE_KEYS for role_key in value))
+    # 원소 검사 먼저 (리스트·딕셔너리 같은 해시 불가 값에서 set() 오류 방지)
+    return (isinstance(value, list)
+            and all(isinstance(role_key, str) and role_key in EVENT_KIND_VISIBLE_ROLE_KEYS for role_key in value)
+            and len(set(value)) == len(value))

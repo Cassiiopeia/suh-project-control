@@ -38,7 +38,7 @@ def test_parse_new_event_kind_visible_to():
     spec, invalid_fields = parse_new_event_kind({"kind": "build", "visible_to": []})
     assert (spec.visible_to, invalid_fields) == ((), [])
 
-    for bad in (["admin"], ["everyone"], "dev", ["dev", "dev"]):
+    for bad in (["admin"], ["everyone"], "dev", ["dev", "dev"], [["dev"]], [{}], [None]):
         assert parse_new_event_kind({"kind": "build", "visible_to": bad}) == (None, ["visible_to"])
 
 
@@ -79,3 +79,8 @@ def test_merge_overrides_attaches_event_kinds():
     assert projects["elum"].event_kinds == (spec,)
     assert projects["extra"].event_kinds == (spec,)
     assert merge_overrides(REGISTRY, RegistryOverrides()).projects[0].event_kinds == ()
+
+
+@pytest.mark.parametrize("payload", [None, "claude-code", ["kind"], 5])
+def test_parse_new_event_kind_rejects_non_dict_payload(payload):
+    assert parse_new_event_kind(payload) == (None, ["kind"])

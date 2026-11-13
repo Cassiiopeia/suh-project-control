@@ -9,15 +9,14 @@ from typing import Callable
 
 from service.control_tower.alert_planner import GLOBAL_SCOPE, INFRASTRUCTURE_KIND, Notification
 from service.control_tower.discord_messages import to_embed
+from service.control_tower.registry_models import EVENT_KIND_INFO, EVENT_KINDS  # noqa: F401 (EVENT_KINDS 재노출, 허용 목록 단일 원본)
 
 logger = logging.getLogger(__name__)
 
-# 이벤트 kind 허용 목록
-EVENT_KINDS = ("report", "error", "deploy", "status", "info")
 # 이벤트 severity 허용 목록
 EVENT_SEVERITIES = ("info", "warning", "critical")
 # info 이벤트는 프로젝트 상태 채널로
-INFO_EVENT_KIND = "info"
+INFO_EVENT_KIND = EVENT_KIND_INFO
 STATUS_CHANNEL_KIND = "status"
 # 이벤트 제목 길이 범위 (글자 수)
 TITLE_MIN_LENGTH = 1

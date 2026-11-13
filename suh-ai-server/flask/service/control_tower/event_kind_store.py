@@ -2,16 +2,13 @@
 _connection·_write_transaction은 ControlTowerStore가 제공"""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 from service.control_tower.registry_models import EventKindSpec
+from service.control_tower.utc_text import to_utc_text
 
 # visible_to 칸 구분자 (빈 문자열 = 관리자만)
 VISIBLE_TO_DELIMITER = ","
-
-
-def _to_utc_text(moment: datetime) -> str:
-    return moment.astimezone(timezone.utc).isoformat(timespec="microseconds")
 
 
 class EventKindStoreMixin:
@@ -31,9 +28,10 @@ class EventKindStoreMixin:
         """종류 1개 추가 > 이미 있으면 False"""
         with self._write_transaction() as connection:
             inserted = connection.execute(
-                "INSERT OR IGNORE INTO project_event_kind VALUES (?,?,?,?,?)",
+                "INSERT OR IGNORE INTO project_event_kind (project_id, kind, channel_name, visible_to, created_at) "
+                "VALUES (?,?,?,?,?)",
                 (project_id, spec.kind, spec.channel_name, VISIBLE_TO_DELIMITER.join(spec.visible_to),
-                 _to_utc_text(now))).rowcount
+                 to_utc_text(now))).rowcount
             return inserted > 0
 
     def delete_project_event_kind(self, project_id: str, kind: str) -> bool:
