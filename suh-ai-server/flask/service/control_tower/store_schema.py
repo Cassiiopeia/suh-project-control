@@ -124,6 +124,23 @@ SCHEMA_STATEMENTS = (
         project_id TEXT PRIMARY KEY,
         managed_since TEXT NOT NULL
     )""",
+    # 프로젝트 알림 받을 곳 (kind = dispatch 채널 종류, url_encrypted = Apprise URL 암호문, url_hint = 수단 + 끝 4자리,
+    # is_enabled 1 사용 0 중지, last_result = 마지막 발송 결과 코드)
+    """CREATE TABLE IF NOT EXISTS project_event_destination (
+        destination_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        label TEXT NOT NULL,
+        url_encrypted BLOB NOT NULL,
+        encryption_scheme TEXT NOT NULL,
+        url_hint TEXT NOT NULL,
+        is_enabled INTEGER NOT NULL,
+        last_result TEXT,
+        last_sent_at TEXT,
+        created_at TEXT NOT NULL
+    )""",
+    """CREATE INDEX IF NOT EXISTS idx_project_event_destination_project_kind
+        ON project_event_destination (project_id, kind)""",
     # 프로젝트 썸네일 (128px WebP 바이트, content_hash = 상태 페이지 캐시 버전)
     """CREATE TABLE IF NOT EXISTS project_icon (
         project_id TEXT PRIMARY KEY,

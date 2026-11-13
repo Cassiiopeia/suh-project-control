@@ -10,7 +10,7 @@ from service.claude_login_account_repository import ClaudeLoginAccount
 from service.claude_login_account_service import AccountCredential, AccountNotFoundError
 from service.claude_login_browser_client import BrowserClientError, LoginCodeNotFoundError
 from service.claude_login_mail_client import MagicLinkMail, MailClientError
-from service.claude_login_secret_cipher import SecretCipherError
+from service.secret_cipher import SecretCipherError
 
 START_TIME = datetime(2026, 10, 26, 0, 34, 0, tzinfo=timezone.utc)
 MAIL_TIME = START_TIME + timedelta(seconds=20)

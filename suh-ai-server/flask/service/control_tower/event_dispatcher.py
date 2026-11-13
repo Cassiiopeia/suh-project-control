@@ -1,4 +1,4 @@
-"""관제소 알림 발송 단일 지점: 플래너 알림·앱 이벤트 > 바인딩 채널 > 디스코드 임베드
+"""관제소 알림 발송 단일 지점: 플래너 알림·앱 이벤트 > 바인딩 채널 > 디스코드 임베드 > 프로젝트 받을 곳(백그라운드)
 이벤트 입구는 검증 > 중복 억제 > 발송 순서, 플래너 알림은 중복 억제 없이 바로 발송
 """
 from __future__ import annotations
@@ -38,18 +38,30 @@ HTTP_ACCEPTED = 202
 HTTP_BAD_REQUEST = 400
 
 
+def to_channel_kind(notification: Notification) -> str:
+    """알림 > 채널 종류 (info 이벤트는 status, 나머지는 kind 그대로, 디스코드 바인딩·받을 곳 공용)"""
+    return STATUS_CHANNEL_KIND if notification.kind == INFO_EVENT_KIND else notification.kind
+
+
 class EventDispatcher:
-    def __init__(self, store, discord_client_provider: Callable, status_page_url: str):
+    def __init__(self, store, discord_client_provider: Callable, status_page_url: str, destination_deliverer=None):
         self._store = store
         self._discord_client_provider = discord_client_provider
         self._status_page_url = status_page_url
+        self._destination_deliverer = destination_deliverer  # None = 받을 곳 발송 없음
 
     def is_delivery_configured(self) -> bool:
         """디스코드 클라이언트 설정 여부 (미설정이면 발송 실패를 재시도하지 않음)"""
         return self._discord_client_provider() is not None
 
     def dispatch(self, notification: Notification) -> bool:
-        """알림 1건 발송: 클라이언트 확인 > 채널 선택(없으면 global alert) > 임베드 전송"""
+        """알림 1건 발송: 기본 디스코드 채널 > 받을 곳 (반환값 = 기본 발송 결과, 받을 곳 결과와 무관)"""
+        is_sent = self._send_to_default_channel(notification)
+        self._deliver_to_destinations(notification)
+        return is_sent
+
+    def _send_to_default_channel(self, notification: Notification) -> bool:
+        """클라이언트 확인 > 채널 선택(없으면 global alert) > 임베드 전송"""
         discord_client = self._discord_client_provider()
         if discord_client is None:
             logger.warning("[control-tower dispatch] skipped : discord client is not configured")
@@ -58,6 +70,17 @@ class EventDispatcher:
         if channel_id is None:
             return False
         return discord_client.send_embed(channel_id, to_embed(notification, self._status_page_url))
+
+    def _deliver_to_destinations(self, notification: Notification) -> None:
+        """받을 곳 발송 위임 (예외는 기록만, 기본 발송·요청 응답에 영향 없음)"""
+        if self._destination_deliverer is None:
+            return
+        try:
+            self._destination_deliverer.deliver(notification)
+        except Exception as error:
+            logger.warning("[control-tower dispatch] destination delivery failed : scope %s kind %s %s",
+                           sanitize_log_value(notification.scope), sanitize_log_value(notification.kind),
+                           type(error).__name__)
 
     def allowed_event_kinds(self, project_id: str) -> frozenset[str]:
         """프로젝트가 받는 이벤트 종류: 기본 종류 + 사용자 정의 종류 (저장소 원본 즉시 조회, 추가·삭제 바로 반영)"""
@@ -93,7 +116,7 @@ class EventDispatcher:
 
     def _find_channel_id(self, notification: Notification) -> str | None:
         """(scope, 채널 종류) 바인딩 > 없으면 (global, alert) 대체 + 경고, 둘 다 없으면 None"""
-        channel_kind = STATUS_CHANNEL_KIND if notification.kind == INFO_EVENT_KIND else notification.kind
+        channel_kind = to_channel_kind(notification)
         channel_id = self._store.get_binding(notification.scope, channel_kind)
         if channel_id is not None:
             return channel_id

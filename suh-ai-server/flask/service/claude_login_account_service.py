@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from config import claude_login_config as config
 from service import claude_login_account_repository as repository
-from service import claude_login_secret_cipher as cipher
+from service import secret_cipher as cipher
 from service.claude_login_mail_client import MailClientError, verify_login
 
 GMAIL_ADDRESS_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -58,7 +58,7 @@ def create_account(display_name, gmail_address, app_password) -> dict:
     app_password = _normalize_app_password(app_password)
     _verify_or_raise(gmail_address, app_password)
     account_id = repository.insert_account(
-        gmail_address, display_name, cipher.encrypt_app_password(app_password, secret), cipher.ENCRYPTION_SCHEME)
+        gmail_address, display_name, cipher.encrypt_secret_text(app_password, secret), cipher.ENCRYPTION_SCHEME)
     return to_account_response(repository.find_account(account_id))
 
 
@@ -76,7 +76,7 @@ def update_account(account_id: int, display_name=None, is_enabled=None, app_pass
         secret = _require_secret()
         app_password = _normalize_app_password(app_password)
         _verify_or_raise(account.gmail_address, app_password)
-        fields.update({"encrypted_app_password": cipher.encrypt_app_password(app_password, secret),
+        fields.update({"encrypted_app_password": cipher.encrypt_secret_text(app_password, secret),
                        "encryption_scheme": cipher.ENCRYPTION_SCHEME, "is_last_test_failed": False})
     repository.update_account(account_id, fields)
     return to_account_response(repository.find_account(account_id))
@@ -107,7 +107,7 @@ def load_enabled_credentials() -> list:
 
 def load_credential(account) -> AccountCredential:
     secret = _require_secret()
-    app_password = cipher.decrypt_app_password(account.encrypted_app_password, account.encryption_scheme, secret)
+    app_password = cipher.decrypt_secret_text(account.encrypted_app_password, account.encryption_scheme, secret)
     return AccountCredential(account.id, account.gmail_address, account.display_name, app_password)
 
 

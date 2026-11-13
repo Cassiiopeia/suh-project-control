@@ -18,7 +18,7 @@ from service.audit_service import AuditAction, AuditCategory
 from service.claude_login_browser_client import (
     BrowserClientError, LoginCodeNotFoundError, read_login_code)
 from service.claude_login_mail_client import MailClientError, find_new_magic_link_mail
-from service.claude_login_secret_cipher import SecretCipherError
+from service.secret_cipher import SecretCipherError
 from service.claude_login_event_notifier import notify_claude_code_event
 
 logger = logging.getLogger(__name__)

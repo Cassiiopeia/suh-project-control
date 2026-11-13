@@ -23,8 +23,9 @@ DISCORD_BOT_TOKEN_ENV = "DISCORD_BOT_TOKEN"
 DISCORD_GUILD_ID_ENV = "DISCORD_GUILD_ID"
 # .env: 프로젝트별 이벤트 토큰 접두사 (CONTROL_EVENT_TOKEN_<PROJECT_ID 대문자, '-' > '_'>)
 EVENT_TOKEN_ENV_PREFIX = "CONTROL_EVENT_TOKEN_"
-# .env: 관제소 비밀값 원본 (DB 발급 이벤트 토큰 해시 키 파생, 없으면 발급·DB 토큰 검증 불가)
-# 한 번 정하면 바꾸지 않음: 바꾸면 DB 발급 토큰 전부 즉시 401 > 관리 화면 프로젝트 토큰 모두 재발급·재배포 필요
+# .env: 관제소 비밀값 원본 (DB 발급 이벤트 토큰 해시 키·받을 곳 URL 암호화 키 파생, 없으면 발급·DB 토큰 검증·받을 곳 등록·발송 불가)
+# 한 번 정하면 바꾸지 않음: 바꾸면 DB 발급 토큰 전부 즉시 401 > 관리 화면 프로젝트 토큰 모두 재발급·재배포 필요,
+# 받을 곳 URL도 복호화 불가 > 모두 다시 등록 필요
 CONTROL_TOWER_SECRET_ENV = "CONTROL_TOWER_SECRET"
 # 토큰 교체 후 이전 토큰 유효 기간 (일, 교체된 토큰마다 각자)
 PREVIOUS_EVENT_TOKEN_VALID_DAYS = 7
