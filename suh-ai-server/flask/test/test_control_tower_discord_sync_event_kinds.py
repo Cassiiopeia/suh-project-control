@@ -108,7 +108,7 @@ def test_plan_archives_removed_custom_kind_channel(store):
     [operation] = operations
     assert (operation.action, operation.scope, operation.kind, operation.target_id) == (
         ACTION_ARCHIVE_CHANNEL, "elum", "old-kind", old_channel_id)
-    assert operation.name == "[보관]-옛종류"
+    assert operation.name == "옛종류"  # 텍스트 채널 이름은 그대로 (빠진 프로젝트 하위 채널과 같은 방식)
     assert operation.overwrites == (
         {"id": GUILD_ID, "type": 0, "allow": 0, "deny": VIEW_CHANNEL},
         {"ref": "global:admin", "type": 0, "allow": VIEW_CHANNEL, "deny": 0},
@@ -116,9 +116,10 @@ def test_plan_archives_removed_custom_kind_channel(store):
 
     report = sync_discord(BASE_REGISTRY, client, store, GUILD_ID)
     assert (report.archived, report.errors) == (1, [])
+    assert client.channel_by_id(old_channel_id)["name"] == "옛종류"
     assert overwrite_map(client.channel_by_id(old_channel_id)) == {
         GUILD_ID: (0, 0, VIEW_CHANNEL), client.role_id(ADMIN_ROLE_NAME): (0, VIEW_CHANNEL, 0)}
-    assert _plan(client, store, BASE_REGISTRY) == []  # 보관 접두사 중복 없음
+    assert _plan(client, store, BASE_REGISTRY) == []  # 관리자만 권한이면 재계획 없음 (이름 정규화와 무관)
 
 
 def test_plan_reuses_bound_channel_when_kind_readded(store):
@@ -126,8 +127,9 @@ def test_plan_reuses_bound_channel_when_kind_readded(store):
     client = _synced_client(store, registry)
     channel_id = store.get_binding("elum", "claude-code")
     overwrites_before = overwrite_map(client.channel_by_id(channel_id))
-    sync_discord(BASE_REGISTRY, client, store, GUILD_ID)
-    assert client.channel_by_id(channel_id)["name"] == "[보관]-클로드코드"
+    assert sync_discord(BASE_REGISTRY, client, store, GUILD_ID).errors == []
+    assert client.role_id("elum-dev") not in overwrite_map(client.channel_by_id(channel_id))
+    client.channel_by_id(channel_id)["name"] = "옛-이름"  # 보관 중 관리자가 바꾼 이름도 복원 대상
 
     [operation] = _plan(client, store, registry)
 
