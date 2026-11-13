@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai.suhsaechan.kr/api/flask/control/events-v1.schema.json",
+  "title": "control tower event v1",
+  "description": "POST /control/events 본문. 한도는 event_dispatcher.py 상수와 같아야 하며 계약 테스트가 비교한다.",
+  "type": "object",
+  "required": ["project", "kind", "severity", "title"],
+  "properties": {
+    "project": {
+      "type": "string",
+      "description": "관제소에 등록된 프로젝트 id (토큰 환경변수 CONTROL_EVENT_TOKEN_<PROJECT>의 주인)"
+    },
+    "kind": {
+      "type": "string",
+      "description": "알림 종류. 기본 report, error, deploy, status, info + 관리 화면에서 프로젝트별로 추가한 종류. 등록 여부는 서버가 프로젝트별로 판단(미등록은 400 unknown_kind)"
+    },
+    "severity": { "enum": ["info", "warning", "critical"] },
+    "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "body": { "type": "string", "maxLength": 2000 },
+    "url": { "type": "string", "pattern": "^https://", "maxLength": 2048 },
+    "dedupe_key": {
+      "type": "string",
+      "description": "같은 값이면 짧은 시간 안의 중복 접수를 한 번만 알림"
+    },
+    "fields": {
+      "type": "array",
+      "maxItems": 10,
+      "items": {
+        "type": "object",
+        "required": ["name", "value"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1, "maxLength": 40 },
+          "value": { "type": "string", "minLength": 1, "maxLength": 200 }
+        }
+      }
+    }
+  }
+}
