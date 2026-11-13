@@ -108,15 +108,17 @@ SCHEMA_STATEMENTS = (
         created_at TEXT NOT NULL,
         PRIMARY KEY (project_id, kind)
     )""",
-    # 프로젝트 이벤트 토큰 해시 (slot: current | previous, expires_at = 이전 토큰 만료 시각, 현재는 NULL)
+    # 프로젝트 이벤트 토큰 해시 (slot: current 1개 | previous 여러 개, expires_at = 이전 토큰 만료 시각, 현재는 NULL)
     """CREATE TABLE IF NOT EXISTS project_event_token (
+        token_id INTEGER PRIMARY KEY AUTOINCREMENT,
         project_id TEXT NOT NULL,
         slot TEXT NOT NULL,
         token_hash TEXT NOT NULL,
         created_at TEXT NOT NULL,
-        expires_at TEXT,
-        PRIMARY KEY (project_id, slot)
+        expires_at TEXT
     )""",
+    """CREATE UNIQUE INDEX IF NOT EXISTS idx_project_event_token_one_current
+        ON project_event_token (project_id) WHERE slot = 'current'""",
     # 행 있음 = DB 토큰만 인정하는 프로젝트 (폐기 후에도 유지)
     """CREATE TABLE IF NOT EXISTS project_event_token_policy (
         project_id TEXT PRIMARY KEY,

@@ -7,35 +7,43 @@ from datetime import datetime
 
 from service.control_tower.utc_text import from_utc_text, to_utc_text
 
-# project_event_token.slot 값: 현재 토큰 / 교체 직전 토큰 (만료 전까지 유효)
+# project_event_token.slot 값: 현재 토큰(프로젝트당 1개) / 교체된 이전 토큰(각자 만료 전까지 유효, 여러 개)
 TOKEN_SLOT_CURRENT = "current"
 TOKEN_SLOT_PREVIOUS = "previous"
 
 
 @dataclass(frozen=True)
 class ProjectTokenState:
-    """프로젝트 1개의 토큰 상태: DB 관리 여부, 현재 발급 시각, 이전 만료 시각, (해시, 만료 시각) 후보"""
+    """프로젝트 1개의 토큰 상태: DB 관리 여부, 현재 발급 시각, 이전 토큰별 만료 시각, (해시, 만료 시각) 후보"""
     is_db_managed: bool
     current_created_at: datetime | None
-    previous_expires_at: datetime | None
+    previous_expiry_times: tuple[datetime, ...]
     token_hashes: tuple[tuple[str, datetime | None], ...]
 
     @classmethod
     def not_managed(cls) -> ProjectTokenState:
         """발급 이력 없음 = 환경변수 토큰 경로"""
-        return cls(is_db_managed=False, current_created_at=None, previous_expires_at=None, token_hashes=())
+        return cls(is_db_managed=False, current_created_at=None, previous_expiry_times=(), token_hashes=())
 
 
 class ProjectTokenStoreMixin:
     def rotate_project_token(self, project_id: str, token_hash: str, now: datetime,
-                             previous_expires_at: datetime) -> None:
-        """한 트랜잭션: 기존 이전 삭제 > 현재 > 이전(만료 지정) > 새 현재 저장 > DB 관리 표시 보장"""
+                             previous_expires_at: datetime, max_previous_count: int) -> None:
+        """한 트랜잭션: 만료된 이전 삭제 > 현재 > 이전(만료 지정) > 상한 초과분 삭제 > 새 현재 저장 > DB 관리 표시 보장"""
         with self._write_transaction() as connection:
-            connection.execute("DELETE FROM project_event_token WHERE project_id = ? AND slot = ?",
-                               (project_id, TOKEN_SLOT_PREVIOUS))
+            # 고정 형식 UTC 문자열이라 문자열 비교 = 시각 비교
+            connection.execute(
+                "DELETE FROM project_event_token WHERE project_id = ? AND slot = ? AND expires_at <= ?",
+                (project_id, TOKEN_SLOT_PREVIOUS, to_utc_text(now)))
             connection.execute(
                 "UPDATE project_event_token SET slot = ?, expires_at = ? WHERE project_id = ? AND slot = ?",
                 (TOKEN_SLOT_PREVIOUS, to_utc_text(previous_expires_at), project_id, TOKEN_SLOT_CURRENT))
+            # 상한 초과분: 만료가 늦은 순으로 상한 개수만 남김 (같은 만료면 먼저 교체된 것부터 삭제)
+            connection.execute(
+                "DELETE FROM project_event_token WHERE token_id IN ("
+                "SELECT token_id FROM project_event_token WHERE project_id = ? AND slot = ? "
+                "ORDER BY expires_at DESC, token_id DESC LIMIT -1 OFFSET ?)",
+                (project_id, TOKEN_SLOT_PREVIOUS, max_previous_count))
             connection.execute(
                 "INSERT INTO project_event_token (project_id, slot, token_hash, created_at, expires_at) "
                 "VALUES (?,?,?,?,NULL)", (project_id, TOKEN_SLOT_CURRENT, token_hash, to_utc_text(now)))
@@ -57,11 +65,11 @@ class ProjectTokenStoreMixin:
         token_rows = connection.execute(
             "SELECT slot, token_hash, created_at, expires_at FROM project_event_token WHERE project_id = ?",
             (project_id,)).fetchall()
-        row_by_slot = {row["slot"]: row for row in token_rows}
-        current_row = row_by_slot.get(TOKEN_SLOT_CURRENT)
-        previous_row = row_by_slot.get(TOKEN_SLOT_PREVIOUS)
+        current_row = next((row for row in token_rows if row["slot"] == TOKEN_SLOT_CURRENT), None)
+        previous_expiry_times = tuple(from_utc_text(row["expires_at"]) for row in token_rows
+                                      if row["slot"] == TOKEN_SLOT_PREVIOUS)
         return ProjectTokenState(
             is_db_managed=policy_row is not None,
             current_created_at=from_utc_text(current_row["created_at"]) if current_row else None,
-            previous_expires_at=from_utc_text(previous_row["expires_at"]) if previous_row else None,
+            previous_expiry_times=previous_expiry_times,
             token_hashes=tuple((row["token_hash"], from_utc_text(row["expires_at"])) for row in token_rows))

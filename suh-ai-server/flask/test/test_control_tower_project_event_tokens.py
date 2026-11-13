@@ -15,6 +15,8 @@ from service.control_tower import project_event_tokens
 from service.control_tower import runtime as runtime_module
 from service.control_tower.app_attention_view import build_source_entry
 from service.control_tower.runtime import ControlTowerRuntime
+from config.control_tower_config import MAX_PREVIOUS_EVENT_TOKEN_COUNT
+from service.control_tower.utc_text import to_utc_text
 from service.control_tower.project_event_tokens import (
     TokenSecretNotConfiguredError, describe_project_token, is_project_token_configured, is_project_token_valid,
     is_token_secret_configured, issue_project_token, revoke_project_tokens,
@@ -75,8 +77,54 @@ def test_rotate_keeps_previous_until_expiry(store):
 
     description = describe_project_token(store, "elum", NOW, SECRET_ENVIRON)
     assert description["has_current"] and description["has_previous"]
+    assert description["previous_count"] == 1
     assert description["previous_expires_at"] == (NOW + timedelta(days=7)).isoformat(timespec="microseconds")
     assert describe_project_token(store, "elum", after_grace, SECRET_ENVIRON)["has_previous"] is False
+
+
+def test_consecutive_rotations_keep_each_previous_grace(store):
+    # A 배포 중 > B 발급 후 복사 안 함 > C 발급: A·B 모두 각자 유예 기간 동안 통과
+    token_a = issue_project_token(store, "elum", NOW, SECRET_ENVIRON)
+    token_b = issue_project_token(store, "elum", NOW + timedelta(hours=1), SECRET_ENVIRON)
+    token_c = issue_project_token(store, "elum", NOW + timedelta(hours=2), SECRET_ENVIRON)
+
+    within_grace = NOW + timedelta(hours=3)
+    for token in (token_a, token_b, token_c):
+        assert is_project_token_valid(store, "elum", token, within_grace, SECRET_ENVIRON)
+    description = describe_project_token(store, "elum", within_grace, SECRET_ENVIRON)
+    assert description["previous_count"] == 2
+    assert description["previous_expires_at"] == to_utc_text(NOW + timedelta(days=7, hours=2))
+
+    # A(1시간 뒤 교체) 만료 시각만 지남 > A 거부, B 통과
+    after_a_expiry = NOW + timedelta(days=7, hours=1, seconds=1)
+    assert not is_project_token_valid(store, "elum", token_a, after_a_expiry, SECRET_ENVIRON)
+    assert is_project_token_valid(store, "elum", token_b, after_a_expiry, SECRET_ENVIRON)
+    assert describe_project_token(store, "elum", after_a_expiry, SECRET_ENVIRON)["previous_count"] == 1
+
+
+def test_previous_tokens_capped_drop_oldest_expiring(store):
+    tokens = [issue_project_token(store, "elum", NOW + timedelta(minutes=index), SECRET_ENVIRON)
+              for index in range(MAX_PREVIOUS_EVENT_TOKEN_COUNT + 2)]
+
+    # 현재 1개 + 이전 상한 개수만 통과, 그보다 오래된 토큰은 교체 시 바로 거부
+    check_time = NOW + timedelta(hours=1)
+    kept_count = MAX_PREVIOUS_EVENT_TOKEN_COUNT + 1
+    for token in tokens[-kept_count:]:
+        assert is_project_token_valid(store, "elum", token, check_time, SECRET_ENVIRON)
+    for token in tokens[:-kept_count]:
+        assert not is_project_token_valid(store, "elum", token, check_time, SECRET_ENVIRON)
+    assert describe_project_token(store, "elum", check_time, SECRET_ENVIRON)["previous_count"] == \
+        MAX_PREVIOUS_EVENT_TOKEN_COUNT
+
+
+def test_rotate_prunes_expired_previous_rows(store):
+    issue_project_token(store, "elum", NOW, SECRET_ENVIRON)
+    issue_project_token(store, "elum", NOW, SECRET_ENVIRON)
+    issue_project_token(store, "elum", NOW + timedelta(days=8), SECRET_ENVIRON)
+
+    row_count = store._connection().execute(
+        "SELECT COUNT(*) FROM project_event_token WHERE project_id = ?", ("elum",)).fetchone()[0]
+    assert row_count == 2
 
 
 def test_revoke_rejects_everything_and_stays_db_managed(store):
@@ -89,7 +137,7 @@ def test_revoke_rejects_everything_and_stays_db_managed(store):
     assert not is_project_token_configured(store, "elum", SECRET_ENVIRON)
     assert describe_project_token(store, "elum", NOW, SECRET_ENVIRON) == {
         "is_db_managed": True, "has_current": False, "current_created_at": None,
-        "has_previous": False, "previous_expires_at": None, "is_env_configured": True,
+        "has_previous": False, "previous_count": 0, "previous_expires_at": None, "is_env_configured": True,
     }
     assert revoke_project_tokens(store, "elum") is False
 
@@ -97,7 +145,7 @@ def test_revoke_rejects_everything_and_stays_db_managed(store):
 def test_describe_not_managed_project(store):
     assert describe_project_token(store, "elum", NOW, {"CONTROL_EVENT_TOKEN_ELUM_PREVIOUS": "old"}) == {
         "is_db_managed": False, "has_current": False, "current_created_at": None,
-        "has_previous": False, "previous_expires_at": None, "is_env_configured": True,
+        "has_previous": False, "previous_count": 0, "previous_expires_at": None, "is_env_configured": True,
     }
 
 

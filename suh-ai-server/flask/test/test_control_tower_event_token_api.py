@@ -167,7 +167,8 @@ def test_관리_목록에_토큰_상태와_비밀값_설정_여부가_있다(tok
     assert body["is_token_secret_configured"] is True
     elum_status = next(project for project in body["projects"] if project["id"] == "elum")["event_token"]
     assert elum_status == {"is_db_managed": False, "has_current": False, "current_created_at": None,
-                           "has_previous": False, "previous_expires_at": None, "is_env_configured": True}
+                           "has_previous": False, "previous_count": 0, "previous_expires_at": None,
+                           "is_env_configured": True}
 
 
 def test_비밀값이_없으면_관리_목록에_미설정으로_표시된다(token_client, monkeypatch):

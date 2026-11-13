@@ -1,5 +1,5 @@
 """관제소 프로젝트 이벤트 토큰: 발급·교체·폐기, 받은 토큰 검증(이벤트·push 입구 공용), 설정 상태 설명
-DB 관리 프로젝트 = DB 토큰(현재·만료 전 이전)만 인정, 아니면 환경변수 토큰 경로. 원문은 발급 응답 1번만 반환"""
+DB 관리 프로젝트 = DB 토큰(현재·만료 전 이전 여러 개)만 인정, 아니면 환경변수 토큰 경로. 원문은 발급 응답 1번만 반환"""
 from __future__ import annotations
 
 import hashlib
@@ -12,7 +12,9 @@ from collections.abc import Mapping
 from datetime import datetime, timedelta
 from time import monotonic
 
-from config.control_tower_config import CONTROL_TOWER_SECRET_ENV, PREVIOUS_EVENT_TOKEN_VALID_DAYS
+from config.control_tower_config import (
+    CONTROL_TOWER_SECRET_ENV, MAX_PREVIOUS_EVENT_TOKEN_COUNT, PREVIOUS_EVENT_TOKEN_VALID_DAYS,
+)
 from service.control_tower.app_attention_tokens import (
     event_token_env_name, is_env_token_configured, is_presented_token_valid,
 )
@@ -51,12 +53,13 @@ def _hash_token(token: str, secret: str) -> str:
 
 
 def issue_project_token(store, project_id: str, now: datetime, environ: Mapping[str, str] = os.environ) -> str:
-    """새 토큰 발급: 비밀값 확인 > 난수 생성 > 해시 저장(기존 현재는 유예 기간 동안 이전으로) > 원문 반환"""
+    """새 토큰 발급: 비밀값 확인 > 난수 생성 > 해시 저장(기존 현재는 각자 유예 기간 동안 이전으로, 상한 초과분 삭제) > 원문 반환"""
     secret = _read_token_secret(environ)
     if secret is None:
         raise TokenSecretNotConfiguredError(CONTROL_TOWER_SECRET_ENV)
     token = secrets.token_urlsafe(TOKEN_RANDOM_BYTES)
-    store.rotate_project_token(project_id, _hash_token(token, secret), now, now + PREVIOUS_TOKEN_VALID_PERIOD)
+    store.rotate_project_token(project_id, _hash_token(token, secret), now, now + PREVIOUS_TOKEN_VALID_PERIOD,
+                               MAX_PREVIOUS_EVENT_TOKEN_COUNT)
     logger.info("[control-tower event-token] issued : project=%s", project_id)
     return token
 
@@ -113,14 +116,17 @@ def is_project_token_configured(store, project_id: str, environ: Mapping[str, st
 
 
 def describe_project_token(store, project_id: str, now: datetime, environ: Mapping[str, str] = os.environ) -> dict:
-    """관리 화면용 토큰 상태 (토큰·해시 값 없음, 만료된 이전은 has_previous False)"""
+    """관리 화면용 토큰 상태 (토큰·해시 값 없음, 만료된 이전 제외)
+    previous_expires_at = 유예 중 이전 토큰 중 가장 늦은 만료 (= 마지막 교체 토큰, 교체 직후 안내와 같은 값)"""
     state = store.load_project_token_state(project_id)
-    has_previous = state.previous_expires_at is not None and state.previous_expires_at > now
+    active_previous_expiry_times = [expires_at for expires_at in state.previous_expiry_times if expires_at > now]
+    latest_previous_expires_at = max(active_previous_expiry_times, default=None)
     return {
         "is_db_managed": state.is_db_managed,
         "has_current": state.current_created_at is not None,
         "current_created_at": to_utc_text(state.current_created_at) if state.current_created_at else None,
-        "has_previous": has_previous,
-        "previous_expires_at": to_utc_text(state.previous_expires_at) if has_previous else None,
+        "has_previous": latest_previous_expires_at is not None,
+        "previous_count": len(active_previous_expiry_times),
+        "previous_expires_at": to_utc_text(latest_previous_expires_at) if latest_previous_expires_at else None,
         "is_env_configured": is_env_token_configured(event_token_env_name(project_id), environ),
     }
