@@ -65,6 +65,10 @@
     CONTROL_EVENT_KIND_DELETE: '관제소 프로젝트 알림 종류 삭제',
     CONTROL_EVENT_TOKEN_ISSUE: '관제소 프로젝트 이벤트 토큰 발급',
     CONTROL_EVENT_TOKEN_REVOKE: '관제소 프로젝트 이벤트 토큰 폐기',
+    CONTROL_DESTINATION_CREATE: '관제소 프로젝트 받을 곳 추가',
+    CONTROL_DESTINATION_UPDATE: '관제소 프로젝트 받을 곳 사용 전환',
+    CONTROL_DESTINATION_DELETE: '관제소 프로젝트 받을 곳 삭제',
+    CONTROL_DESTINATION_TEST: '관제소 프로젝트 받을 곳 테스트 발송',
   };
 
   // 카테고리 선택 시 행위 셀렉트를 해당 카테고리 것만으로 좁힌다
@@ -85,7 +89,9 @@
                     'CONTROL_APP_ATTENTION_SOURCE_SAVE', 'CONTROL_APP_ATTENTION_SOURCE_DELETE',
                     'CONTROL_APP_ATTENTION_ITEM_OVERRIDE', 'CONTROL_APP_ATTENTION_SOURCE_TEST',
                     'CONTROL_EVENT_KIND_CREATE', 'CONTROL_EVENT_KIND_DELETE',
-                    'CONTROL_EVENT_TOKEN_ISSUE', 'CONTROL_EVENT_TOKEN_REVOKE'],
+                    'CONTROL_EVENT_TOKEN_ISSUE', 'CONTROL_EVENT_TOKEN_REVOKE',
+                    'CONTROL_DESTINATION_CREATE', 'CONTROL_DESTINATION_UPDATE',
+                    'CONTROL_DESTINATION_DELETE', 'CONTROL_DESTINATION_TEST'],
   };
 
   var KST_FMT = new Intl.DateTimeFormat('ko-KR', {

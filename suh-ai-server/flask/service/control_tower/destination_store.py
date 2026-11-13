@@ -70,6 +70,13 @@ class DestinationStoreMixin:
         rows = self._connection().execute(query + " ORDER BY project_id, destination_id", parameters).fetchall()
         return [_to_destination(row) for row in rows]
 
+    def find_destination(self, destination_id: int) -> Destination | None:
+        """받을 곳 1개 조회 (없으면 None)"""
+        row = self._connection().execute(
+            f"SELECT {DESTINATION_COLUMNS} FROM project_event_destination WHERE destination_id = ?",
+            (destination_id,)).fetchone()
+        return _to_destination(row) if row is not None else None
+
     def list_enabled_destinations(self, project_id: str, kind: str) -> list[Destination]:
         """(프로젝트, 채널 종류)의 사용 중 받을 곳, 추가 순"""
         rows = self._connection().execute(

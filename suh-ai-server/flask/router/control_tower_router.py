@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from flask import Blueprint, jsonify, request
 
 from router.control_tower_admin_api import register_admin_api
+from router.control_tower_destination_api import register_destination_api
 from router.control_tower_app_attention_api import register_app_attention_api
 from router.control_tower_app_attention_intake import register_app_attention_intake
 from router.control_tower_event_kind_api import register_event_kind_api
@@ -25,6 +26,7 @@ register_invite_api(control_tower_bp)  # 프로젝트 초대 API (nginx 키 검�
 register_icon_api(control_tower_bp)  # 프로젝트 썸네일 API (nginx 키 검사 대상)
 register_event_kind_api(control_tower_bp)  # 프로젝트 알림 종류 API (nginx 키 검사 대상)
 register_event_token_api(control_tower_bp)  # 프로젝트 이벤트 토큰 API (nginx 키 검사 대상)
+register_destination_api(control_tower_bp)  # 프로젝트 받을 곳 API (nginx 키 검사 대상)
 register_app_attention_api(control_tower_bp)  # 앱 확인할 일 관리 API (nginx 키 검사 대상)
 register_app_attention_intake(control_tower_bp)  # 앱 확인할 일 push 입구 (nginx 키 검사 제외, 프로젝트 토큰)
 

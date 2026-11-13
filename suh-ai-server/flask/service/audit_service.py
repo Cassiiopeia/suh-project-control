@@ -86,6 +86,11 @@ class AuditAction(str, Enum):
     # 관제소 프로젝트 이벤트 토큰: 발급·교체 / 폐기 (상세는 project_id만, 토큰 값 없음)
     CONTROL_EVENT_TOKEN_ISSUE = "CONTROL_EVENT_TOKEN_ISSUE"
     CONTROL_EVENT_TOKEN_REVOKE = "CONTROL_EVENT_TOKEN_REVOKE"
+    # 관제소 프로젝트 받을 곳: 추가 / 사용 전환 / 삭제 / 테스트 발송 (상세는 url_hint까지, URL 원문 없음)
+    CONTROL_DESTINATION_CREATE = "CONTROL_DESTINATION_CREATE"
+    CONTROL_DESTINATION_UPDATE = "CONTROL_DESTINATION_UPDATE"
+    CONTROL_DESTINATION_DELETE = "CONTROL_DESTINATION_DELETE"
+    CONTROL_DESTINATION_TEST = "CONTROL_DESTINATION_TEST"
 
 
 def record(category: AuditCategory, action: AuditAction, actor_ip: str, detail: dict = None, *,

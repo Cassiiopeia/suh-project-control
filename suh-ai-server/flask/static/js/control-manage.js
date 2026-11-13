@@ -71,6 +71,7 @@
     body.appendChild(tableWrapper);
     if (project) body.appendChild(window.ControlManageEventKinds.createEventKindSection(project, manageData.event_kind_options));
     if (project) body.appendChild(window.ControlManageEventToken.createEventTokenSection(project, manageData));
+    if (project) body.appendChild(window.ControlManageDestinations.createDestinationSection(project, manageData));
     card.appendChild(body);
     return card;
   }

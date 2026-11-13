@@ -45,6 +45,12 @@ RESULT_FAILED = "failed"
 RESULT_SECRET_MISSING = "skipped:secret_missing"
 RESULT_DECRYPT_FAILED = "skipped:decrypt_failed"
 RESULT_ERROR_PREFIX = "error:"
+RESULT_TIMEOUT = RESULT_ERROR_PREFIX + "Timeout"
+# 관리 화면 테스트 발송: 고정 문구 1건, 요청 스레드가 기다리는 최대 시간 (초)
+DESTINATION_TEST_TIMEOUT_SECONDS = 15
+DESTINATION_TEST_THREAD_NAME = "control-tower-destination-test"
+DESTINATION_TEST_TITLE = "SUH 관제소 테스트 알림"
+DESTINATION_TEST_BODY = "받을 곳 연결 확인용 테스트 메시지"
 
 
 class DestinationSecretNotConfiguredError(Exception):
@@ -148,6 +154,18 @@ class DestinationDeliverer:
             self._run_in_background(partial(self._deliver_one, destination, url_key, title, body),
                                     DELIVERY_THREAD_NAME)
 
+    def send_test_message(self, destination: Destination) -> str:
+        """받을 곳 1개 테스트 발송: 비밀값 확인 > 복호화·발송(제한 시간) > 결과 기록 > 로그 > 결과 코드"""
+        url_key = _read_url_key(self._environ)
+        if url_key is None:
+            raise DestinationSecretNotConfiguredError(CONTROL_TOWER_SECRET_ENV)
+        result = _run_with_timeout(
+            partial(self._send_to_destination, destination, url_key, DESTINATION_TEST_TITLE, DESTINATION_TEST_BODY),
+            DESTINATION_TEST_TIMEOUT_SECONDS)
+        self._store.record_destination_result(destination.destination_id, result, self._now_provider())
+        _log_result(destination, result)
+        return result
+
     def _deliver_one(self, destination: Destination, url_key: str, title: str, body: str) -> None:
         """복호화 > 발송 > 결과 기록 > 로그 (스레드 연결은 성공·실패 공통으로 닫음)"""
         try:
@@ -204,6 +222,22 @@ class DestinationDeliverer:
                 return False
             self._last_secret_missing_warning_monotonic = current_monotonic
             return True
+
+
+def _run_with_timeout(send: Callable[[], str], timeout_seconds: float) -> str:
+    """별도 스레드 발송 > 제한 시간 대기 (넘으면 RESULT_TIMEOUT, 발송 스레드는 저장소를 쓰지 않음)"""
+    results: list[str] = []
+
+    def run_send() -> None:
+        try:
+            results.append(send())
+        except Exception as error:
+            results.append(RESULT_ERROR_PREFIX + type(error).__name__)
+
+    thread = threading.Thread(target=run_send, daemon=True, name=DESTINATION_TEST_THREAD_NAME)
+    thread.start()
+    thread.join(timeout_seconds)
+    return results[0] if results else RESULT_TIMEOUT
 
 
 def _log_result(destination: Destination, result: str) -> None:

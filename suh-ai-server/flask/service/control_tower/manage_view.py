@@ -11,6 +11,9 @@ from config.control_tower_config import (
     MAX_EXTERNAL_CHECKS, MAX_PREVIOUS_EVENT_TOKEN_COUNT, PREVIOUS_EVENT_TOKEN_VALID_DAYS,
 )
 from service.control_tower.bootstrap import DEFAULT_STATUS_PAGE_URL, STATUS_PAGE_URL_ENV
+from service.control_tower.destination_validation import (
+    DESTINATION_LABEL_MAX_LENGTH, DESTINATION_URL_MAX_LENGTH, destination_entry, destination_kind_choices,
+)
 from service.control_tower.override_models import RegistryOverrides
 from service.control_tower.overview import check_entry, incident_entry, iso_text
 from service.control_tower.project_event_tokens import describe_project_token, is_token_secret_configured
@@ -67,17 +70,21 @@ def count_external_checks(registry: Registry) -> int:
 
 def build_manage(runtime, context: ManageContext) -> dict:
     """관리 화면 본문: 상태 페이지 설정 > 프로젝트 > 서비스(인프라 포함, 표시 순서) > 외부 점검 사용량 > 알림 종류 선택지
-    > 토큰 비밀값 설정 여부 (CONTROL_TOWER_SECRET, 없으면 화면 발급 버튼 비활성) > 이전 토큰 유예 일수·최대 개수 (화면 안내 문구 원본)"""
+    > 토큰 비밀값 설정 여부 (CONTROL_TOWER_SECRET, 없으면 화면 발급 버튼 비활성) > 이전 토큰 유예 일수·최대 개수 (화면 안내 문구 원본)
+    프로젝트마다 받을 곳(url_hint만)·받을 곳 종류 선택지 (같은 비밀값이 URL 암호화 키 > 미설정이면 추가·전환 비활성)"""
     states = _current_states(runtime)
     now = datetime.now(timezone.utc)
     page = context.effective.page
     invites = runtime.store.all_project_invites()
     icon_images = runtime.store.load_project_icon_images()
+    destinations_by_project = _destinations_by_project(runtime.store)
     return {
         "page": {"title": page.title, "notice_text": page.notice_text, "notice_level": page.notice_level,
                  "preview_url": os.environ.get(STATUS_PAGE_URL_ENV) or DEFAULT_STATUS_PAGE_URL},
         "projects": [{**_project_entry(project, context, invites.get(project.id), icon_images.get(project.id)),
-                      "event_token": describe_project_token(runtime.store, project.id, now)}
+                      "event_token": describe_project_token(runtime.store, project.id, now),
+                      "destinations": destinations_by_project.get(project.id, []),
+                      "destination_kinds": list(destination_kind_choices(runtime.store, project.id))}
                      for project in context.effective.projects],
         "services": [_service_entry(service, context, states)
                      for service in context.effective.services + context.effective.infrastructure],
@@ -86,7 +93,17 @@ def build_manage(runtime, context: ManageContext) -> dict:
         "is_token_secret_configured": is_token_secret_configured(),
         "previous_token_valid_days": PREVIOUS_EVENT_TOKEN_VALID_DAYS,
         "max_previous_token_count": MAX_PREVIOUS_EVENT_TOKEN_COUNT,
+        "destination_options": {"label_max_length": DESTINATION_LABEL_MAX_LENGTH,
+                                "url_max_length": DESTINATION_URL_MAX_LENGTH},
     }
+
+
+def _destinations_by_project(store) -> dict[str, list[dict]]:
+    """받을 곳 전체 1회 조회 > 프로젝트별 항목 목록 (추가 순)"""
+    entries_by_project: dict[str, list[dict]] = {}
+    for destination in store.list_destinations():
+        entries_by_project.setdefault(destination.project_id, []).append(destination_entry(destination))
+    return entries_by_project
 
 
 def _event_kind_options(discord: DiscordPolicy) -> dict:
