@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 
+from service.control_tower.event_dispatcher import EVENT_FIELD_VALUE_MAX_LENGTH
 from service.control_tower.log_text import sanitize_log_value
 from service.control_tower.runtime import get_runtime
 
@@ -25,8 +26,8 @@ def send_project_event(project_id: str, kind: str, title: str, *,
             return False
         payload = {
             "kind": kind, "severity": severity, "title": title, "body": body,
-            # 값 없는 필드는 제외 (예: 브라우저 정보 없음)
-            "fields": [{"name": name, "value": value} for name, value in fields if value],
+            # 값 없는 필드는 제외, 긴 값은 접수 상한으로 자름
+            "fields": [{"name": name, "value": value[:EVENT_FIELD_VALUE_MAX_LENGTH]} for name, value in fields if value],
             "dedupe_key": dedupe_key, "url": url,
         }
         status, response = runtime.dispatcher.accept_event(project_id, payload, datetime.now(timezone.utc))

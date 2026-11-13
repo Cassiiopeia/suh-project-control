@@ -19,14 +19,12 @@ from service.claude_login_browser_client import (
     BrowserClientError, LoginCodeNotFoundError, read_login_code)
 from service.claude_login_mail_client import MailClientError, find_new_magic_link_mail
 from service.claude_login_secret_cipher import SecretCipherError
-from service.control_tower.project_event_sender import send_project_event
+from service.claude_login_event_notifier import notify_claude_code_event
 
 logger = logging.getLogger(__name__)
 
 # 실패 화면 캡처: logs/claude_login_failure_{계정 id}.png
 SCREENSHOT_DIRECTORY = os.path.join(os.path.dirname(__file__), '..', 'logs')
-# 알림 필드: 브라우저(User-Agent) 표시 최대 글자 수
-EVENT_USER_AGENT_MAX_LENGTH = 60
 # 처리한 메일 Message-ID 보관 개수 (계정별, 1회용 링크 재사용 방지)
 PROCESSED_MESSAGE_ID_LIMIT = 50
 
@@ -229,11 +227,9 @@ def _finish(account, job_id: str, client: dict, *, code=None, failure_reason=Non
         user_agent=client.get('user_agent'), success=is_success)
     # 발급 알림 (성공만, 코드·Gmail 주소 제외)
     if is_success:
-        send_project_event(
-            config.CONTROL_TOWER_PROJECT_ID, config.CONTROL_TOWER_EVENT_KIND, 'Claude 코드 발급',
-            fields=[('계정', account.display_name), ('IP', client.get('client_ip')),
-                    ('브라우저', (client.get('user_agent') or '')[:EVENT_USER_AGENT_MAX_LENGTH])],
-            dedupe_key=f'claude-code:issued:{job_id}')
+        notify_claude_code_event(
+            'Claude 코드 발급', f'claude-code:issued:{job_id}', account.display_name,
+            client.get('client_ip'), client.get('user_agent'))
 
 
 def _snapshot(account, now: datetime) -> dict:

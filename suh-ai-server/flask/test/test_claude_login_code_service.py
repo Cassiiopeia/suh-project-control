@@ -204,7 +204,7 @@ def test_manual_request_replaces_issued_code():
     assert state['status'] == 'running'
 
 
-SENDER = 'service.claude_login_code_service.send_project_event'
+SENDER = 'service.claude_login_event_notifier.send_project_event'
 
 
 def test_issued_sends_project_event_without_code_or_address():

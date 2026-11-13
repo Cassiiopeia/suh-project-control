@@ -147,7 +147,7 @@ def test_status_sends_view_project_event_once_without_code(client):
     state = ISSUED_STATE | {'display_name': '회사'}
     with patch(f'{CODE_SERVICE}.get_states', return_value=[state]), \
             patch('router.claude_login_router.audit_service.record'), \
-            patch('router.claude_login_router.send_project_event') as send:
+            patch('service.claude_login_event_notifier.send_project_event') as send:
         client.get('/claude-login/code/status', headers={'X-Forwarded-For': '8.8.8.8', 'User-Agent': 'UA'})
         client.get('/claude-login/code/status', headers={'X-Forwarded-For': '8.8.8.8', 'User-Agent': 'UA'})
     assert send.call_count == 1

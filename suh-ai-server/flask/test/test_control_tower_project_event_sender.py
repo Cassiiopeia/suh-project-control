@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from service.control_tower import project_event_sender as sender
+from service.control_tower.event_dispatcher import EVENT_FIELD_VALUE_MAX_LENGTH
 
 RUNTIME_GETTER = 'service.control_tower.project_event_sender.get_runtime'
 
@@ -61,3 +62,10 @@ def test_dispatcher_exception_returns_false_without_raising(caplog):
     with patch(RUNTIME_GETTER, return_value=runtime_with(dispatcher)), caplog.at_level(logging.WARNING):
         assert sender.send_project_event('p', 'k', 't') is False
     assert '[control-tower project event]' in caplog.text
+
+
+def test_long_field_value_is_truncated_to_dispatcher_limit():
+    dispatcher = FakeDispatcher()
+    with patch(RUNTIME_GETTER, return_value=runtime_with(dispatcher)):
+        sender.send_project_event('p', 'k', 't', fields=[('계정', 'x' * (EVENT_FIELD_VALUE_MAX_LENGTH + 50))])
+    assert len(dispatcher.calls[0][1]['fields'][0]['value']) == EVENT_FIELD_VALUE_MAX_LENGTH
