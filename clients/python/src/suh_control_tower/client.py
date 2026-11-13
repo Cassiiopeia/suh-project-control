@@ -3,6 +3,7 @@ import json
 import socket
 import threading
 import urllib.error
+import urllib.parse
 import urllib.request
 from typing import Any, Iterable, Mapping, Optional, Tuple, Union
 
@@ -17,15 +18,47 @@ HTTP_ACCEPTED = 202
 ERROR_CODE_TIMEOUT = "timeout"
 ERROR_CODE_CONNECTION = "connection_error"
 ERROR_CODE_NOT_INITIALIZED = "not_initialized"
+ERROR_CODE_INVALID_INPUT = "invalid_input"  # 보내기 전 로컬 검증 실패 (서버의 invalid와 구분)
+
+# 평문 http를 허용하는 호스트 (로컬 테스트 전용)
+PLAINTEXT_ALLOWED_HOSTS = ("127.0.0.1", "localhost")
 
 FieldsInput = Union[Mapping[str, Any], Iterable[Tuple[str, Any]]]
+
+
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """리다이렉트 차단: 토큰 헤더가 다른 주소로 전달되지 않게 3xx를 그대로 결과로 돌림"""
+
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+
+_NO_REDIRECT_OPENER = urllib.request.build_opener(_NoRedirectHandler)
+
+
+def _validate_configuration(project: str, token: str, base_url: str) -> None:
+    """설정 검증 (project, token, base_url): 잘못되면 ValueError (토큰 값은 메시지에 넣지 않음)"""
+    if not isinstance(project, str) or not project:
+        raise ValueError("project must be a non-empty string")
+    if not isinstance(token, str) or not token:
+        raise ValueError("token must be a non-empty string")
+    # 헤더 값으로 안전한 문자만: ASCII 인쇄 가능, 공백·제어문자 없음
+    if not token.isascii() or any(ch.isspace() or not ch.isprintable() for ch in token):
+        raise ValueError("token must not contain whitespace, control or non-ASCII characters")
+    parsed = urllib.parse.urlparse(base_url) if isinstance(base_url, str) else None
+    is_https = parsed is not None and parsed.scheme == "https" and bool(parsed.hostname)
+    is_local_http = (parsed is not None and parsed.scheme == "http"
+                     and parsed.hostname in PLAINTEXT_ALLOWED_HOSTS)
+    if not (is_https or is_local_http):
+        raise ValueError("base_url must be https (http only for 127.0.0.1 or localhost)")
 
 
 class ControlTowerClient:
     """관제소 알림 전송: 스레드 안전 (요청마다 연결을 새로 만들고 상태를 바꾸지 않음)"""
 
-    def __init__(self, project: str, token: str, base_url: str = DEFAULT_BASE_URL,
+    def __init__(self, *, project: str, token: str, base_url: str = DEFAULT_BASE_URL,
                  timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS):
+        _validate_configuration(project, token, base_url)
         self._project = project
         self._token = token
         self._events_url = base_url.rstrip("/") + EVENTS_PATH
@@ -48,7 +81,11 @@ class ControlTowerClient:
             payload["dedupe_key"] = dedupe_key
         if fields is not None:
             pairs = fields.items() if isinstance(fields, Mapping) else fields
-            payload["fields"] = [{"name": str(name), "value": str(value)} for name, value in pairs]
+            payload["fields"] = []
+            for name, value in pairs:
+                if name is None or value is None:
+                    raise ValueError("field name and value must not be None")
+                payload["fields"].append({"name": str(name), "value": str(value)})
         return payload
 
     def notify(self, kind: str, title: str, fields: Optional[FieldsInput] = None,
@@ -59,13 +96,13 @@ class ControlTowerClient:
             payload = self.build_payload(kind, title, fields, body, url, severity, dedupe_key)
             raw_body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         except Exception:
-            return NotifyResult(is_accepted=False, error_code="invalid")
+            return NotifyResult(is_accepted=False, error_code=ERROR_CODE_INVALID_INPUT)
         request = urllib.request.Request(self._events_url, data=raw_body, method="POST", headers={
             "Content-Type": "application/json; charset=utf-8",
             TOKEN_HEADER_NAME: self._token,
         })
         try:
-            with urllib.request.urlopen(request, timeout=self._timeout_seconds) as response:
+            with _NO_REDIRECT_OPENER.open(request, timeout=self._timeout_seconds) as response:
                 return _to_result(response.status, response.read())
         except urllib.error.HTTPError as http_error:
             return _to_result(http_error.code, _read_quietly(http_error))
@@ -78,9 +115,12 @@ class ControlTowerClient:
         except Exception:
             return NotifyResult(is_accepted=False, error_code=ERROR_CODE_CONNECTION)
 
-    def notify_in_background(self, *args, **kwargs) -> threading.Thread:
-        """notify를 데몬 스레드에서 실행하고 즉시 반환 (결과는 버림)"""
-        thread = threading.Thread(target=self.notify, args=args, kwargs=kwargs, daemon=True)
+    def notify_in_background(self, kind: str, title: str, fields: Optional[FieldsInput] = None,
+                             body: Optional[str] = None, url: Optional[str] = None,
+                             severity: str = "info", dedupe_key: Optional[str] = None) -> threading.Thread:
+        """notify를 데몬 스레드에서 실행하고 즉시 반환 (결과는 버림, 종료 시 진행 중 전송은 유실)"""
+        thread = threading.Thread(
+            target=self.notify, args=(kind, title, fields, body, url, severity, dedupe_key), daemon=True)
         thread.start()
         return thread
 

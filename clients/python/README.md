@@ -21,7 +21,7 @@ pip install ./clients/python
 import os
 import suh_control_tower
 
-suh_control_tower.init(
+suh_control_tower.init(   # 키워드 전용, project와 token 필수
     project="my-project",
     token=os.environ["CONTROL_TOWER_TOKEN"],  # 교체 시 환경변수만 바꾸고 재시작
     # base_url 기본값: https://ai.suhsaechan.kr/api/flask, timeout_seconds 기본값: 3
@@ -35,11 +35,16 @@ result = suh_control_tower.notify(
 )
 ```
 
-`init`을 쓰지 않고 `ControlTowerClient(project=..., token=...)`를 직접 만들어 써도 됩니다(스레드 안전).
+`init`을 쓰지 않고 `ControlTowerClient(project=..., token=...)`를 직접 만들어 써도 됩니다(스레드 안전, 인자는 모두 키워드 전용).
+
+- 설정 오류는 `init`/생성자에서 `ValueError`로 알립니다: 빈 `project`/`token`, 공백·제어문자·비ASCII가 든 토큰, `https`가 아닌 `base_url`(테스트용 `http://127.0.0.1`, `http://localhost`만 예외). 앱 시작 시 한 번 걸러집니다.
+- `notify`/`notify_in_background`는 예외를 던지지 않습니다.
+- `timeout_seconds`는 소켓 동작(연결, 읽기)마다 적용되며 전체 소요 시간 상한이 아닙니다.
+- 리다이렉트(3xx)는 따라가지 않습니다(토큰 유출 방지). 결과는 `http_302`처럼 실제 상태로 나옵니다.
 
 ### Flask / FastAPI 요청 처리 안에서
 
-알림 때문에 응답이 늦어지지 않도록 `notify_in_background`(데몬 스레드)를 씁니다.
+알림 때문에 응답이 늦어지지 않도록 `notify_in_background`를 씁니다. 데몬 스레드라서 프로세스가 종료되면 진행 중이던 전송은 버려지고, 결과는 받을 수 없습니다(`init` 전에 호출하면 `None`을 돌려줍니다).
 
 ```python
 @app.post("/reports")           # Flask, FastAPI 모두 동일
@@ -61,7 +66,7 @@ def create_report():
 |---|---|
 | `is_accepted` | 서버가 접수(202)했는지 |
 | `status_code` | HTTP 상태 (네트워크 오류, 시간 초과, init 전은 `None`) |
-| `error_code` | 서버 `error` 값(`invalid`, `unknown_kind`, `unauthorized`, `unknown_project`, `unavailable`), JSON이 아닌 응답은 `http_<상태>`(예 `http_413`), `timeout`, `connection_error`, `not_initialized` |
+| `error_code` | 서버 `error` 값(`invalid`, `unknown_kind`, `unauthorized`, `unknown_project`, `unavailable`), JSON이 아닌 응답은 `http_<상태>`(예 `http_413`), `timeout`, `connection_error`, `not_initialized`, `invalid_input`(보내기 전 로컬 검증 실패, 예 필드 값이 `None`. 서버의 `invalid`와 구분) |
 | `is_deduplicated` | `dedupe_key` 중복으로 알림 없이 접수만 됨 |
 
 ```python
