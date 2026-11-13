@@ -14,6 +14,7 @@ from typing import Callable
 from config.control_tower_config import CONTROL_TOWER_SECRET_ENV
 from service.control_tower.alert_planner import GLOBAL_SCOPE, Notification
 from service.control_tower.check_runner import utc_now
+from service.control_tower.destination_dedupe import DeliveredNotificationMemory
 from service.control_tower.destination_store import Destination
 from service.control_tower.destination_url_cache import DecryptedUrlCache
 from service.control_tower.event_dispatcher import to_channel_kind
@@ -35,6 +36,7 @@ URL_HINT_MIN_REMAINDER_LENGTH = 8
 APPRISE_LOGGER_NAME = "apprise"
 APPRISE_SILENCED_LOG_LEVEL = logging.CRITICAL + 1
 DELIVERY_THREAD_NAME = "control-tower-destination-deliver"
+SECRET_MISSING_THREAD_NAME = "control-tower-destination-skip"
 # 메시지 본문: 구획(본문 / 항목 줄들 / 링크) 사이 빈 줄, 항목 줄 형식
 MESSAGE_SECTION_SEPARATOR = "\n\n"
 FIELD_LINE_SEPARATOR = "\n"
@@ -126,7 +128,8 @@ def build_destination_message(notification: Notification) -> tuple[str, str]:
 
 
 class DestinationDeliverer:
-    """프로젝트 알림 > 같은 (프로젝트, 채널 종류)의 사용 중 받을 곳: 받을 곳마다 백그라운드 발송, 재시도 없음"""
+    """프로젝트 알림 > 같은 (프로젝트, 채널 종류)의 사용 중 받을 곳: 받을 곳마다 백그라운드 발송, 재시도 없음
+    같은 알림 재dispatch(기본 발송 실패 재시도)는 기억 기간 안 1번만 발송"""
 
     def __init__(self, store, run_in_background: Callable[[Callable[[], None], str], None],
                  environ: Mapping[str, str] = os.environ, now_provider: Callable[[], datetime] = utc_now):
@@ -137,9 +140,10 @@ class DestinationDeliverer:
         self._secret_missing_warning_lock = threading.Lock()
         self._last_secret_missing_warning_monotonic: float | None = None
         self._decrypted_url_cache = DecryptedUrlCache()
+        self._delivered_notification_memory = DeliveredNotificationMemory()
 
     def deliver(self, notification: Notification) -> None:
-        """전역 알림 제외 > 받을 곳 조회 > 비밀값 확인(없으면 생략 기록) > 받을 곳마다 백그라운드 발송"""
+        """전역 알림 제외 > 받을 곳 조회 > 비밀값 확인(없으면 백그라운드 생략 기록) > 이미 보낸 알림 생략 > 받을 곳마다 백그라운드 발송"""
         if notification.scope == GLOBAL_SCOPE:
             return
         destinations = self._store.list_enabled_destinations(notification.scope, to_channel_kind(notification))
@@ -147,7 +151,10 @@ class DestinationDeliverer:
             return
         url_key = _read_url_key(self._environ)
         if url_key is None:
-            self._skip_for_missing_secret(notification, destinations)
+            self._run_in_background(partial(self._skip_for_missing_secret, notification, destinations),
+                                    SECRET_MISSING_THREAD_NAME)
+            return
+        if not self._delivered_notification_memory.remember_if_new(notification, self._now_provider()):
             return
         title, body = build_destination_message(notification)
         for destination in destinations:
@@ -204,13 +211,19 @@ class DestinationDeliverer:
         return url
 
     def _skip_for_missing_secret(self, notification: Notification, destinations: list[Destination]) -> None:
-        """비밀값 없음: 받을 곳마다 생략 기록 + 경고 (간격 제한)"""
-        now = self._now_provider()
-        for destination in destinations:
-            self._store.record_destination_result(destination.destination_id, RESULT_SECRET_MISSING, now)
-        if self._should_warn_secret_missing():
-            logger.warning("[control-tower deliver] skipped : %s not configured project=%s destinations=%d",
-                           CONTROL_TOWER_SECRET_ENV, sanitize_log_value(notification.scope), len(destinations))
+        """비밀값 없음 (백그라운드 1건): 받을 곳마다 생략 기록 + 경고 (간격 제한, 연결은 성공·실패 공통으로 닫음)"""
+        try:
+            now = self._now_provider()
+            for destination in destinations:
+                self._store.record_destination_result(destination.destination_id, RESULT_SECRET_MISSING, now)
+            if self._should_warn_secret_missing():
+                logger.warning("[control-tower deliver] skipped : %s not configured project=%s destinations=%d",
+                               CONTROL_TOWER_SECRET_ENV, sanitize_log_value(notification.scope), len(destinations))
+        except Exception as error:
+            logger.warning("[control-tower deliver] skip record failed : project=%s %s",
+                           sanitize_log_value(notification.scope), type(error).__name__)
+        finally:
+            self._store.close_thread_connection()
 
     def _should_warn_secret_missing(self) -> bool:
         """비밀값 없음 경고 허용 여부 (마지막 경고 후 최소 간격 경과, 스레드 안전)"""

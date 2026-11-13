@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from service.control_tower.destination_delivery import is_destination_url_supported
+from service.control_tower.destination_delivery import (
+    RESULT_DECRYPT_FAILED, RESULT_ERROR_PREFIX, RESULT_FAILED, RESULT_SECRET_MISSING, RESULT_SENT,
+    is_destination_url_supported,
+)
 from service.control_tower.destination_store import Destination
 from service.control_tower.overview import iso_text
 from service.control_tower.registry_models import PROJECT_CHANNEL_KINDS
@@ -13,6 +16,14 @@ from service.control_tower.registry_models import PROJECT_CHANNEL_KINDS
 DESTINATION_LABEL_MAX_LENGTH = 40
 # 받을 곳 URL 최대 길이 (글자 수)
 DESTINATION_URL_MAX_LENGTH = 2048
+# 결과 코드 > 화면 표시 문구 (error:* 는 오류 문구 + 예외 이름)
+DESTINATION_RESULT_LABELS = {
+    RESULT_SENT: "성공",
+    RESULT_FAILED: "실패",
+    RESULT_SECRET_MISSING: "비밀값 없음",
+    RESULT_DECRYPT_FAILED: "복호화 실패",
+}
+DESTINATION_ERROR_RESULT_LABEL = "오류"
 
 
 @dataclass(frozen=True)
@@ -44,6 +55,13 @@ def parse_new_destination(payload, kind_choices: tuple[str, ...]) -> tuple[NewDe
     if invalid_fields:
         return None, invalid_fields
     return NewDestination(kind, label, url), []
+
+
+def destination_form_options() -> dict:
+    """관리 화면 받을 곳 규칙: 입력 길이(검증 상수) + 결과 코드 표시 문구 (화면은 이 값만 사용)"""
+    return {"label_max_length": DESTINATION_LABEL_MAX_LENGTH, "url_max_length": DESTINATION_URL_MAX_LENGTH,
+            "result_labels": dict(DESTINATION_RESULT_LABELS), "error_result_prefix": RESULT_ERROR_PREFIX,
+            "error_result_label": DESTINATION_ERROR_RESULT_LABEL}
 
 
 def destination_entry(destination: Destination) -> dict:

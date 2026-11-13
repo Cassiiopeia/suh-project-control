@@ -167,7 +167,7 @@ public void sendControlEvent(String token, String jsonPayload) {
 
 ### 6.1 등록하기
 
-1. 서버에 `CONTROL_TOWER_SECRET`이 설정되어 있어야 한다(3장 참고). 없으면 추가·사용 전환·테스트 버튼이 비활성되고 안내가 보인다.
+1. 서버에 `CONTROL_TOWER_SECRET`이 설정되어 있어야 한다(3장 참고). 없으면 추가·사용 켜기·테스트 버튼이 비활성되고 안내가 보인다(끄기·삭제는 비밀값 없이도 된다).
 2. 관제소 관리 화면 > 서비스 관리 > 프로젝트 카드 > **추가로 받을 곳**을 펼친다.
 3. 종류를 고르고, 이름(예: `팀 디스코드`)과 URL을 넣고 **받을 곳 추가**를 누른다. URL은 [Apprise](https://github.com/caronc/apprise/wiki) 형식이다.
 
@@ -178,7 +178,7 @@ public void sendControlEvent(String token, String jsonPayload) {
 | Telegram | `tgram://봇토큰/채팅ID` | BotFather 봇 토큰 + 받을 채팅 ID |
 | 메일 | `mailto://계정:비밀번호@메일서버` | 보내는 메일 계정 (앱 비밀번호 권장) |
 
-4. 표의 **테스트 발송**(종이비행기) 버튼으로 고정 문구 1건을 바로 보내 결과를 확인한다.
+4. 표의 **테스트 발송**(종이비행기) 버튼으로 고정 문구 1건을 바로 보내 결과를 확인한다. 15초 안에 끝나지 않으면 `오류 (Timeout)`으로 표시되지만, 발송 자체는 멈추지 않아 잠시 뒤 실제로 도착할 수 있다.
 
 ### 6.2 표 읽기
 
@@ -190,4 +190,6 @@ public void sendControlEvent(String token, String jsonPayload) {
 
 - URL(웹훅 비밀값 포함)은 `CONTROL_TOWER_SECRET`으로 암호화해 저장한다. 관리 화면 응답, 감사 기록, 서버 로그, 오류 응답에는 원문이 남지 않는다(감사 상세는 프로젝트, 종류, 이름, `url_hint`만).
 - 발송은 백그라운드에서 받을 곳마다 따로 한다. 한 곳이 실패하거나 느려도 다른 받을 곳, 기본 SUH 관제소 디스코드, 앱 요청 응답에 영향이 없다. 실패는 재시도하지 않고 결과와 경고 로그만 남긴다.
+- 같은 알림은 받을 곳에 24시간 안에 1번만 보낸다. 기본 디스코드 발송이 실패해 관제소가 같은 알림을 다시 보내도 받을 곳에는 다시 가지 않는다(중복 발송보다 누락이 낫다).
+- 받을 곳은 관리자만 등록할 수 있고, `json://`·`form://` 등으로 내부망 주소도 지정할 수 있다. 관리자 전용 기능이라 의도된 동작이며, 관리 화면 접근 권한을 관리자에게만 둔다.
 - 감사 행위: `CONTROL_DESTINATION_CREATE`(추가), `CONTROL_DESTINATION_UPDATE`(사용 전환), `CONTROL_DESTINATION_DELETE`(삭제), `CONTROL_DESTINATION_TEST`(테스트 발송).

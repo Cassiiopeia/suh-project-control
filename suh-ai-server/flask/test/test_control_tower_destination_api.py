@@ -1,64 +1,19 @@
-"""관제소 받을 곳 관리 API: 추가 201·400·404·409·503, 사용 전환, 삭제, 테스트 발송(가짜 Apprise 1건), 감사 4종, 관리 목록, URL 원문 노출 없음"""
+"""관제소 받을 곳 관리 API: 추가 201·400·404·409·503, 사용 전환(끄기는 비밀값 없어도), 삭제(비밀값 없어도), 테스트 발송(가짜 Apprise 1건), 감사 4종"""
 from __future__ import annotations
 
-import logging
 import threading
 from unittest.mock import patch
 
 import pytest
 
-from control_tower_admin_fixtures import (  # noqa: F401 (pytest 픽스처 재노출)
-    NOW, REGISTRY, FakePoller, _snapshot, dispatcher, make_app, store,
+from control_tower_admin_fixtures import NOW, dispatcher, make_app, store  # noqa: F401 (pytest 픽스처 재노출)
+from control_tower_destination_api_fixtures import (  # noqa: F401 (pytest 픽스처 재노출)
+    CREATE_PATH, DISCORD_URL, WEBHOOK_TOKEN, _create, destination_client, fake_apprise_sends, fast_kdf,
 )
-from service import secret_cipher
 from service.audit_service import AuditAction
 from service.control_tower import destination_delivery, runtime as runtime_module
 from service.control_tower.destination_validation import DESTINATION_LABEL_MAX_LENGTH, DESTINATION_URL_MAX_LENGTH
 from service.control_tower.registry_models import EventKindSpec, PROJECT_CHANNEL_KINDS
-from service.control_tower.runtime import ControlTowerRuntime
-
-SECRET_VALUE = "tower-secret-for-destination-api"
-WEBHOOK_TOKEN = "secret-webhook-token-value-zz99"
-DISCORD_URL = f"discord://1234567890/{WEBHOOK_TOKEN}"
-CREATE_PATH = "/control/projects/elum/destinations"
-
-
-@pytest.fixture(autouse=True)
-def fast_kdf(monkeypatch):
-    # 테스트 속도: 반복 횟수만 낮춤 (알고리즘 동일)
-    monkeypatch.setattr(secret_cipher, "PBKDF2_ITERATIONS", 1000)
-
-
-@pytest.fixture
-def fake_apprise_sends(monkeypatch):
-    """Apprise 발송 경계 교체: (url, 제목, 본문) 기록 > 성공"""
-    sends = []
-
-    def fake_send(url, title, body):
-        sends.append((url, title, body))
-        return True
-
-    monkeypatch.setattr(destination_delivery, "_send_with_apprise", fake_send)
-    return sends
-
-
-@pytest.fixture
-def destination_client(store, dispatcher, monkeypatch):
-    monkeypatch.setenv("CONTROL_TOWER_SECRET", SECRET_VALUE)
-    runtime_module.set_runtime(ControlTowerRuntime(
-        lambda: REGISTRY, store, dispatcher, poller=FakePoller(_snapshot()),
-        file_registry_provider=lambda: REGISTRY))
-    yield make_app().test_client()
-    runtime_module.set_runtime(None)
-
-
-def _create(client, kind="error", label="팀 디스코드", url=DISCORD_URL):
-    return client.post(CREATE_PATH, json={"kind": kind, "label": label, "url": url})
-
-
-def _manage_destinations(client, project_id="elum") -> list[dict]:
-    projects = client.get("/control/manage").get_json()["projects"]
-    return next(project for project in projects if project["id"] == project_id)["destinations"]
 
 
 # ---- POST /control/projects/<id>/destinations ----
@@ -82,6 +37,7 @@ def test_추가하면_201과_힌트만_돌려주고_암호문으로_저장한다
     ({"kind": "error", "label": "가" * (DESTINATION_LABEL_MAX_LENGTH + 1), "url": DISCORD_URL}, ["label"]),
     ({"kind": "error", "label": "팀", "url": "nope://not-a-service"}, ["url"]),
     ({"kind": "error", "label": "팀", "url": ""}, ["url"]),
+    ({"kind": "error", "label": "팀", "url": DISCORD_URL + "a" * DESTINATION_URL_MAX_LENGTH}, ["url"]),
     ({"kind": 1, "label": None}, ["kind", "label", "url"]),
 ])
 def test_잘못된_값은_400_fields(destination_client, store, payload, expected_fields):
@@ -142,7 +98,17 @@ def test_사용_전환하면_200과_저장값_변경(destination_client, store):
     assert store.list_destinations("elum")[0].is_enabled is False
 
 
-def test_사용_전환_값이_불리언이_아니면_400_없는_받을_곳은_404_비밀값_없으면_409(destination_client, monkeypatch):
+def test_비밀값이_없어도_끄기는_200(destination_client, store, monkeypatch):
+    destination_id = _create(destination_client).get_json()["destination_id"]
+    monkeypatch.delenv("CONTROL_TOWER_SECRET")
+
+    response = destination_client.patch(f"/control/destinations/{destination_id}", json={"is_enabled": False})
+
+    assert response.status_code == 200
+    assert store.list_destinations("elum")[0].is_enabled is False
+
+
+def test_사용_전환_값이_불리언이_아니면_400_없는_받을_곳은_404_비밀값_없으면_켜기_409(destination_client, monkeypatch):
     destination_id = _create(destination_client).get_json()["destination_id"]
 
     invalid_response = destination_client.patch(f"/control/destinations/{destination_id}", json={"is_enabled": "no"})
@@ -167,6 +133,14 @@ def test_삭제하면_204_다시_삭제하면_404(destination_client, store):
     assert store.list_destinations() == []
     second_response = destination_client.delete(f"/control/destinations/{destination_id}")
     assert (second_response.status_code, second_response.get_json()) == (404, {"error": "unknown_destination"})
+
+
+def test_비밀값이_없어도_삭제는_204(destination_client, store, monkeypatch):
+    destination_id = _create(destination_client).get_json()["destination_id"]
+    monkeypatch.delenv("CONTROL_TOWER_SECRET")
+
+    assert destination_client.delete(f"/control/destinations/{destination_id}").status_code == 204
+    assert store.list_destinations() == []
 
 
 # ---- POST /control/destinations/<id>/test ----
@@ -234,48 +208,3 @@ def test_감사_액션_4종과_상세에_URL_없음(destination_client, fake_app
     assert [call.args[3] for call in record.call_args_list] == [
         expected_detail, {**expected_detail, "is_enabled": False}, expected_detail, expected_detail]
     assert WEBHOOK_TOKEN not in repr(record.call_args_list)
-
-
-# ---- 관리 목록·노출 ----
-
-def test_관리_목록에_프로젝트별_받을_곳이_힌트만으로_실린다(destination_client):
-    destination_id = _create(destination_client).get_json()["destination_id"]
-
-    destinations = _manage_destinations(destination_client)
-
-    assert destinations == [{"destination_id": destination_id, "kind": "error", "label": "팀 디스코드",
-                             "url_hint": "discord://…zz99", "is_enabled": True, "last_result": None,
-                             "last_sent_at": None}]
-
-
-def test_관리_목록의_받을_곳_입력_길이는_검증_상수와_같다(destination_client):
-    body = destination_client.get("/control/manage").get_json()
-
-    assert body["destination_options"] == {"label_max_length": DESTINATION_LABEL_MAX_LENGTH,
-                                           "url_max_length": DESTINATION_URL_MAX_LENGTH}
-
-
-def test_URL_원문이_관리_목록_감사_로그_오류_응답에_없다(destination_client, caplog, fake_apprise_sends):
-    caplog.set_level(logging.DEBUG)
-    with patch("util.audit_helper.audit_service.record") as record:
-        destination_id = _create(destination_client).get_json()["destination_id"]
-        destination_client.post(f"/control/destinations/{destination_id}/test")
-        invalid_text = destination_client.post(
-            CREATE_PATH, json={"kind": "nope", "label": "팀", "url": DISCORD_URL}).get_data(as_text=True)
-        destination_client.delete(f"/control/destinations/{destination_id}")
-        _create(destination_client)
-
-    manage_text = destination_client.get("/control/manage").get_data(as_text=True)
-    exposed_text = manage_text + repr(record.call_args_list) + caplog.text + invalid_text
-    assert WEBHOOK_TOKEN not in exposed_text
-    assert SECRET_VALUE not in exposed_text
-
-
-def test_비밀값이_없어도_관리_목록은_열린다(destination_client, monkeypatch):
-    _create(destination_client)
-    monkeypatch.delenv("CONTROL_TOWER_SECRET")
-
-    body = destination_client.get("/control/manage").get_json()
-
-    assert body["is_token_secret_configured"] is False
-    assert len(next(project for project in body["projects"] if project["id"] == "elum")["destinations"]) == 1

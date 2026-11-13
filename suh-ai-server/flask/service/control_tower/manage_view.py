@@ -12,7 +12,7 @@ from config.control_tower_config import (
 )
 from service.control_tower.bootstrap import DEFAULT_STATUS_PAGE_URL, STATUS_PAGE_URL_ENV
 from service.control_tower.destination_validation import (
-    DESTINATION_LABEL_MAX_LENGTH, DESTINATION_URL_MAX_LENGTH, destination_entry, destination_kind_choices,
+    destination_entry, destination_form_options, destination_kind_choices,
 )
 from service.control_tower.override_models import RegistryOverrides
 from service.control_tower.overview import check_entry, incident_entry, iso_text
@@ -93,8 +93,7 @@ def build_manage(runtime, context: ManageContext) -> dict:
         "is_token_secret_configured": is_token_secret_configured(),
         "previous_token_valid_days": PREVIOUS_EVENT_TOKEN_VALID_DAYS,
         "max_previous_token_count": MAX_PREVIOUS_EVENT_TOKEN_COUNT,
-        "destination_options": {"label_max_length": DESTINATION_LABEL_MAX_LENGTH,
-                                "url_max_length": DESTINATION_URL_MAX_LENGTH},
+        "destination_options": destination_form_options(),
     }
 
 

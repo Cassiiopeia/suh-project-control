@@ -1,6 +1,6 @@
 """관제소 프로젝트 받을 곳 API (nginx API 키 보호): 추가 POST /control/projects/<id>/destinations,
 사용 전환 PATCH·삭제 DELETE /control/destinations/<id>, 테스트 발송 POST /control/destinations/<id>/test
-URL 원문은 암호화 저장만 (응답·감사·로그는 url_hint까지), 비밀값 없으면 추가·전환·테스트 409, 런타임 미설정 시 503"""
+URL 원문은 암호화 저장만 (응답·감사·로그는 url_hint까지), 비밀값 없으면 추가·사용 켜기·테스트 409 (끄기·삭제는 가능), 런타임 미설정 시 503"""
 from __future__ import annotations
 
 import os
@@ -68,7 +68,7 @@ def _create_destination(project_id: str):
 
 @audited(AuditCategory.CONTROL_TOWER, AuditAction.CONTROL_DESTINATION_UPDATE)
 def _update_destination(destination_id: int):
-    """사용·중지 전환: 본문 검증 > 받을 곳 확인 > 비밀값 확인 > 저장 > 항목 응답"""
+    """사용·중지 전환: 본문 검증 > 받을 곳 확인 > 비밀값 확인(켜기만) > 저장 > 항목 응답"""
     runtime = get_runtime()
     if runtime is None:
         return _error("unavailable", 503)
@@ -81,7 +81,8 @@ def _update_destination(destination_id: int):
     if destination is None:
         return _error("unknown_destination", 404)
     set_audit_detail({**destination_audit_detail(destination), "is_enabled": is_enabled})
-    if not is_token_secret_configured():
+    # 끄기는 비밀값 없어도 허용 (비밀값 분실 시에도 발송 중지 가능)
+    if is_enabled and not is_token_secret_configured():
         return _error("secret_not_configured", 409)
     if not runtime.store.set_destination_enabled(destination_id, is_enabled):
         return _error("unknown_destination", 404)
