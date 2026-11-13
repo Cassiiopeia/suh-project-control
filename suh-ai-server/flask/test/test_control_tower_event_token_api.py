@@ -10,6 +10,7 @@ import pytest
 from control_tower_admin_fixtures import (  # noqa: F401 (pytest 픽스처 재노출)
     NOW, REGISTRY, FakePoller, _snapshot, dispatcher, make_app, store,
 )
+from config.control_tower_config import MAX_PREVIOUS_EVENT_TOKEN_COUNT, PREVIOUS_EVENT_TOKEN_VALID_DAYS
 from service.audit_service import AuditAction
 from service.control_tower import runtime as runtime_module
 from service.control_tower.override_models import CustomProject
@@ -175,3 +176,10 @@ def test_비밀값이_없으면_관리_목록에_미설정으로_표시된다(to
     monkeypatch.delenv("CONTROL_TOWER_SECRET")
 
     assert token_client.get("/control/manage").get_json()["is_token_secret_configured"] is False
+
+
+def test_관리_목록의_토큰_유예_일수와_이전_최대_개수는_설정_상수와_같다(token_client):
+    body = token_client.get("/control/manage").get_json()
+
+    assert body["previous_token_valid_days"] == PREVIOUS_EVENT_TOKEN_VALID_DAYS
+    assert body["max_previous_token_count"] == MAX_PREVIOUS_EVENT_TOKEN_COUNT

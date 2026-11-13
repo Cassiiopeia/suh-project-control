@@ -7,7 +7,9 @@ import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from config.control_tower_config import MAX_EXTERNAL_CHECKS
+from config.control_tower_config import (
+    MAX_EXTERNAL_CHECKS, MAX_PREVIOUS_EVENT_TOKEN_COUNT, PREVIOUS_EVENT_TOKEN_VALID_DAYS,
+)
 from service.control_tower.bootstrap import DEFAULT_STATUS_PAGE_URL, STATUS_PAGE_URL_ENV
 from service.control_tower.override_models import RegistryOverrides
 from service.control_tower.overview import check_entry, incident_entry, iso_text
@@ -65,7 +67,7 @@ def count_external_checks(registry: Registry) -> int:
 
 def build_manage(runtime, context: ManageContext) -> dict:
     """관리 화면 본문: 상태 페이지 설정 > 프로젝트 > 서비스(인프라 포함, 표시 순서) > 외부 점검 사용량 > 알림 종류 선택지
-    > 토큰 비밀값 설정 여부 (CONTROL_TOWER_SECRET, 없으면 화면 발급 버튼 비활성)"""
+    > 토큰 비밀값 설정 여부 (CONTROL_TOWER_SECRET, 없으면 화면 발급 버튼 비활성) > 이전 토큰 유예 일수·최대 개수 (화면 안내 문구 원본)"""
     states = _current_states(runtime)
     now = datetime.now(timezone.utc)
     page = context.effective.page
@@ -82,6 +84,8 @@ def build_manage(runtime, context: ManageContext) -> dict:
         "external_checks": {"used": count_external_checks(context.effective), "maximum": MAX_EXTERNAL_CHECKS},
         "event_kind_options": _event_kind_options(context.effective.discord),
         "is_token_secret_configured": is_token_secret_configured(),
+        "previous_token_valid_days": PREVIOUS_EVENT_TOKEN_VALID_DAYS,
+        "max_previous_token_count": MAX_PREVIOUS_EVENT_TOKEN_COUNT,
     }
 
 

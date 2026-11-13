@@ -1,15 +1,12 @@
 /* 관제소 프로젝트 카드의 "이벤트 토큰" 영역: 상태 줄(관리 방식·현재 발급 시각·이전 개수·가장 늦은 만료 시각) + 발급·교체·폐기 버튼
    POST·DELETE /control/projects/{id}/event-token > 발급 원문은 결과 창에 1번만 표시(닫으면 비움) > ControlManage.reload()
-   window.ControlManageEventToken 로 노출, 비밀값 설정 여부는 GET /control/manage 의 is_token_secret_configured */
+   window.ControlManageEventToken 로 노출, 비밀값 설정 여부·유예 일수·이전 최대 개수는 GET /control/manage 값 사용 */
 (function () {
   const actions = window.ControlManageActions;
   const controlFormat = window.ControlFormat;
   const createElement = controlFormat.createElement;
   const MANAGED_BY_ADMIN_LABEL = '관리 화면';
   const MANAGED_BY_ENV_LABEL = '환경변수';
-  // 7일·3개 = control_tower_config.py PREVIOUS_EVENT_TOKEN_VALID_DAYS·MAX_PREVIOUS_EVENT_TOKEN_COUNT
-  const ROTATE_CONFIRM_TEXT = '토큰을 교체할까요? 지금 토큰은 7일 뒤 만료됩니다. 새 토큰으로 앱을 배포하세요.\n' +
-    '이전 토큰은 최대 3개까지 유지되며, 넘으면 만료가 가장 이른 이전 토큰이 바로 거부됩니다.';
   const FIRST_ISSUE_ENV_CONFIRM_TEXT = '토큰을 발급할까요? 발급하면 이 프로젝트의 환경변수 토큰은 더 이상 쓸 수 없습니다.';
   const REVOKE_CONFIRM_TEXT = '토큰을 폐기할까요? 현재·이전 토큰 모두 바로 거부되고 환경변수 토큰으로 돌아가지 않습니다.';
   // 비밀값 없음 안내 = 409 secret_not_configured 문구 (ControlManageActions 오류 문구 원본 사용)
@@ -93,6 +90,13 @@
   }
 
   /* ---------- 2. 버튼 ---------- */
+  // 교체 확인 문구 (유예 일수·이전 최대 개수 = 서버 설정 원본)
+  function describeRotateConfirm(manageData) {
+    return '토큰을 교체할까요? 지금 토큰은 ' + manageData.previous_token_valid_days +
+      '일 뒤 만료됩니다. 새 토큰으로 앱을 배포하세요.\n이전 토큰은 최대 ' + manageData.max_previous_token_count +
+      '개까지 유지되며, 넘으면 만료가 가장 이른 이전 토큰이 바로 거부됩니다.';
+  }
+
   function createButton(iconName, labelText, extraClass, isSecretConfigured, onClick) {
     const button = createElement('button', 'btn btn-xs ' + extraClass);
     button.type = 'button';
@@ -110,12 +114,13 @@
   }
 
   // 발급(처음)·교체(현재 있음)·폐기(현재 또는 이전 있음), 확인 창 거친 뒤 요청
-  function createButtonGroup(project, isSecretConfigured) {
+  function createButtonGroup(project, manageData) {
     const tokenStatus = project.event_token;
+    const isSecretConfigured = manageData.is_token_secret_configured;
     const group = createElement('div', 'flex flex-wrap items-center gap-2 mt-2');
     if (tokenStatus.has_current) {
       group.appendChild(createButton('refresh-cw', '토큰 교체', 'btn-outline', isSecretConfigured, async function () {
-        if (confirm(ROTATE_CONFIRM_TEXT)) await requestEventToken('POST', project, '토큰을 교체했습니다');
+        if (confirm(describeRotateConfirm(manageData))) await requestEventToken('POST', project, '토큰을 교체했습니다');
       }));
     } else {
       group.appendChild(createButton('key-round', '토큰 발급', 'btn-outline', isSecretConfigured, async function () {
@@ -135,11 +140,11 @@
   }
 
   /* ---------- 3. 영역 ---------- */
-  function createEventTokenSection(project, isSecretConfigured) {
+  function createEventTokenSection(project, manageData) {
     const section = createElement('div', 'mt-2 text-sm');
     section.appendChild(createElement('div', 'text-xs opacity-70', '이벤트 토큰 · 앱이 이벤트를 보낼 때 X-Control-Token 헤더에 사용'));
     section.appendChild(createStatusLine(project.event_token));
-    section.appendChild(createButtonGroup(project, isSecretConfigured));
+    section.appendChild(createButtonGroup(project, manageData));
     return section;
   }
 

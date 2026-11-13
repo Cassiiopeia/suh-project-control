@@ -70,7 +70,7 @@
     tableWrapper.appendChild(table);
     body.appendChild(tableWrapper);
     if (project) body.appendChild(window.ControlManageEventKinds.createEventKindSection(project, manageData.event_kind_options));
-    if (project) body.appendChild(window.ControlManageEventToken.createEventTokenSection(project, manageData.is_token_secret_configured));
+    if (project) body.appendChild(window.ControlManageEventToken.createEventTokenSection(project, manageData));
     card.appendChild(body);
     return card;
   }
