@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Iterable
 
+from service.control_tower.discord_sync_models import CATEGORY_KIND
+
 # 서비스 생명주기: active 감시·알림·공개 / paused 감시만 / retired 감시 안 함
 SERVICE_STATUS_ACTIVE = "active"
 SERVICE_STATUS_PAUSED = "paused"
@@ -22,6 +24,16 @@ ATTENTION_CHANNEL_KIND = "attention"
 GLOBAL_CHANNEL_KINDS = ("notice", "alert", "digest")
 # 채널 공개 대상에 항상 쓸 수 있는 예약 역할 키
 RESERVED_ROLE_KEYS = ("admin", "everyone")
+
+# 이벤트 접수 기본 종류 (프로젝트 사용자 정의 종류 이름으로 쓸 수 없음)
+EVENT_KIND_INFO = "info"
+# 사용자 정의 알림 종류 이름으로 쓸 수 없는 예약어 (role: 접두는 검증 함수가 별도 확인)
+RESERVED_EVENT_KINDS = frozenset(
+    PROJECT_CHANNEL_KINDS + GLOBAL_CHANNEL_KINDS + (EVENT_KIND_INFO, CATEGORY_KIND))
+# 사용자 정의 알림 종류 공개 대상으로 지정 가능한 역할 키 (관리자는 항상 볼 수 있어 저장 안 함)
+EVENT_KIND_VISIBLE_ROLE_KEYS = ("dev", "member")
+# 사용자 정의 알림 종류 기본 공개 대상
+DEFAULT_EVENT_KIND_VISIBLE_TO = ("dev",)
 
 DEFAULT_ROLE_NAMES = {"member": "{project}", "dev": "{project}-dev"}
 DEFAULT_CHANNEL_NAMES = {
@@ -60,6 +72,14 @@ class ServiceSpec:
 
 
 @dataclass(frozen=True)
+class EventKindSpec:
+    """프로젝트별 사용자 정의 알림 종류: 종류 이름, 디스코드 채널 이름, 공개 대상(빈 튜플 = 관리자만)"""
+    kind: str
+    channel_name: str
+    visible_to: tuple[str, ...] = DEFAULT_EVENT_KIND_VISIBLE_TO
+
+
+@dataclass(frozen=True)
 class ProjectSpec:
     id: str
     name: str
@@ -69,6 +89,7 @@ class ProjectSpec:
     is_hidden: bool = False  # 관리자 화면에서 숨김 > 공개 페이지 제외 (감시·알림은 유지)
     icon_source_url: str | None = None  # 기본 썸네일 가져올 https 주소 (등록 파일, 저장소에 이미지 없을 때 1회만)
     icon_version: str | None = None  # 저장된 썸네일 내용 해시 12자 (없으면 썸네일 없음, 스냅샷에 실림)
+    event_kinds: tuple[EventKindSpec, ...] = ()  # 사용자 정의 알림 종류 (저장소에서 병합, 생성 순)
 
 
 @dataclass(frozen=True)

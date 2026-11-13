@@ -99,6 +99,15 @@ SCHEMA_STATEMENTS = (
         sort_order INTEGER,
         created_at TEXT NOT NULL
     )""",
+    # 프로젝트별 사용자 정의 알림 종류 (visible_to = 쉼표 구분, 빈 문자열 = 관리자만)
+    """CREATE TABLE IF NOT EXISTS project_event_kind (
+        project_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        channel_name TEXT NOT NULL,
+        visible_to TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (project_id, kind)
+    )""",
     # 프로젝트 썸네일 (128px WebP 바이트, content_hash = 상태 페이지 캐시 버전)
     """CREATE TABLE IF NOT EXISTS project_icon (
         project_id TEXT PRIMARY KEY,
