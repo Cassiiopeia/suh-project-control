@@ -11,6 +11,7 @@ from control_tower_app_attention_api_fixtures import (  # noqa: F401
     BASE_TIME, attention_client, ingest, save_source, snapshot_document,
 )
 from router import control_tower_app_attention_intake
+from service.control_tower import project_event_tokens
 from service.control_tower import runtime as runtime_module
 from service.control_tower.app_attention_view import build_source_entry
 from service.control_tower.runtime import ControlTowerRuntime
@@ -23,6 +24,12 @@ NOW = datetime(2026, 11, 13, 3, 0, tzinfo=timezone.utc)
 ENV_TOKEN = "abc"
 SECRET_ENVIRON = {"CONTROL_TOWER_SECRET": "tower-secret", "CONTROL_EVENT_TOKEN_ELUM": ENV_TOKEN}
 NO_SECRET_ENVIRON = {"CONTROL_EVENT_TOKEN_ELUM": ENV_TOKEN}
+
+
+@pytest.fixture(autouse=True)
+def reset_secret_missing_warning(monkeypatch):
+    # 경고 간격 상태는 프로세스 전역이라 테스트마다 초기화
+    monkeypatch.setattr(project_event_tokens, "_last_secret_missing_warning_monotonic", None)
 
 
 def _all_stored_text(store) -> str:
@@ -111,6 +118,35 @@ def test_db_managed_without_secret_rejects_with_warning(store, caplog):
     assert len(warnings) == 1
     assert warnings[0].getMessage().startswith("[control-tower event-token]")
     assert token not in caplog.text
+
+
+def test_secret_missing_warning_is_throttled(store, caplog, monkeypatch):
+    token = issue_project_token(store, "elum", NOW, SECRET_ENVIRON)
+    clock = {"seconds": 1000.0}
+    monkeypatch.setattr(project_event_tokens, "monotonic", lambda: clock["seconds"])
+
+    def count_warnings_after_requests(request_count: int) -> int:
+        caplog.clear()
+        with caplog.at_level(logging.WARNING):
+            for _ in range(request_count):
+                assert not is_project_token_valid(store, "elum", token, NOW, NO_SECRET_ENVIRON)
+        return sum(1 for record in caplog.records if record.levelno == logging.WARNING)
+
+    assert count_warnings_after_requests(5) == 1
+    clock["seconds"] += project_event_tokens.SECRET_MISSING_WARNING_INTERVAL_SECONDS - 1
+    assert count_warnings_after_requests(3) == 0
+    clock["seconds"] += 1
+    assert count_warnings_after_requests(3) == 1
+
+
+def test_revoke_log_distinguishes_nothing_deleted(store, caplog):
+    issue_project_token(store, "elum", NOW, SECRET_ENVIRON)
+    with caplog.at_level(logging.INFO):
+        revoke_project_tokens(store, "elum")
+        revoke_project_tokens(store, "elum")
+    messages = [record.getMessage() for record in caplog.records if "revoke" in record.getMessage()]
+    assert messages == ["[control-tower event-token] revoked : project=elum",
+                        "[control-tower event-token] revoke skipped : no tokens project=elum"]
 
 
 def test_empty_presented_rejected(store):

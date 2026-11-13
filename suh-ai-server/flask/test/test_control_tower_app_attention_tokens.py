@@ -73,7 +73,7 @@ class _EnvTokenOnlyStore:
     """DB 발급 토큰 없는 저장소 (환경변수 토큰 경로만 검사)"""
 
     def load_project_token_state(self, project_id):
-        return ProjectTokenState(False, None, None, ())
+        return ProjectTokenState.not_managed()
 
 
 @pytest.fixture

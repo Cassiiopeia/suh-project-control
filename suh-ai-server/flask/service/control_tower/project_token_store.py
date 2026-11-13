@@ -20,6 +20,11 @@ class ProjectTokenState:
     previous_expires_at: datetime | None
     token_hashes: tuple[tuple[str, datetime | None], ...]
 
+    @classmethod
+    def not_managed(cls) -> ProjectTokenState:
+        """발급 이력 없음 = 환경변수 토큰 경로"""
+        return cls(is_db_managed=False, current_created_at=None, previous_expires_at=None, token_hashes=())
+
 
 class ProjectTokenStoreMixin:
     def rotate_project_token(self, project_id: str, token_hash: str, now: datetime,

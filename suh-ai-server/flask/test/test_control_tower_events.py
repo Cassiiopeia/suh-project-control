@@ -41,7 +41,7 @@ class FakeStore:
 
     def load_project_token_state(self, project_id: str) -> ProjectTokenState:
         # DB 발급 토큰 없음 = 환경변수 토큰 경로
-        return ProjectTokenState(False, None, None, ())
+        return ProjectTokenState.not_managed()
 
     def record_event(self, project_id: str, kind: str, dedupe_key: str | None, created_at: datetime) -> bool:
         if dedupe_key and any(entry[0] == project_id and entry[2] == dedupe_key for entry in self.recorded):

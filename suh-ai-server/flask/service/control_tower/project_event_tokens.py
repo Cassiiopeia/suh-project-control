@@ -7,8 +7,10 @@ import hmac
 import logging
 import os
 import secrets
+import threading
 from collections.abc import Mapping
 from datetime import datetime, timedelta
+from time import monotonic
 
 from config.control_tower_config import CONTROL_TOWER_SECRET_ENV, PREVIOUS_EVENT_TOKEN_VALID_DAYS
 from service.control_tower.app_attention_tokens import (
@@ -23,6 +25,11 @@ TOKEN_HASH_KEY_PREFIX = "control-tower:event-token:"
 # 발급 토큰 난수 크기 (바이트, urlsafe 43자)
 TOKEN_RANDOM_BYTES = 32
 PREVIOUS_TOKEN_VALID_PERIOD = timedelta(days=PREVIOUS_EVENT_TOKEN_VALID_DAYS)
+# 비밀값 없음 경고 최소 간격 (초, 프로세스당, 미인증 요청 반복 시 로그 폭주 방지)
+SECRET_MISSING_WARNING_INTERVAL_SECONDS = 600
+
+_secret_missing_warning_lock = threading.Lock()
+_last_secret_missing_warning_monotonic: float | None = None
 
 
 class TokenSecretNotConfiguredError(Exception):
@@ -44,7 +51,7 @@ def _hash_token(token: str, secret: str) -> str:
 
 
 def issue_project_token(store, project_id: str, now: datetime, environ: Mapping[str, str] = os.environ) -> str:
-    """새 토큰 발급: 비밀값 확인 > 난수 생성 > 해시 저장(기존 현재는 7일 유예 이전으로) > 원문 반환"""
+    """새 토큰 발급: 비밀값 확인 > 난수 생성 > 해시 저장(기존 현재는 유예 기간 동안 이전으로) > 원문 반환"""
     secret = _read_token_secret(environ)
     if secret is None:
         raise TokenSecretNotConfiguredError(CONTROL_TOWER_SECRET_ENV)
@@ -57,8 +64,23 @@ def issue_project_token(store, project_id: str, now: datetime, environ: Mapping[
 def revoke_project_tokens(store, project_id: str) -> bool:
     """현재·이전 토큰 삭제 (DB 관리 유지 = 환경변수 토큰으로 되돌아가지 않음) > 지운 토큰이 있었는지"""
     is_deleted = store.delete_project_tokens(project_id)
-    logger.info("[control-tower event-token] revoked : project=%s deleted=%s", project_id, is_deleted)
+    if is_deleted:
+        logger.info("[control-tower event-token] revoked : project=%s", project_id)
+    else:
+        logger.info("[control-tower event-token] revoke skipped : no tokens project=%s", project_id)
     return is_deleted
+
+
+def _should_warn_secret_missing() -> bool:
+    """비밀값 없음 경고 허용 여부 (마지막 경고 후 최소 간격 경과, 스레드 안전)"""
+    global _last_secret_missing_warning_monotonic
+    current_monotonic = monotonic()
+    with _secret_missing_warning_lock:
+        last_monotonic = _last_secret_missing_warning_monotonic
+        if last_monotonic is not None and current_monotonic - last_monotonic < SECRET_MISSING_WARNING_INTERVAL_SECONDS:
+            return False
+        _last_secret_missing_warning_monotonic = current_monotonic
+        return True
 
 
 def is_project_token_valid(store, project_id: str, presented: str, now: datetime,
@@ -71,8 +93,9 @@ def is_project_token_valid(store, project_id: str, presented: str, now: datetime
         return is_presented_token_valid(event_token_env_name(project_id), presented, environ)
     secret = _read_token_secret(environ)
     if secret is None:
-        logger.warning("[control-tower event-token] rejected : %s not configured project=%s",
-                       CONTROL_TOWER_SECRET_ENV, project_id)
+        if _should_warn_secret_missing():
+            logger.warning("[control-tower event-token] rejected : %s not configured project=%s",
+                           CONTROL_TOWER_SECRET_ENV, project_id)
         return False
     presented_hash = _hash_token(presented, secret)
     # 후보 전부 비교 (어느 쪽과 맞았는지 시간 차이 안 남게), 만료된 이전 토큰 제외
