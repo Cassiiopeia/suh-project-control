@@ -69,16 +69,18 @@ NotifyResult result = ControlTower.notify(ControlTowerEvent.of("error", "결제 
         .severity("critical")
         .body("결제 승인 응답 지연")
         .url("https://example.com/orders/42")
-        .field("주문", "42")                 // 넣은 순서 유지, 값은 String.valueOf로 문자열화
+        .field("주문", 42)                   // 넣은 순서 유지, 값은 String.valueOf로 문자열화 (42 > "42", true > "true")
         .field("원인", "timeout")            // 여러 개는 .fields(LinkedHashMap)도 가능
         .dedupeKey("payment-error:42"));
 ```
+
+필드 값은 모두 문자열로 보냅니다. boolean 값은 `"true"`/`"false"`가 되므로 "예/아니오"처럼 읽기 쉬운 값이 필요하면 직접 바꿔 넣으세요. 빈 Map을 `.fields(...)`에 넘기면 `"fields": []`로 보냅니다.
 
 `ControlTower` 정적 진입점 대신 `new ControlTowerClient(options)`를 직접 만들어 써도 됩니다(스레드 안전).
 
 - 설정 오류는 `build()`/`init`에서 `IllegalArgumentException`으로 알립니다: 빈 `project`/`token`, 공백·제어문자·비ASCII가 든 토큰, `https`가 아닌 `baseUrl`(테스트용 `http://127.0.0.1`, `http://localhost`만 예외), 0 이하 `timeout`. 앱 시작 시 한 번 걸러집니다. 메시지에 토큰은 들어가지 않습니다.
 - `notify`/`notifyAsync`는 예외를 던지지 않습니다.
-- `timeout`은 **요청 전체 소요 시간 상한**입니다(연결 + 응답 대기, `HttpRequest.timeout`과 `connectTimeout`에 같은 값). Python 클라이언트의 `timeout_seconds`는 소켓 동작마다 적용되는 값이라 의미가 조금 다릅니다.
+- `timeout`은 **요청 전체 소요 시간 상한**입니다(연결 + 응답 헤더 + 응답 본문까지, 넘으면 전송을 취소하고 `timeout`). Python 클라이언트의 `timeout_seconds`는 소켓 동작마다 적용되는 값이라 의미가 조금 다릅니다.
 - 리다이렉트(3xx)는 따라가지 않습니다(토큰 유출 방지). 결과는 `http_302`처럼 실제 상태로 나옵니다.
 
 ### Spring 서비스 안에서

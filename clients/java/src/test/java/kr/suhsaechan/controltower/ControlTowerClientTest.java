@@ -27,6 +27,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ControlTowerClientTest {
 
     private static final String TOKEN = "secret-token-123";
+    // 본문 지연(5초) 응답에서 timeout 300ms가 지켜졌다고 볼 상한 (여유 포함)
+    private static final long STALLED_BODY_TIME_LIMIT_MILLISECONDS = 2000;
     private final List<FakeServer> servers = new ArrayList<>();
 
     @AfterEach
@@ -140,6 +142,42 @@ class ControlTowerClientTest {
     }
 
     @Test
+    void timeoutCoversStalledBody() throws IOException {
+        FakeServer server = startServer().stallBodyAfterHeaders(5000);
+        long startNanos = System.nanoTime();
+        NotifyResult result = makeClient(server.baseUrl(), Duration.ofMillis(300))
+                .notify(ControlTowerEvent.of("report", "제목"));
+        long elapsedMilliseconds = Duration.ofNanos(System.nanoTime() - startNanos).toMillis();
+        assertEquals(new NotifyResult(false, null, "timeout", false), result);
+        assertTrue(elapsedMilliseconds < STALLED_BODY_TIME_LIMIT_MILLISECONDS, "elapsed " + elapsedMilliseconds);
+    }
+
+    @Test
+    void asyncTimeoutCoversStalledBody() throws Exception {
+        FakeServer server = startServer().stallBodyAfterHeaders(5000);
+        long startNanos = System.nanoTime();
+        NotifyResult result = makeClient(server.baseUrl(), Duration.ofMillis(300))
+                .notifyAsync(ControlTowerEvent.of("report", "제목")).get(5, TimeUnit.SECONDS);
+        long elapsedMilliseconds = Duration.ofNanos(System.nanoTime() - startNanos).toMillis();
+        assertEquals(new NotifyResult(false, null, "timeout", false), result);
+        assertTrue(elapsedMilliseconds < STALLED_BODY_TIME_LIMIT_MILLISECONDS, "elapsed " + elapsedMilliseconds);
+    }
+
+    @Test
+    void emptyFieldsMapEmitsEmptyArray() throws IOException {
+        FakeServer server = startServer();
+        String requestBody = makeClient(server).buildRequestBody(ControlTowerEvent.of("report", "t").fields(Map.of()));
+        assertEquals(List.of(), ((Map<?, ?>) JsonValueParser.parse(requestBody)).get("fields"));
+    }
+
+    @Test
+    void deeplyNestedResponseFallsBackToHttpStatus() throws IOException {
+        FakeServer server = startServer().respond(500, "[".repeat(100_000));
+        NotifyResult result = makeClient(server).notify(ControlTowerEvent.of("report", "제목"));
+        assertEquals(new NotifyResult(false, 500, "http_500", false), result);
+    }
+
+    @Test
     void connectionRefused() {
         NotifyResult result = makeClient("http://127.0.0.1:1", Duration.ofSeconds(1))
                 .notify(ControlTowerEvent.of("report", "제목"));
@@ -152,8 +190,7 @@ class ControlTowerClientTest {
         makeClient(server).notify(ControlTowerEvent.of("report", "한글 제목")
                 .body("본문").field("요청 경로", "메일 링크").url("https://a.b"));
         FakeServer.ReceivedRequest request = server.receivedRequests.get(0);
-        String expectedTitle = new String("한글 제목".getBytes(StandardCharsets.UTF_8), StandardCharsets.UTF_8);
-        assertTrue(request.bodyText().contains(expectedTitle));
+        assertTrue(containsBytes(request.body(), "한글 제목".getBytes(StandardCharsets.UTF_8)));
         assertEquals(TOKEN, request.headers().getFirst("X-Control-Token"));
         assertEquals("application/json; charset=utf-8", request.headers().getFirst("Content-Type"));
         Map<?, ?> payload = (Map<?, ?>) JsonValueParser.parse(request.bodyText());
@@ -212,5 +249,14 @@ class ControlTowerClientTest {
         NotifyResult result = makeClient(server.baseUrl(), Duration.ofMillis(200))
                 .notifyAsync(ControlTowerEvent.of("report", "t")).join();
         assertEquals("timeout", result.errorCode());
+    }
+
+    private static boolean containsBytes(byte[] haystack, byte[] needle) {
+        for (int start = 0; start + needle.length <= haystack.length; start++) {
+            if (java.util.Arrays.equals(haystack, start, start + needle.length, needle, 0, needle.length)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

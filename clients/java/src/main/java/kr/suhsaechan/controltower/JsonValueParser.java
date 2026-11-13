@@ -12,8 +12,14 @@ import java.util.Map;
  */
 final class JsonValueParser {
 
+    // 객체·배열 최대 중첩 깊이 (깊은 응답으로 StackOverflowError 방지)
+    static final int MAXIMUM_NESTING_DEPTH = 64;
+    private static final int UNICODE_ESCAPE_LENGTH = 4;
+    private static final int HEX_RADIX = 16;
+
     private final String text;
     private int position;
+    private int nestingDepth;
 
     private JsonValueParser(String text) {
         this.text = text;
@@ -36,14 +42,24 @@ final class JsonValueParser {
         }
         char current = text.charAt(position);
         return switch (current) {
-            case '{' -> readObject();
-            case '[' -> readArray();
+            case '{' -> readNested(true);
+            case '[' -> readNested(false);
             case '"' -> readString();
             case 't' -> readLiteral("true", Boolean.TRUE);
             case 'f' -> readLiteral("false", Boolean.FALSE);
             case 'n' -> readLiteral("null", null);
             default -> readNumber();
         };
+    }
+
+    /** 중첩 깊이 확인 > 객체 또는 배열 읽기 */
+    private Object readNested(boolean isObject) {
+        if (++nestingDepth > MAXIMUM_NESTING_DEPTH) {
+            throw error("nesting too deep");
+        }
+        Object nested = isObject ? readObject() : readArray();
+        nestingDepth--;
+        return nested;
     }
 
     private Map<String, Object> readObject() {
@@ -113,17 +129,21 @@ final class JsonValueParser {
         throw error("unterminated string");
     }
 
+    /** 16진 4자리만 허용 (부호 +/- 거부) */
     private char readUnicodeEscape() {
-        if (position + 4 > text.length()) {
+        if (position + UNICODE_ESCAPE_LENGTH > text.length()) {
             throw error("short unicode escape");
         }
-        try {
-            char decoded = (char) Integer.parseInt(text.substring(position, position + 4), 16);
-            position += 4;
-            return decoded;
-        } catch (NumberFormatException invalidHex) {
-            throw error("invalid unicode escape");
+        int codeUnit = 0;
+        for (int offset = 0; offset < UNICODE_ESCAPE_LENGTH; offset++) {
+            int digit = Character.digit(text.charAt(position + offset), HEX_RADIX);
+            if (digit < 0) {
+                throw error("invalid unicode escape");
+            }
+            codeUnit = codeUnit * HEX_RADIX + digit;
         }
+        position += UNICODE_ESCAPE_LENGTH;
+        return (char) codeUnit;
     }
 
     private Object readLiteral(String literal, Object value) {

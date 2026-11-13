@@ -47,11 +47,12 @@ public final class ControlTowerEvent {
         return this;
     }
 
-    /** 필드 여러 개 추가 (Map 순회 순서 유지: LinkedHashMap 권장) */
+    /** 필드 여러 개 추가 (Map 순회 순서 유지: LinkedHashMap 권장, 빈 Map > "fields": []) */
     public ControlTowerEvent fields(Map<String, ?> namedValues) {
         if (namedValues == null) {
             return this;
         }
+        hasFields = true;
         namedValues.forEach(this::field);
         return this;
     }

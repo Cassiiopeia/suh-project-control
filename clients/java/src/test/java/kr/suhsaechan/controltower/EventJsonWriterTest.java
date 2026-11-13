@@ -30,7 +30,7 @@ class EventJsonWriterTest {
 
     @Test
     void escapesLineSeparators() {
-        assertEquals("\"\\u2028\\u2029\"", write("  "));
+        assertEquals("\"\\u2028\\u2029\"", write("\u2028\u2029"));
     }
 
     @Test
@@ -57,7 +57,20 @@ class EventJsonWriterTest {
 
     @Test
     void roundTripsThroughParser() {
-        String text = "따옴표\" 역슬래시\\ 줄\n 제어\u0002 구분  이모지😀";
+        String text = "따옴표\" 역슬래시\\ 줄\n 제어\u0002 구분\u2028 이모지😀";
         assertEquals(text, JsonValueParser.parse(EventJsonWriter.write(text)));
+    }
+
+    @Test
+    void parserRejectsDeepNestingWithoutStackOverflow() {
+        assertThrows(IllegalArgumentException.class, () -> JsonValueParser.parse("[".repeat(100_000)));
+        assertEquals(List.of(List.of()), JsonValueParser.parse("[[]]"));
+    }
+
+    @Test
+    void parserRejectsSignedHexInUnicodeEscape() {
+        assertThrows(IllegalArgumentException.class, () -> JsonValueParser.parse("\"\\u+041\""));
+        assertThrows(IllegalArgumentException.class, () -> JsonValueParser.parse("\"\\u-041\""));
+        assertEquals("A", JsonValueParser.parse("\"\\u0041\""));
     }
 }

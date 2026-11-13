@@ -14,6 +14,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
@@ -34,15 +35,18 @@ final class FakeServer implements AutoCloseable {
     final List<ReceivedRequest> receivedRequests = new CopyOnWriteArrayList<>();
     final Map<String, String> extraHeaders = new ConcurrentHashMap<>();
     private final HttpServer httpServer;
+    private final ExecutorService handlerExecutor = Executors.newCachedThreadPool();
     private volatile int status = 202;
     private volatile byte[] responseBody = DEFAULT_RESPONSE_BODY.getBytes(StandardCharsets.UTF_8);
     private volatile long delayMilliseconds = 0;
     // 지정하면 응답 전에 이 래치가 풀릴 때까지 대기
     private volatile CountDownLatch responseGate;
+    // 0보다 크면 헤더와 본문 일부만 보낸 뒤 이 시간만큼 멈춤 (본문 지연)
+    private volatile long bodyStallMilliseconds = 0;
 
     FakeServer() throws IOException {
         httpServer = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
-        httpServer.setExecutor(Executors.newCachedThreadPool());
+        httpServer.setExecutor(handlerExecutor);
         httpServer.createContext("/", this::handle);
         httpServer.start();
     }
@@ -55,6 +59,11 @@ final class FakeServer implements AutoCloseable {
 
     FakeServer delay(long delayMilliseconds) {
         this.delayMilliseconds = delayMilliseconds;
+        return this;
+    }
+
+    FakeServer stallBodyAfterHeaders(long bodyStallMilliseconds) {
+        this.bodyStallMilliseconds = bodyStallMilliseconds;
         return this;
     }
 
@@ -85,7 +94,7 @@ final class FakeServer implements AutoCloseable {
             extraHeaders.forEach((name, value) -> exchange.getResponseHeaders().add(name, value));
             exchange.sendResponseHeaders(status, responseBody.length == 0 ? -1 : responseBody.length);
             try (OutputStream output = exchange.getResponseBody()) {
-                output.write(responseBody);
+                writeBody(output);
             }
         } catch (IOException clientGone) {
             // 클라이언트가 시간 초과로 먼저 끊은 경우
@@ -94,8 +103,27 @@ final class FakeServer implements AutoCloseable {
         }
     }
 
+    /** 본문 쓰기 (본문 지연 모드: 첫 바이트 > 멈춤 > 나머지) */
+    private void writeBody(OutputStream output) throws IOException {
+        if (bodyStallMilliseconds <= 0 || responseBody.length < 2) {
+            output.write(responseBody);
+            return;
+        }
+        output.write(responseBody, 0, 1);
+        output.flush();
+        try {
+            Thread.sleep(bodyStallMilliseconds);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            return;
+        }
+        output.write(responseBody, 1, responseBody.length - 1);
+    }
+
     @Override
     public void close() {
         httpServer.stop(0);
+        // 멈춘 핸들러 스레드까지 정리
+        handlerExecutor.shutdownNow();
     }
 }

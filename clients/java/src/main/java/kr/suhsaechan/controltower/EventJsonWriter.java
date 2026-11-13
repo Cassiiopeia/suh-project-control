@@ -11,8 +11,8 @@ import java.util.Map;
 final class EventJsonWriter {
 
     private static final char LAST_CONTROL_CHARACTER = 0x1F;
-    private static final char LINE_SEPARATOR = ' ';
-    private static final char PARAGRAPH_SEPARATOR = ' ';
+    private static final char LINE_SEPARATOR = '\u2028';
+    private static final char PARAGRAPH_SEPARATOR = '\u2029';
 
     private EventJsonWriter() {
     }
