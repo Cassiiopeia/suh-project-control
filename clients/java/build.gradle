@@ -1,0 +1,36 @@
+plugins {
+    id 'java-library'
+}
+
+// 좌표: kr.suhsaechan:suh-control-tower-client (서버 릴리스 v2.0.x와 별도 버전, 게시 설정 없음)
+group = 'kr.suhsaechan'
+version = '0.1.0'
+description = 'Control tower event intake client for server-side Java (no dependencies)'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+// 런타임 의존성 0개 (테스트 전용 JUnit만)
+dependencies {
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 17
+}
+
+test {
+    useJUnitPlatform()
+    // 계약 테스트: 레포 규격 원본(docs/control-tower/events) 위치
+    systemProperty 'controlTower.eventsDirectory', file('../../docs/control-tower/events').absolutePath
+}
