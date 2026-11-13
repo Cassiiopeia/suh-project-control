@@ -22,6 +22,8 @@
     no_icon: '삭제할 썸네일이 없습니다',
     duplicate_kind: '이미 있는 알림 종류입니다',
     unknown_kind: '이미 삭제된 알림 종류입니다',
+    secret_not_configured: '서버에 CONTROL_TOWER_SECRET 설정이 필요해요',
+    no_token: '폐기할 토큰이 없습니다',
   };
   // 서비스 id 규칙 (서버 검증과 같음)
   const IDENTIFIER_PATTERN = /^[a-z0-9][a-z0-9-]{1,40}$/;

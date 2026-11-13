@@ -5,12 +5,13 @@ from __future__ import annotations
 import base64
 import os
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 
 from config.control_tower_config import MAX_EXTERNAL_CHECKS
 from service.control_tower.bootstrap import DEFAULT_STATUS_PAGE_URL, STATUS_PAGE_URL_ENV
 from service.control_tower.override_models import RegistryOverrides
 from service.control_tower.overview import check_entry, incident_entry, iso_text
+from service.control_tower.project_event_tokens import describe_project_token, is_token_secret_configured
 from service.control_tower.registry import SERVICE_STATUS_RETIRED, CheckSpec, Registry, ServiceSpec
 from service.control_tower.event_kind_validation import (
     CHANNEL_NAME_MAX_LENGTH, EVENT_KIND_PATTERN, EVENT_KIND_RULE_TEXT,
@@ -63,20 +64,24 @@ def count_external_checks(registry: Registry) -> int:
 
 
 def build_manage(runtime, context: ManageContext) -> dict:
-    """관리 화면 본문: 상태 페이지 설정 > 프로젝트 > 서비스(인프라 포함, 표시 순서) > 외부 점검 사용량 > 알림 종류 선택지"""
+    """관리 화면 본문: 상태 페이지 설정 > 프로젝트 > 서비스(인프라 포함, 표시 순서) > 외부 점검 사용량 > 알림 종류 선택지
+    > 토큰 비밀값 설정 여부 (CONTROL_TOWER_SECRET, 없으면 화면 발급 버튼 비활성)"""
     states = _current_states(runtime)
+    now = datetime.now(timezone.utc)
     page = context.effective.page
     invites = runtime.store.all_project_invites()
     icon_images = runtime.store.load_project_icon_images()
     return {
         "page": {"title": page.title, "notice_text": page.notice_text, "notice_level": page.notice_level,
                  "preview_url": os.environ.get(STATUS_PAGE_URL_ENV) or DEFAULT_STATUS_PAGE_URL},
-        "projects": [_project_entry(project, context, invites.get(project.id), icon_images.get(project.id))
+        "projects": [{**_project_entry(project, context, invites.get(project.id), icon_images.get(project.id)),
+                      "event_token": describe_project_token(runtime.store, project.id, now)}
                      for project in context.effective.projects],
         "services": [_service_entry(service, context, states)
                      for service in context.effective.services + context.effective.infrastructure],
         "external_checks": {"used": count_external_checks(context.effective), "maximum": MAX_EXTERNAL_CHECKS},
         "event_kind_options": _event_kind_options(context.effective.discord),
+        "is_token_secret_configured": is_token_secret_configured(),
     }
 
 

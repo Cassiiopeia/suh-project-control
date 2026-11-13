@@ -83,6 +83,9 @@ class AuditAction(str, Enum):
     # 관제소 프로젝트 알림 종류: 추가 / 삭제
     CONTROL_EVENT_KIND_CREATE = "CONTROL_EVENT_KIND_CREATE"
     CONTROL_EVENT_KIND_DELETE = "CONTROL_EVENT_KIND_DELETE"
+    # 관제소 프로젝트 이벤트 토큰: 발급·교체 / 폐기 (상세는 project_id만, 토큰 값 없음)
+    CONTROL_EVENT_TOKEN_ISSUE = "CONTROL_EVENT_TOKEN_ISSUE"
+    CONTROL_EVENT_TOKEN_REVOKE = "CONTROL_EVENT_TOKEN_REVOKE"
 
 
 def record(category: AuditCategory, action: AuditAction, actor_ip: str, detail: dict = None, *,

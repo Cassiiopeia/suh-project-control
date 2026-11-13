@@ -23,6 +23,7 @@
 </div>
 {% include "admin/control/service_modal.html" %}
 {% include "admin/control/app_attention_modals.html" %}
+{% include "admin/control/event_token_modal.html" %}
 {% endblock %}
 {% block extra_js %}
 <script src="{{ root }}/static/js/control-format.js?v={{ asset('js/control-format.js') }}"></script>
@@ -32,6 +33,7 @@
 <script src="{{ root }}/static/js/control-manage-invite.js?v={{ asset('js/control-manage-invite.js') }}"></script>
 <script src="{{ root }}/static/js/control-manage-icon.js?v={{ asset('js/control-manage-icon.js') }}"></script>
 <script src="{{ root }}/static/js/control-manage-event-kinds.js?v={{ asset('js/control-manage-event-kinds.js') }}"></script>
+<script src="{{ root }}/static/js/control-manage-event-token.js?v={{ asset('js/control-manage-event-token.js') }}"></script>
 <script src="{{ root }}/static/js/control-manage.js?v={{ asset('js/control-manage.js') }}"></script>
 <script src="{{ root }}/static/js/control-status-page.js?v={{ asset('js/control-status-page.js') }}"></script>
 <!-- 앱 확인할 일: 표시 도우미 > 현황 > 관리(표·폼·항목) -->
