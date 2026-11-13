@@ -10,6 +10,7 @@ from flask import Blueprint, jsonify, request
 from router.control_tower_admin_api import register_admin_api
 from router.control_tower_app_attention_api import register_app_attention_api
 from router.control_tower_app_attention_intake import register_app_attention_intake
+from router.control_tower_event_kind_api import register_event_kind_api
 from router.control_tower_icon_api import register_icon_api
 from router.control_tower_invite_api import register_invite_api
 from router.control_tower_manage_api import register_manage_api
@@ -21,6 +22,7 @@ register_admin_api(control_tower_bp)  # 관리자 화면 API (nginx 키 검사 �
 register_manage_api(control_tower_bp)  # 서비스 관리 API (nginx 키 검사 대상)
 register_invite_api(control_tower_bp)  # 프로젝트 초대 API (nginx 키 검사 대상)
 register_icon_api(control_tower_bp)  # 프로젝트 썸네일 API (nginx 키 검사 대상)
+register_event_kind_api(control_tower_bp)  # 프로젝트 알림 종류 API (nginx 키 검사 대상)
 register_app_attention_api(control_tower_bp)  # 앱 확인할 일 관리 API (nginx 키 검사 대상)
 register_app_attention_intake(control_tower_bp)  # 앱 확인할 일 push 입구 (nginx 키 검사 제외, 프로젝트 토큰)
 

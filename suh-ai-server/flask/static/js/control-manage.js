@@ -69,6 +69,7 @@
     table.appendChild(tableBody);
     tableWrapper.appendChild(table);
     body.appendChild(tableWrapper);
+    if (project) body.appendChild(window.ControlManageEventKinds.createEventKindSection(project, manageData.event_kind_options));
     card.appendChild(body);
     return card;
   }

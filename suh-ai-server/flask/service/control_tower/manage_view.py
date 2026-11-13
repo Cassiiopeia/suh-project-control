@@ -12,6 +12,9 @@ from service.control_tower.bootstrap import DEFAULT_STATUS_PAGE_URL, STATUS_PAGE
 from service.control_tower.override_models import RegistryOverrides
 from service.control_tower.overview import check_entry, incident_entry, iso_text
 from service.control_tower.registry import SERVICE_STATUS_RETIRED, CheckSpec, Registry, ServiceSpec
+from service.control_tower.registry_models import (
+    DEFAULT_EVENT_KIND_VISIBLE_TO, EVENT_KIND_VISIBLE_ROLE_KEYS, EventKindSpec,
+)
 from service.control_tower.registry_overrides import merge_overrides
 from service.control_tower.state_machine import STATUS_UNKNOWN
 
@@ -57,7 +60,7 @@ def count_external_checks(registry: Registry) -> int:
 
 
 def build_manage(runtime, context: ManageContext) -> dict:
-    """관리 화면 본문: 상태 페이지 설정 > 프로젝트 > 서비스(인프라 포함, 표시 순서) > 외부 점검 사용량"""
+    """관리 화면 본문: 상태 페이지 설정 > 프로젝트 > 서비스(인프라 포함, 표시 순서) > 외부 점검 사용량 > 알림 종류 선택지"""
     states = _current_states(runtime)
     page = context.effective.page
     invites = runtime.store.all_project_invites()
@@ -70,6 +73,9 @@ def build_manage(runtime, context: ManageContext) -> dict:
         "services": [_service_entry(service, context, states)
                      for service in context.effective.services + context.effective.infrastructure],
         "external_checks": {"used": count_external_checks(context.effective), "maximum": MAX_EXTERNAL_CHECKS},
+        # 알림 종류 추가 폼 선택지 (공개 대상 역할 키·기본값, 서버 검증과 같은 원본)
+        "event_kind_options": {"visible_role_keys": list(EVENT_KIND_VISIBLE_ROLE_KEYS),
+                               "default_visible_to": list(DEFAULT_EVENT_KIND_VISIBLE_TO)},
     }
 
 
@@ -104,7 +110,7 @@ def _current_states(runtime) -> dict:
 
 def _project_entry(project, context: ManageContext, invite=None, icon_image: bytes | None = None) -> dict:
     """invite_url: 디스코드 초대 링크 (없으면 null), icon_data_url: 썸네일 data URL (없으면 null),
-    icon_source_url: 등록 파일의 기본 이미지 주소 (없으면 null)"""
+    icon_source_url: 등록 파일의 기본 이미지 주소 (없으면 null), event_kinds: 사용자 정의 알림 종류 (생성 순)"""
     override = context.overrides.project_overrides.get(project.id)
     original = next((item for item in context.file_registry.projects if item.id == project.id), None)
     custom = next((item for item in context.overrides.custom_projects if item.id == project.id), None)
@@ -117,7 +123,13 @@ def _project_entry(project, context: ManageContext, invite=None, icon_image: byt
         "invite_url": invite.url if invite is not None else None,
         "icon_data_url": _to_webp_data_url(icon_image),
         "icon_source_url": original.icon_source_url if original is not None else None,
+        "event_kinds": [event_kind_entry(spec) for spec in project.event_kinds],
     }
+
+
+def event_kind_entry(spec: EventKindSpec) -> dict:
+    """알림 종류 1개 > {kind, channel_name, visible_to} (관리 목록·추가 응답 공용)"""
+    return {"kind": spec.kind, "channel_name": spec.channel_name, "visible_to": list(spec.visible_to)}
 
 
 def _to_webp_data_url(image_bytes: bytes | None) -> str | None:
