@@ -1,6 +1,6 @@
 """test_claude_login_code_service.py — 계정별 코드 작업 상태·만료·감사·열람 중복 제거·동시 계정"""
 from datetime import datetime, timedelta, timezone
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -202,3 +202,24 @@ def test_manual_request_replaces_issued_code():
         [(state, is_new_job)] = code_service.start_requests('manual', CLIENT, 1)
     assert is_new_job is True
     assert state['status'] == 'running'
+
+
+SENDER = 'service.claude_login_code_service.send_project_event'
+
+
+def test_issued_sends_project_event_without_code_or_address():
+    with patch(SENDER) as send:
+        run_job()
+    assert send.call_count == 1
+    assert send.call_args.args[:3] == ('suh-ai', 'claude-code', 'Claude 코드 발급')
+    fields = dict(send.call_args.kwargs['fields'])
+    assert fields == {'계정': '계정1', 'IP': '1.2.3.4', '브라우저': 'UA'}
+    assert send.call_args.kwargs['dedupe_key'] == f"claude-code:issued:{code_service.get_state(1)['job_id']}"
+    assert '027696' not in repr(send.call_args)
+    assert 'me@gmail.com' not in repr(send.call_args)
+
+
+def test_failed_job_sends_no_project_event():
+    with patch(SENDER) as send:
+        run_job(read_code=Mock(side_effect=BrowserClientError('x')))
+    send.assert_not_called()

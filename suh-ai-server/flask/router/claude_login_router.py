@@ -11,11 +11,14 @@ from service import audit_service
 from service import claude_login_account_service as account_service
 from service import claude_login_code_service as code_service
 from service.audit_service import AuditAction, AuditCategory
+from service.control_tower.project_event_sender import send_project_event
 from service.claude_login_account_repository import AccountStoreUnavailableError, DuplicateAccountError
 from util.audit_helper import audited, client_info, set_audit_action, set_audit_detail
 
 claude_login_bp = Blueprint('claude_login', __name__)
 
+# 알림 필드: 브라우저(User-Agent) 표시 최대 글자 수
+EVENT_USER_AGENT_MAX_LENGTH = 60
 # trigger: auto 화면 진입 자동, manual "다시 기다리기" 버튼
 ALLOWED_TRIGGERS = ('auto', 'manual')
 # 서비스 예외 > (HTTP 상태, error 코드) — 화면 문구는 claude-login.js ERROR_LABELS
@@ -134,6 +137,12 @@ def code_status():
                  'mail_received_at': state.get('mail_received_at')},
                 client_ip=info['client_ip'], proxy_chain=info['proxy_chain'],
                 user_agent=info['user_agent'])
+            # 열람 알림 (코드·Gmail 주소 제외)
+            send_project_event(
+                config.CONTROL_TOWER_PROJECT_ID, config.CONTROL_TOWER_EVENT_KIND, 'Claude 코드 열람',
+                fields=[('계정', state.get('display_name')), ('IP', info['client_ip']),
+                        ('브라우저', (info['user_agent'] or '')[:EVENT_USER_AGENT_MAX_LENGTH])],
+                dedupe_key=f"claude-code:view:{state['job_id']}:{info['client_ip']}")
     return jsonify({'accounts': states, 'is_secret_configured': config.is_secret_configured()}), 200
 
 

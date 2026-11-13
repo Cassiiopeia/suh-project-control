@@ -143,6 +143,21 @@ def test_status_records_view_once_per_account_job(client):
     assert '027696' not in repr(record.call_args)
 
 
+def test_status_sends_view_project_event_once_without_code(client):
+    state = ISSUED_STATE | {'display_name': '회사'}
+    with patch(f'{CODE_SERVICE}.get_states', return_value=[state]), \
+            patch('router.claude_login_router.audit_service.record'), \
+            patch('router.claude_login_router.send_project_event') as send:
+        client.get('/claude-login/code/status', headers={'X-Forwarded-For': '8.8.8.8', 'User-Agent': 'UA'})
+        client.get('/claude-login/code/status', headers={'X-Forwarded-For': '8.8.8.8', 'User-Agent': 'UA'})
+    assert send.call_count == 1
+    assert send.call_args.args[:3] == ('suh-ai', 'claude-code', 'Claude 코드 열람')
+    assert dict(send.call_args.kwargs['fields'])['계정'] == '회사'
+    assert send.call_args.kwargs['dedupe_key'] == 'claude-code:view:job1:8.8.8.8'
+    assert '027696' not in repr(send.call_args)
+    assert 'gmail.com' not in repr(send.call_args)
+
+
 def test_screenshot_requires_account_id_and_404_when_missing(client, tmp_path):
     assert client.get('/claude-login/code/screenshot').status_code == 400
     with patch(f'{CODE_SERVICE}.SCREENSHOT_DIRECTORY', str(tmp_path)):
