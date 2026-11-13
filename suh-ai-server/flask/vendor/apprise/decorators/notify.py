@@ -1,0 +1,131 @@
+# BSD 2-Clause License
+#
+# Apprise - Push Notification Library.
+# Copyright (c) 2026, Chris Caron <lead2gold@gmail.com>
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# 1. Redistributions of source code must retain the above copyright notice,
+#    this list of conditions and the following disclaimer.
+#
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+#    this list of conditions and the following disclaimer in the documentation
+#    and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+
+from .base import CustomNotifyPlugin
+
+
+def notify(on, name=None, body_format=None):
+    """Register a function as an Apprise notification plugin.
+
+    ``on`` identifies the URL protocol that triggers the function.
+
+        @notify(on="foobar")
+        def your_declaration(body, title, notify_type, meta, *args, **kwargs):
+            ...
+
+    ``name`` optionally sets the plugin name exposed through the API.
+
+        @notify(on="foobar", name="My Foobar Process")
+        def your_action(body, title, notify_type, meta, *args, **kwargs):
+            ...
+
+    ``body_format`` declares accepted prepared formats. Without it, message
+    content passes through without conversion.
+
+        @notify(on="foobar", body_format=NotifyFormat.MARKDOWN)
+        def your_action(body, title, notify_type, meta, *args, **kwargs):
+            ...
+
+    ``meta`` contains parsed URL and configuration values for the call.
+
+        @notify(on="foobar", name="My Foobar Process")
+        def your_action(body, title, notify_type, body_format, meta, attach,
+                        *args, **kwargs):
+            ...
+
+    Arguments break down as follows:
+      body:        The message body associated with the notification
+      title:       The message title associated with the notification
+      notify_type: The message type (info, success, warning, and failure)
+      body_format: The resolved format delivered to your function.
+      body_passthrough:
+                   True if the caller left the source format
+                   undeclared, so automatic format conversion was
+                   skipped.
+      meta:        Combines the URL arguments specified on the `on` call
+                   with the ones loaded from a users configuration. This
+                   is a dictionary that presents itself like this:
+                    {
+                      'schema': 'http',
+                      'url': 'http://hostname',
+                      'host': 'hostname',
+
+                      'user': 'john',
+                      'password': 'doe',
+                      'port': 80,
+                      'path': '/',
+                      'fullpath': '/test.php',
+                      'query': 'test.php',
+
+                      'qsd': {'key': 'value', 'key2': 'value2'},
+                      'verify': True,
+
+                      'asset': <AppriseAsset>,
+                      'tag': set(),
+                    }
+
+                    Entries appear only when available. A simple
+                    ``foobar://`` URL produces:
+                    {
+                      'schema': 'foobar',
+                      'url': 'foobar://',
+                      'verify': True,
+
+                      'asset': <AppriseAsset>,
+                      'tag': set(),
+                    }
+
+      attach:      An array AppriseAttachment objects (if any were provided)
+
+      @notify body_format:
+                   Declares the prepared body format(s) your wrapper
+                   accepts; omitted means pass-through for every format.
+
+
+    Functions that do not need every parameter may use:
+
+        @notify(on="foobar", name="My Foobar Process")
+        def your_action(body, title, *args, **kwargs)
+
+    End the function signature with ``*args`` and ``**kwargs`` for forward
+    compatibility.
+
+    Return ``True`` for success or ``False`` for failure. A missing return
+    value is treated as success.
+    """
+
+    def wrapper(func):
+        """Instantiate our custom (notification) plugin."""
+
+        # Generate
+        CustomNotifyPlugin.instantiate_plugin(
+            url=on, send_func=func, name=name, body_format=body_format
+        )
+
+        return func
+
+    return wrapper

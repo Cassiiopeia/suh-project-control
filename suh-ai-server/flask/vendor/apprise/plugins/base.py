@@ -1,0 +1,1820 @@
+# BSD 2-Clause License
+#
+# Apprise - Push Notification Library.
+# Copyright (c) 2026, Chris Caron <lead2gold@gmail.com>
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# 1. Redistributions of source code must retain the above copyright notice,
+#    this list of conditions and the following disclaimer.
+#
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+#    this list of conditions and the following disclaimer in the documentation
+#    and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+
+import asyncio
+from collections.abc import Generator
+import contextlib
+import contextvars
+from datetime import tzinfo
+from functools import partial
+import math
+import re
+import time
+from typing import Any, ClassVar, Optional, TypedDict, Union
+from zoneinfo import ZoneInfo
+
+from ..apprise_attachment import AppriseAttachment
+from ..common import (
+    APPRISE_MAX_SERVICE_RETRY,
+    APPRISE_MAX_SERVICE_WAIT,
+    NOTIFY_FORMATS,
+    OVERFLOW_MODES,
+    NotifyFormat,
+    NotifyImageSize,
+    NotifyType,
+    OverflowMode,
+    PersistentStoreMode,
+)
+from ..conversion import (
+    commonmark_repair_chunk,
+    convert_between,
+    split_dialect_chunk,
+    truncate_dialect_chunk,
+)
+from ..exception import AppriseImproperlyConfigured
+from ..locale import Translatable, gettext_lazy as _
+from ..persistent_store import PersistentStore
+from ..url import URLBase
+from ..utils.format import smart_split
+from ..utils.parse import parse_bool, parse_list
+from ..utils.time import zoneinfo
+
+
+class RequirementsSpec(TypedDict, total=False):
+    """Defines our plugin requirements."""
+
+    packages_required: Optional[Union[str, list[str]]]
+    packages_recommended: Optional[Union[str, list[str]]]
+    details: Optional[Translatable]
+
+
+class _PayloadPrecappedToken:
+    """Prove that ``Apprise.notify()`` capped the source before conversion.
+
+    Only this token skips a second cap; truthy values from direct plugin
+    callers do not bypass ``payload_max_size``.
+    """
+
+
+_PAYLOAD_PRECAPPED = _PayloadPrecappedToken()
+
+
+# Remembers successful targets during retries. It remains unused when retries
+# are disabled, preserving the original plugin behavior.
+_delivery_tracker: contextvars.ContextVar[
+    Optional[set[tuple[Optional[int], Any]]]
+] = contextvars.ContextVar("apprise_delivery_tracker", default=None)
+
+# Holds state that ``remember()`` and ``recall()`` share across attempts.
+# It stays unset when retries are disabled because nothing will read it.
+_delivery_memo: contextvars.ContextVar[Optional[dict[Any, Any]]] = (
+    contextvars.ContextVar("apprise_delivery_memo", default=None)
+)
+
+# Identifies the current message piece so split messages are tracked one piece
+# at a time.
+_delivery_index: contextvars.ContextVar[int] = contextvars.ContextVar(
+    "apprise_delivery_index", default=0
+)
+
+# Marks a whole message piece as accepted. A private object is used so it
+# can never match a key a plugin tracks its own targets under.
+_PIECE_DELIVERED = object()
+
+
+class NotifyBase(URLBase):
+    """This is the base class for all notification services."""
+
+    # An internal flag used to test the state of the plugin. If set to
+    # False, then the plugin is not used.  Plugins can disable themselves
+    # due to enviroment issues (such as missing libraries, or platform
+    # dependencies that are not present).  By default all plugins are
+    # enabled.
+    enabled = True
+
+    @staticmethod
+    def runtime_deps():
+        """Return a tuple of top-level Python package names that this plugin
+        imported as optional runtime dependencies.
+
+        The plugin manager uses this to maintain a reference counter per
+        library.  When every plugin that declared a given library is disabled,
+        its counter reaches zero and the manager evicts the library from
+        `sys.modules`, releasing the associated Python objects from memory.
+
+        Names must be the importable top-level namespace - the same string you
+        would pass to `import` - not the pip install name:
+
+            ('paho',)        # paho-mqtt installs as 'paho'
+            ('slixmpp',)
+            ('cryptography',)
+
+        Submodules are handled automatically; declaring the top-level name is
+        sufficient.
+
+        Override this in any plugin that conditionally imports a heavy optional
+        library.  Return an empty tuple (the default) when the plugin has no
+        optional dependencies that are worth evicting.
+        """
+        return ()
+
+    @classmethod
+    def enable(self):
+        """Mark this plugin as enabled.
+
+        This is the counterpart to :meth:`disable`.  Calling this restores the
+        plugin to an active state so it will be used for notifications again.
+        Note that if the plugin's runtime dependencies were evicted from memory
+        by the plugin manager, re-enabling will restore the flag but the
+        plugin may not function until the process is restarted.
+        """
+        self.enabled = True
+
+    @classmethod
+    def disable(self):
+        """Mark this plugin as disabled.
+
+        The plugin will not be used for notifications.  The plugin manager
+        calls this when honouring `APPRISE_DENY_SERVICES` /
+        `APPRISE_ALLOW_SERVICES` and uses the result of
+        :method:`runtime_deps` to decrement its per-library reference counters,
+        potentially evicting unused libraries from `sys.modules`.
+        """
+        self.enabled = False
+
+    # The category allows for parent inheritance of this object to alter
+    # this when it's function/use is intended to behave differently. The
+    # following category types exist:
+    #
+    #  native: Is a native plugin written/stored in `apprise/plugins/Notify*`
+    #  custom: Is a custom plugin written/stored in a users plugin directory
+    #          that they loaded at execution time.
+    category = "native"
+
+    # Some plugins may require additional packages above what is provided
+    # already by Apprise.
+    #
+    # Use this section to relay this information to the users of the script to
+    # help guide them with what they need to know if they plan on using your
+    # plugin.   The below configuration should otherwise accommodate all normal
+    # situations and will not requrie any updating:
+    requirements: ClassVar[RequirementsSpec] = {
+        # Use the description to provide a human interpretable description of
+        # what is required to make the plugin work. This is only nessisary
+        # if there are package dependencies.  Setting this to default will
+        # cause a general response to be returned.  Only set this if you plan
+        # on over-riding the default.  Always consider language support here.
+        # So before providing a value do the following in your code base:
+        #
+        #  from apprise.AppriseLocale import gettext_lazy as _
+        #
+        # 'details': _('My detailed requirements')
+        "details": None,
+        # Define any required packages needed for the plugin to run.  This is
+        # an array of strings that simply look like lines residing in a
+        # `requirements.txt` file...
+        #
+        # As an example, an entry may look like:
+        # 'packages_required': [
+        #   'cryptography < 3.4`,
+        # ]
+        "packages_required": [],
+        # Recommended packages identify packages that are not required to make
+        # your plugin work, but would improve it's use or grant it access to
+        # full functionality (that might otherwise be limited).
+        # Similar to `packages_required`, you would identify each entry in
+        # the array as you would in a `requirements.txt` file.
+        #
+        #   - Do not re-provide entries already in the `packages_required`
+        "packages_recommended": [],
+    }
+
+    # The services URL
+    service_url = None
+
+    # A URL that takes you to the setup/help of the specific protocol
+    setup_url = None
+
+    # Most Servers do not like more then 1 request per 5 seconds, so 5.5 gives
+    # us a safe play range. Override the one defined already in the URLBase
+    request_rate_per_sec = 5.5
+
+    # Allows the user to specify the NotifyImageSize object
+    image_size = None
+
+    # The maximum allowable characters allowed in the body per message
+    body_maxlen = 32768
+
+    # Defines the maximum allowable characters in the title; set this to zero
+    # if a title can't be used. Titles that are not used but are defined are
+    # automatically placed into the body
+    title_maxlen = 250
+
+    # Set the maximum line count; if this is set to anything larger then zero
+    # the message (prior to it being sent) will be truncated to this number
+    # of lines. Setting this to zero disables this feature.
+    body_max_line_count = 0
+
+    # Persistent storage default settings
+    persistent_storage = True
+
+    # Timezone Default; by setting it to None, the timezone detected
+    # on the server is used
+    timezone = None
+
+    # Default Notify Format
+    notify_format = NotifyFormat.TEXT
+
+    # Default Overflow Mode
+    overflow_mode = OverflowMode.UPSTREAM
+
+    # Our default is to no not use persistent storage beyond in-memory
+    # reference
+    storage_mode = PersistentStoreMode.MEMORY
+
+    # Default Emoji Interpretation
+    interpret_emojis = False
+
+    # Default retry count for failed notifications.  Plugins may override
+    # via ?retry=N in their URL; the asset's default_service_retry is used
+    # when no per-plugin value is set.
+    # Always in [0, APPRISE_MAX_SERVICE_RETRY].
+    service_retry = 0
+
+    # Default wait (seconds) between retry attempts.  Plugins may override
+    # via ?wait=N in their URL; the asset's default_service_wait is used when
+    # no per-plugin value is set.  Always in [0.0, APPRISE_MAX_SERVICE_WAIT].
+    service_wait = 0.0
+
+    # When set to True, a delivery failure for this individual service is
+    # silently absorbed by all three dispatch paths (sequential, thread-pool,
+    # and asyncio coroutine).  The overall notify() / async_notify() call
+    # still returns True even if this particular endpoint could not be
+    # reached, provided that every *required* (non-optional) service in
+    # the same batch succeeded.
+    #
+    # This flag is designed for "nice to have" services -- endpoints that
+    # you want to notify when they are available but whose unavailability
+    # must not be treated as a delivery failure by the calling application.
+    #
+    # Concrete example -- four Kodi home screens tagged "media":
+    #
+    #   Configure every Kodi entry with optional=yes.  When the application
+    #   calls notify(tag="media"), Apprise attempts delivery to whichever
+    #   screens are currently powered on and reachable.  If none of the four
+    #   respond (all are off or unreachable), the call still returns True
+    #   because every failing service was optional.  The application is
+    #   never penalised for transient screen availability.
+    #
+    # Important behaviour details:
+    #   - Retries are still performed up to the configured retry count
+    #     before a service is considered to have failed.  The optional flag
+    #     only fires *after* all retry attempts have been exhausted without
+    #     a successful delivery.  In other words, optional does not bypass
+    #     the retry loop -- it only changes the meaning of the final result.
+    #   - Setting optional=True does NOT skip the service.  Delivery is
+    #     still attempted on every call.  Only the *outcome* is affected:
+    #     a failure is reported as True instead of False to the caller.
+    #   - A batch that mixes optional and required services returns False
+    #     only if one of the *required* (optional=False) services fails.
+    #     Optional failures are never included in the aggregate result.
+    #   - The flag is per-instance.  Different URLs that share a tag can
+    #     have different optional values, so you can mix required and
+    #     optional endpoints within the same tag group.
+    #
+    # Ways to enable this flag:
+    #   - URL query parameter  : append ?optional=yes  to the service URL
+    #   - YAML configuration   : add  optional: yes    under the URL entry
+    #   - Python constructor   : MyPlugin(host="...", optional=True)
+    #   - Direct assignment    : server.optional = True
+    #
+    # Accepted truthy values  : "yes", "true", "on", "1", True
+    # Accepted falsy  values  : "no", "false", "off", "0", False
+    #
+    # Defaults to False -- every delivery failure is propagated to the
+    # caller unchanged.
+    optional = False
+
+    # Support Attachments; this defaults to being disabled.
+    # Since apprise allows you to send attachments without a body or title
+    # defined, by letting Apprise know the plugin won't support attachments
+    # up front, it can quickly pass over and ignore calls to these end points.
+
+    # You must set this to true if your application can handle attachments.
+    # You must also consider a flow change to your notification if this is set
+    # to True as well as now there will be cases where both the body and title
+    # may not be set.  There will never be a case where a body, or attachment
+    # isn't set in the same call to your notify() function.
+    attachment_support = False
+
+    # Default Title HTML Tagging
+    # When a title is specified for a notification service that doesn't accept
+    # titles, by default apprise tries to give a plesant view and convert the
+    # title so that it can be placed into the body. The default is to just
+    # use a <b> tag.  The below causes the <b>title</b> to get generated:
+    default_html_tag_id = "b"
+
+    # Here is where we define all of the arguments we accept on the url
+    # such as: schema://whatever/?overflow=upstream&format=text
+    # These act the same way as tokens except they are optional and/or
+    # have default values set if mandatory. This rule must be followed
+    template_args = dict(
+        URLBase.template_args,
+        **{
+            "overflow": {
+                "name": _("Overflow Mode"),
+                "type": "choice:string",
+                "values": OVERFLOW_MODES,
+                # Provide a default
+                "default": overflow_mode,
+                # look up default using the following parent class value at
+                # runtime. The variable name identified here (in this case
+                # overflow_mode) is checked and it's result is placed over-top
+                # of the 'default'. This is done because once a parent class
+                # inherits this one, the overflow_mode already set as a default
+                # 'could' be potentially over-ridden and changed to a different
+                # value.
+                "_lookup_default": "overflow_mode",
+            },
+            "format": {
+                "name": _("Notify Format"),
+                "type": "choice:string",
+                # ?format= is accepted for any of the 3 values on every
+                # plugin. Single-format plugins force the requested
+                # value directly; multi-format plugins decide later
+                # whether to honor it. plugins.details() exposes the
+                # plugin's native subset through the additive
+                # format.supported field.
+                "values": NOTIFY_FORMATS,
+                # Provide a default
+                "default": notify_format,
+                # look up default using the following parent class value at
+                # runtime.
+                "_lookup_default": "notify_format",
+            },
+            "emojis": {
+                "name": _("Interpret Emojis"),
+                # SSL Certificate Authority Verification
+                "type": "bool",
+                # Provide a default
+                "default": interpret_emojis,
+                # look up default using the following parent class value at
+                # runtime.
+                "_lookup_default": "interpret_emojis",
+            },
+            "store": {
+                "name": _("Persistent Storage"),
+                # Use Persistent Storage
+                "type": "bool",
+                # Provide a default
+                "default": persistent_storage,
+                # look up default using the following parent class value at
+                # runtime.
+                "_lookup_default": "persistent_storage",
+            },
+            "tz": {
+                "name": _("Timezone"),
+                "type": "string",
+                # Provide a default
+                "default": timezone,
+                # look up default using the following parent class value at
+                # runtime.
+                "_lookup_default": "timezone",
+            },
+            "retry": {
+                "name": _("Service Retry"),
+                "type": "int",
+                "min": 0,
+                "max": APPRISE_MAX_SERVICE_RETRY,
+                "default": service_retry,
+                "_lookup_default": "service_retry",
+            },
+            "wait": {
+                "name": _("Inter-Retry Wait"),
+                "type": "float",
+                "min": 0.0,
+                "max": APPRISE_MAX_SERVICE_WAIT,
+                "default": service_wait,
+                "_lookup_default": "service_wait",
+            },
+            "optional": {
+                "name": _("Optional Service"),
+                "type": "bool",
+                "default": optional,
+                "_lookup_default": "optional",
+            },
+        },
+    )
+
+    #
+    # Overflow Defaults / Configuration applicable to SPLIT mode only
+    #
+
+    # Display Count  [X/X]
+    #               ^^^^^^
+    #               \\\\\\
+    #               6 characters (space + count)
+    # Display Count  [XX/XX]
+    #               ^^^^^^^^
+    #               \\\\\\\\
+    #               8 characters (space + count)
+    # Display Count  [XXX/XXX]
+    #               ^^^^^^^^^^
+    #               \\\\\\\\\\
+    #               10 characters (space + count)
+    # Display Count  [XXXX/XXXX]
+    #               ^^^^^^^^^^^^
+    #               \\\\\\\\\\\\
+    #               12 characters (space + count)
+    #
+    # Given the above + some buffer we come up with the following:
+    # If this value is exceeded, display counts automatically shut off
+    overflow_max_display_count_width = 12
+
+    # The number of characters to reserver for whitespace buffering
+    # This is detected automatically, but you can enforce a value if
+    # you desire:
+    overflow_buffer = 0
+
+    # the min accepted length of a title to allow for a counter display
+    overflow_display_count_threshold = 130
+
+    # Whether or not when over-flow occurs, if the title should be repeated
+    # each time the message is split up
+    #   - None: Detect
+    #   - True: Always display title once
+    #   - False: Display the title for each occurance
+    overflow_display_title_once = None
+
+    # If this is set to to True:
+    #   The title_maxlen should be considered as a subset of the body_maxlen
+    #    Hence: len(title) + len(body) should never be greater then body_maxlen
+    #
+    # If set to False, then there is no corrorlation between title_maxlen
+    #  restrictions and that of body_maxlen
+    overflow_amalgamate_title = False
+
+    # Identifies the timezone to use;  if this is not over-ridden, then the
+    # timezone defined in the AppriseAsset() object is used instead.  The
+    # Below is expected to be in a ZoneInfo type already.  You can have this
+    # automatically initialized by specifying ?tz= on the Apprise URLs
+    __tzinfo = None
+
+    @classmethod
+    def __init_subclass__(cls, **kwargs):
+        """Automatically wrap any __len__ defined on a subclass so that it
+        multiplies its base target count by (retry + 1).
+
+        This ensures every plugin's __len__ reflects the total number of
+        transmission attempts (targets * retry-factor) without requiring
+        each plugin to be updated individually.
+        """
+        super().__init_subclass__(**kwargs)
+        if "__len__" in cls.__dict__:
+            _orig = cls.__dict__["__len__"]
+
+            def _retry_aware_len(self, _orig=_orig):
+                return _orig(self) * (getattr(self, "retry", 0) + 1)
+
+            cls.__len__ = _retry_aware_len
+
+    def __init__(self, **kwargs):
+        """Initialize some general configuration that will keep things
+        consistent when working with the notifiers that will inherit this
+        class."""
+
+        super().__init__(**kwargs)
+
+        # Initialize retry count from (in priority order):
+        #   1. kwargs["retry"]  (from ?retry= URL param or YAML retry: key)
+        #   2. asset.default_service_retry
+        # Always clamped to [0, APPRISE_MAX_SERVICE_RETRY].
+        _retry_raw = kwargs.get("retry")
+        if _retry_raw is not None:
+            try:
+                _retry_val = int(_retry_raw)
+                if _retry_val < 0:
+                    msg = f"Service retry count must be >= 0; got {_retry_raw}"
+                    self.logger.warning(msg)
+                    raise AppriseImproperlyConfigured(msg)
+                self.retry = min(_retry_val, APPRISE_MAX_SERVICE_RETRY)
+            except (TypeError, ValueError):
+                self.logger.warning(
+                    "Invalid retry value specified (%s); using default",
+                    _retry_raw,
+                )
+                self.retry = min(
+                    max(0, self.asset.default_service_retry),
+                    APPRISE_MAX_SERVICE_RETRY,
+                )
+        else:
+            self.retry = min(
+                max(0, self.asset.default_service_retry),
+                APPRISE_MAX_SERVICE_RETRY,
+            )
+
+        # Initialize wait (inter-retry delay) from (in priority order):
+        #   1. kwargs["wait"]  (from ?wait= URL param or YAML wait: key)
+        #   2. asset.default_service_wait
+        # Only valid non-negative finite floats are accepted; integers are
+        # promoted to float.  Invalid values fall back to the asset default.
+        # Negative values are invalid and use the same fallback.
+        _wait_raw = kwargs.get("wait")
+        if _wait_raw is not None:
+            try:
+                _wait_val = float(_wait_raw)
+                if not math.isfinite(_wait_val) or _wait_val < 0.0:
+                    msg = f"Service retry wait must be >= 0; got {_wait_raw}"
+                    self.logger.warning(msg)
+                    raise AppriseImproperlyConfigured(msg)
+                self.wait = min(_wait_val, APPRISE_MAX_SERVICE_WAIT)
+            except (TypeError, ValueError):
+                self.logger.warning(
+                    "Invalid wait value specified (%s); using default",
+                    _wait_raw,
+                )
+                self.wait = min(
+                    max(0.0, self.asset.default_service_wait),
+                    APPRISE_MAX_SERVICE_WAIT,
+                )
+        else:
+            self.wait = min(
+                max(0.0, self.asset.default_service_wait),
+                APPRISE_MAX_SERVICE_WAIT,
+            )
+
+        # Initialize the optional= flag from kwargs if provided, otherwise
+        # fall back to the class-level attribute (default: False).
+        #
+        # Priority order (highest to lowest):
+        #   1. kwargs["optional"]  -- supplied via ?optional=yes/no URL
+        #      parameter, YAML optional: yes/no key, or a direct Python
+        #      keyword argument to the constructor.
+        #   2. The class-level 'optional' attribute on the plugin class
+        #      (or any of its superclasses).  Plugin authors can ship
+        #      with optional=True as the default simply by overriding
+        #      the class attribute -- no extra __init__ boilerplate needed.
+        #
+        # parse_bool() is used for the string -> bool conversion so that
+        # all of the canonical truthy/falsy representations that Apprise
+        # accepts elsewhere are valid here too: "yes"/"no", "true"/"false",
+        # "on"/"off", "1"/"0", and native Python booleans.  The function
+        # returns the 'default' argument (False) for unrecognised strings,
+        # so garbage input silently falls back to the safe behaviour
+        # (propagate failures) rather than raising an exception.
+        _optional_raw = kwargs.get("optional")
+        if _optional_raw is not None:
+            # An explicit value was passed in -- parse it and store on
+            # this instance, shadowing the class-level attribute only for
+            # this particular service object.
+            self.optional = parse_bool(_optional_raw)
+        # else: kwargs did not include "optional".  Leave self.optional
+        #   unset so that normal Python attribute lookup falls through to
+        #   the class-level default (NotifyBase.optional = False, or the
+        #   value set by a plugin subclass that overrides it).
+
+        # Store our interpret_emoji's setting
+        # If asset emoji value is set to a default of True and the user
+        #   specifies it to be false, this is accepted and False over-rides.
+        #
+        # If asset emoji value is set to a default of None, a user may
+        #   optionally over-ride this and set it to True from the Apprise
+        #   URL. ?emojis=yes
+        #
+        # If asset emoji value is set to a default of False, then all emoji's
+        # are turned off (no user over-rides allowed)
+        #
+
+        # Our Persistent Storage object is initialized on demand
+        self.__store = None
+
+        # Take a default
+        self.interpret_emojis = self.asset.interpret_emojis
+        if "emojis" in kwargs:
+            # possibly over-ride default
+            self.interpret_emojis = bool(
+                self.interpret_emojis in (None, True)
+                and parse_bool(
+                    kwargs.get("emojis", False),
+                    default=NotifyBase.template_args["emojis"]["default"],
+                )
+            )
+
+        # Store an explicit ?format= request for multi-format plugins.
+        # Those plugins keep their declared notify_format tuple intact,
+        # then resolve the one active destination later for each send.
+        # Single-format plugins still force self.notify_format directly,
+        # preserving the established URL override behavior.
+        self._format_override: Optional[NotifyFormat] = None
+
+        if "format" in kwargs:
+            value = kwargs["format"]
+            try:
+                requested = (
+                    value
+                    if isinstance(value, NotifyFormat)
+                    else NotifyFormat(value.lower())
+                )
+
+            except (AttributeError, ValueError):
+                err = (
+                    f"An invalid notification format ({value}) was specified."
+                )
+                self.logger.warning(err)
+                raise AppriseImproperlyConfigured(err) from None
+
+            if len(self._formats()) == 1:
+                # Single-format plugin: force the requested destination
+                # directly onto self.notify_format.
+                self.notify_format = requested
+
+            else:
+                # Multi-format plugin: remember the request and validate
+                # it during per-send resolution.
+                self._format_override = requested
+
+        if "tz" in kwargs:
+            value = kwargs["tz"]
+            self.__tzinfo = zoneinfo(value)
+            if not self.__tzinfo:
+                err = (
+                    "An invalid notification timezone "
+                    f"({value}) was specified."
+                )
+                self.logger.warning(err)
+                raise AppriseImproperlyConfigured(err) from None
+
+        if "overflow" in kwargs:
+            value = kwargs["overflow"]
+            try:
+                self.overflow_mode = (
+                    value
+                    if isinstance(value, OverflowMode)
+                    else OverflowMode(value.lower())
+                )
+
+            except (AttributeError, ValueError):
+                err = f"An invalid overflow method ({value}) was specified."
+                self.logger.warning(err)
+                raise AppriseImproperlyConfigured(err) from None
+
+        # Prepare our Persistent Storage switch.  Turning it off keeps the
+        # URL identifier working; it only stops anything being written to
+        # disk for it (see the store property below).
+        self.persistent_storage = parse_bool(
+            kwargs.get("store", NotifyBase.persistent_storage)
+        )
+
+    def image_url(
+        self,
+        notify_type: NotifyType,
+        image_size: Optional[NotifyImageSize] = None,
+        logo: bool = False,
+        extension: Optional[str] = None,
+    ) -> Optional[str]:
+        """Returns Image URL if possible."""
+
+        image_size = self.image_size if image_size is None else image_size
+        if not image_size:
+            return None
+
+        return self.asset.image_url(
+            notify_type=notify_type,
+            image_size=image_size,
+            logo=logo,
+            extension=extension,
+        )
+
+    def image_path(
+        self,
+        notify_type: NotifyType,
+        extension: Optional[str] = None,
+    ) -> Optional[str]:
+        """Returns the path of the image if it can."""
+        if not self.image_size:
+            return None
+
+        return self.asset.image_path(
+            notify_type=notify_type,
+            image_size=self.image_size,
+            extension=extension,
+        )
+
+    def image_raw(
+        self,
+        notify_type: NotifyType,
+        extension: Optional[str] = None,
+    ) -> Optional[bytes]:
+        """Returns the raw image if it can."""
+        if not self.image_size:
+            return None
+
+        return self.asset.image_raw(
+            notify_type=notify_type,
+            image_size=self.image_size,
+            extension=extension,
+        )
+
+    def color(
+        self,
+        notify_type: NotifyType,
+        color_type: Optional[type] = None,
+    ) -> Union[str, int, tuple[int, int, int]]:
+        """Returns the html color (hex code) associated with the
+        notify_type."""
+
+        return self.asset.color(
+            notify_type=notify_type,
+            color_type=color_type,
+        )
+
+    def ascii(
+        self,
+        notify_type: NotifyType,
+    ) -> str:
+        """Returns the ascii characters associated with the notify_type."""
+
+        return self.asset.ascii(
+            notify_type=notify_type,
+        )
+
+    def _formats(self) -> tuple[NotifyFormat, ...]:
+        """Supported notify formats as a tuple.
+
+        ``notify_format`` accepts one format or a list. The first entry is the
+        default when no override or input format matches.
+        """
+        # Preserve declaration order because the first entry is the
+        # default. parse_list() sorts alphabetically by default, which
+        # would silently choose the wrong fallback format here.
+        return tuple(
+            NotifyFormat(f) for f in parse_list(self.notify_format, sort=False)
+        )
+
+    def resolve_format(
+        self, body_format: Optional[Union[str, NotifyFormat]] = None
+    ) -> NotifyFormat:
+        """Resolve which format this send should actually render as.
+
+        Resolution order:
+        - A single-format plugin always uses its one declared format.
+        - A multi-format plugin honors an explicit ?format= override,
+          when that override is one of its declared formats.
+        - Otherwise, if the caller's body_format matches a declared
+          format, align to it directly (no conversion needed).
+        - Otherwise, fall back to the plugin's default, formats[0].
+        """
+        formats = self._formats()
+        if len(formats) == 1:
+            return formats[0]
+
+        if self._format_override is not None:
+            if self._format_override in formats:
+                return self._format_override
+
+            # The requested destination is not one this plugin declared.
+            # Fall through to input alignment/default instead of failing
+            # delivery. The actual fallback (input alignment vs
+            # formats[0]) is decided below, so it is not named here.
+            if body_format is not None:
+                self.logger.debug(
+                    "%s does not support format %s; ignoring override.",
+                    self.service_name,
+                    self._format_override.value,
+                )
+
+        if body_format in formats:
+            # body_format may arrive as a plain string (e.g. from the
+            # CLI) rather than a NotifyFormat; normalize to the actual
+            # matched member so callers can always rely on .value etc.
+            return (
+                body_format
+                if isinstance(body_format, NotifyFormat)
+                else NotifyFormat(body_format)
+            )
+
+        return formats[0]
+
+    def is_delivered(self, key: Any, per_message: bool = False) -> bool:
+        """Return whether ``key`` accepted the current message piece.
+
+        Use a stable target identifier, such as a phone number, room ID,
+        token, or email address. This always returns ``False`` when retries
+        are disabled. Pair it with :meth:`mark_delivered`::
+
+            for target in self.targets:
+                if self.is_delivered(target):
+                    continue
+
+                if self._post(target, body):
+                    self.mark_delivered(target)
+
+        A long message is delivered in pieces, and each piece is tracked on
+        its own. Set ``per_message`` for something sent once for the whole
+        notification, such as an icon, so it is not repeated for every
+        piece.
+        """
+        tracker = _delivery_tracker.get()
+        # No tracker means retries are off; nothing has been recorded.
+        if tracker is None:
+            return False
+
+        return self._slot(key, per_message) in tracker
+
+    def mark_delivered(self, key: Any, per_message: bool = False) -> None:
+        """Record a successful target for the current message piece.
+
+        Call this only after the target accepts the message. A later retry
+        can then skip it. See :meth:`is_delivered` for an example.
+
+        Set ``per_message`` for something that belongs to the whole
+        notification rather than one piece of it.
+        """
+        tracker = _delivery_tracker.get()
+        if tracker is not None:
+            tracker.add(self._slot(key, per_message))
+
+    def remember(
+        self, key: Any, value: Any, per_message: bool = False
+    ) -> None:
+        """Keep ``value`` available to later attempts of this notification.
+
+        Values expire with the notification and are separate for each split
+        piece. Set ``per_message`` to share one value across all pieces. With
+        retries off, nothing is stored.
+        """
+        memo = _delivery_memo.get()
+        # Without retries, no later attempt needs this value.
+        if memo is not None:
+            memo[self._slot(key, per_message)] = value
+
+    def recall(
+        self, key: Any, default: Any = None, per_message: bool = False
+    ) -> Any:
+        """Return what :meth:`remember` stored, else ``default``.
+
+        An earlier attempt of this same notification is the only thing
+        that can have stored it. Pass the same ``per_message`` that
+        :meth:`remember` was given.
+        """
+        memo = _delivery_memo.get()
+        # An absent memo reads the same way as one that was never written.
+        if memo is None:
+            return default
+
+        return memo.get(self._slot(key, per_message), default)
+
+    @staticmethod
+    def _slot(key: Any, per_message: bool) -> tuple[Optional[int], Any]:
+        """Return the entry ``key`` is recorded under.
+
+        Split-message pieces use separate slots. ``per_message`` instead
+        shares one slot across the notification. Including the type keeps
+        look-alike values distinct, while ``repr`` supports container keys.
+        """
+        piece = None if per_message else _delivery_index.get()
+        return (piece, (type(key), repr(key)))
+
+    def _timed_send(self, **kwargs: Any) -> bool:
+        """Send one prepared call and log its duration at DEBUG.
+
+        Prefer a format-specific sender when available, otherwise use send().
+        """
+        # The format may arrive as a NotifyFormat, a plain string such as
+        # "html", or None when a caller skipped it entirely.
+        resolved = kwargs.get("body_format")
+        fn = getattr(
+            self, f"send_{getattr(resolved, 'value', resolved)}", None
+        )
+        send_fn = fn if callable(fn) else self.send
+
+        # Track each piece of a split message separately.
+        index_token = _delivery_index.set(kwargs.get("index", 0))
+
+        send_start = time.monotonic()
+        try:
+            # A retry does not send a piece that was already accepted.
+            if self.is_delivered(_PIECE_DELIVERED):
+                self.logger.debug(
+                    "%s already accepted this message piece; skipping.",
+                    self.service_name,
+                )
+                return True
+
+            result = send_fn(**kwargs)
+            if result:
+                # Remember the accepted piece so a retry can skip it.
+                self.mark_delivered(_PIECE_DELIVERED)
+
+        finally:
+            # Always restore the previous piece, even if send() raised.
+            _delivery_index.reset(index_token)
+
+        self.logger.debug(
+            "%s send() completed in %.2fs.",
+            self.service_name,
+            time.monotonic() - send_start,
+        )
+        return result
+
+    def notify(self, *args: Any, **kwargs: Any) -> bool:
+        """Performs notification."""
+        try:
+            # Build a list of dictionaries that can be used to call send().
+            send_calls = list(self._build_send_calls(*args, **kwargs))
+
+        except TypeError:
+            # Internal error
+            return False
+
+        else:
+            # Loop through each call, one at a time. (Use a list rather than a
+            # generator to call all the partials, even in case of a failure.)
+            the_calls = [self._timed_send(**kwargs2) for kwargs2 in send_calls]
+            return all(the_calls)
+
+    async def async_notify(self, *args: Any, **kwargs: Any) -> bool:
+        """Performs notification for asynchronous callers."""
+        try:
+            # Build a list of dictionaries that can be used to call send().
+            send_calls = list(self._build_send_calls(*args, **kwargs))
+
+        except TypeError:
+            # Internal error
+            return False
+
+        else:
+            # Deferred import to dodge a circular import (apprise.apprise
+            # loads this module first). Fine by call time.
+            from ..apprise import get_shared_executor
+
+            # Use Apprise's own shared pool, not the loop's default one --
+            # keeps a stuck send() from starving unrelated executor work.
+            # TODO: let plugins supply a native async_send() instead.
+            executor = get_shared_executor()
+
+            async def do_send(**kwargs2):
+                """Run one prepared send() call in the executor."""
+                send = partial(self._timed_send, **kwargs2)
+                # Copy the current logging details into the worker thread.
+                ctx = contextvars.copy_context()
+                # Submit directly so cancellation still leaves access to the
+                # worker future. A running send cannot be interrupted, so its
+                # future is needed until the background work finishes.
+                cf_future = executor.submit(ctx.run, send)
+                try:
+                    result = await asyncio.wrap_future(cf_future)
+
+                except asyncio.CancelledError:
+                    # Cancellation stops waiting, but cannot stop a running
+                    # function inside a worker thread.
+                    if cf_future.running():
+                        # Import here to avoid modules loading each other
+                        # before they are ready.
+                        from ..apprise import track_abandoned_future
+                        from ..dispatch import service_metadata
+
+                        # Keep a safe description until the worker finishes.
+                        name, url, _, _, _ = service_metadata(self)
+                        track_abandoned_future(cf_future, name, url)
+                    # Let the caller continue handling the cancellation.
+                    raise
+
+                # Forward the normal send result to async_notify().
+                return result
+
+            # Await this plugin's pieces in order so split text and attachments
+            # arrive predictably. Services still run concurrently one level up,
+            # and each blocking send remains in the shared executor.
+            results = []
+            for kwargs2 in send_calls:
+                # Wait for each piece before starting the next one.
+                results.append(await do_send(**kwargs2))
+            # Every prepared piece must succeed for this service to succeed.
+            return all(results)
+
+    def _build_send_calls(
+        self,
+        body: Optional[str] = None,
+        title: Optional[str] = None,
+        notify_type: Union[str, NotifyType] = NotifyType.INFO,
+        overflow: Optional[Union[str, OverflowMode]] = None,
+        attach: Optional[Union[list[str], AppriseAttachment]] = None,
+        body_format: Optional[Union[str, NotifyFormat]] = None,
+        body_passthrough: Optional[bool] = None,
+        _payload_precapped: object = None,
+        **kwargs: Any,
+    ) -> Generator[dict[str, Any], None, None]:
+        """Prepare the arguments for each ``send()`` call.
+
+        Parameters:
+          - ``body`` and ``title`` provide the message content.
+          - ``notify_type`` identifies the message severity.
+          - ``overflow`` controls upstream, truncation, or splitting.
+          - ``attach`` supplies one or more attachments.
+          - ``body_format`` identifies the source or resolved format.
+          - ``body_passthrough`` preserves content with no declared format.
+          - ``_payload_precapped`` confirms Apprise already applied its cap.
+          - Extra keyword arguments are accepted for caller compatibility.
+
+        Yields one mapping per final ``send()`` call, including its zero-based
+        ``index`` and the total number of calls.
+        """
+
+        # Normalization of notify_type before it ever reaches a plugin.
+        if not isinstance(notify_type, NotifyType):
+            with contextlib.suppress(AttributeError, ValueError):
+                notify_type = NotifyType(notify_type.lower())
+
+        # Direct plugin calls bypass Apprise's per-server resolution, so
+        # resolve here and remember whether a source format was declared.
+        # Keep the source format for conversion after size checks.
+        source_format = None
+        if body_passthrough is None:
+            body_passthrough = body_format is None
+            source_format = body_format
+            body_format = self.resolve_format(body_format)
+
+        if not self.enabled:
+            # Deny notifications issued to services that are disabled
+            msg = f"{self.service_name} is currently disabled on this system."
+            self.logger.warning(msg)
+            raise AppriseImproperlyConfigured(msg)
+
+        # Prepare attachments if required
+        if attach is not None and not isinstance(attach, AppriseAttachment):
+            try:
+                attach = AppriseAttachment(attach, asset=self.asset)
+
+            except TypeError:
+                # bad attachments
+                raise
+
+            # Handle situations where the body is None
+            body = body if body else ""
+
+        elif not (body or attach):
+            # If there is not an attachment at the very least, a body must be
+            # present
+            msg = "No message body or attachment was specified."
+            self.logger.warning(msg)
+            raise AppriseImproperlyConfigured(msg)
+
+        if not body and not self.attachment_support:
+            # If no body was specified, then we know that an attachment
+            # was.  This is logic checked earlier in the code.
+            #
+            # Knowing this, if the plugin itself doesn't support sending
+            # attachments, there is nothing further to do here, just move
+            # along.
+            msg = (
+                f"{self.service_name} does not support "
+                "attachments; service skipped"
+            )
+            self.logger.warning(msg)
+            raise AppriseImproperlyConfigured(msg)
+
+        # Handle situations where the title is None
+        title = title if title else ""
+
+        if source_format is not None:
+            # Cap direct-call source content before converting it to the
+            # resolved format, matching Apprise.notify().
+            title, body = self._enforce_payload_cap(title, body)
+            _payload_precapped = _PAYLOAD_PRECAPPED
+
+            # Convert our body
+            body = convert_between(source_format, body_format, body)
+
+            # A title is only converted when it is blended into the body
+            if title and self.title_maxlen <= 0:
+                title = convert_between(source_format, body_format, title)
+
+        # Truncate mode keeps only the first of multiple attachments.
+        # Prepare it once for all calls made by this service.
+        overflow = self.overflow_mode if overflow is None else overflow
+        if attach and len(attach) > 1 and overflow == OverflowMode.TRUNCATE:
+            # Save the first attachment.
+            attach_ = AppriseAttachment(attach[0], asset=self.asset)
+        else:
+            # Reuse the original attachment collection.
+            attach_ = attach
+
+        # Apply overflow and dialect resizing to every chunk first so plugins
+        # receive the final call count before delivery begins.
+        all_pieces = [
+            self._apply_dialect_overflow(
+                chunk, overflow, body_format, body_passthrough
+            )
+            for chunk in self._apply_overflow(
+                body=body,
+                title=title,
+                overflow=overflow,
+                body_format=body_format,
+                body_passthrough=body_passthrough,
+                _payload_precapped=_payload_precapped,
+            )
+        ]
+        total = sum(len(pieces) for pieces in all_pieces)
+
+        # Select one attachment-bearing call before split delivery begins.
+        # This avoids duplicates and shared state during concurrent sends.
+        attach_index = self._attachment_send_index(total) if attach_ else None
+
+        # Track each call's position across all chunks so plugins can place
+        # attachments relative to the first or last delivery.
+        index = 0
+        for pieces in all_pieces:
+            for piece in pieces:
+                # Send notification
+                yield {
+                    "body": piece["body"],
+                    "title": piece["title"],
+                    "notify_type": notify_type,
+                    # Attach only on the one call chosen above; never repeat
+                    # it across overflow chunks or dialect-split pieces.
+                    "attach": attach_ if index == attach_index else None,
+                    "body_format": body_format,
+                    "body_passthrough": body_passthrough,
+                    "index": index,
+                    "total": total,
+                }
+                index += 1
+
+    def _enforce_payload_cap(self, title: str, body: str) -> tuple[str, str]:
+        """Apply the asset's payload_max_size to a title and body.
+
+        Returns the (possibly trimmed) title and body, logging a warning
+        when anything was removed.
+        """
+        original_len = len(title) + len(body)
+        title, body = self.asset.enforce_payload_max_size(title, body)
+        if len(title) + len(body) < original_len:
+            self.logger.warning(
+                "%s payload trimmed to stay within the configured "
+                "payload_max_size of %d characters.",
+                self.service_name,
+                self.asset._payload_max_size,
+            )
+
+        return title, body
+
+    def _attachment_send_index(self, total: int) -> int:
+        """Return the flat call index that should carry an attachment.
+
+        The default is the first call. Plugins may use ``total`` to select a
+        later call when their delivery order requires it.
+        """
+        return 0
+
+    def _apply_overflow(
+        self,
+        body: Optional[str],
+        title: Optional[str] = None,
+        overflow: Optional[Union[str, OverflowMode]] = None,
+        body_format: Optional[NotifyFormat] = None,
+        body_passthrough: Optional[bool] = None,
+        _payload_precapped: object = None,
+    ) -> list[dict[str, str]]:
+        """Apply upstream, truncation, or split overflow rules.
+
+        The title may be merged into the body when the service has no title
+        field. ``body_format`` guides splitting and Markdown repair, while
+        ``body_passthrough`` skips format conversion for an undeclared source.
+
+        Returns one or more independently deliverable title/body mappings:
+            [
+                {
+                    title: 'the title goes here',
+                    body: 'the message body goes here',
+                },
+                {
+                    title: 'the title goes here',
+                    body: 'the continued message body goes here',
+                },
+            ]
+        """
+        response: list[dict[str, str]] = []
+
+        # Tidy
+        title = "" if not title else title.strip()
+        body = "" if not body else body.rstrip()
+
+        # Direct plugin calls still need the source-size cap. Only Apprise's
+        # private token confirms it was already applied before conversion.
+        if _payload_precapped is not _PAYLOAD_PRECAPPED:
+            title, body = self._enforce_payload_cap(title, body)
+
+        # Default overflow mode
+        if overflow is None:
+            overflow = self.overflow_mode
+
+        if body_passthrough is None:
+            body_passthrough = body_format is None
+            body_format = self.resolve_format(body_format)
+
+        # If the service does not support a title, amalgamate into body
+        if self.title_maxlen <= 0 and len(title) > 0:
+            if body_format == NotifyFormat.HTML:
+                body = (
+                    f"<{self.default_html_tag_id}>{title}"
+                    f"</{self.default_html_tag_id}>"
+                    f"<br />\r\n{body}"
+                )
+
+            elif body_format == NotifyFormat.MARKDOWN and not body_passthrough:
+                # Declared Markdown/CommonMark can receive a heading.
+                # Undeclared content uses the normal plain-text title layout.
+                title = title.lstrip("\r\n \t\v\f#-")
+                if title:
+                    body = f"# {title}\n{body}"
+
+            else:
+                body = f"{title}\r\n{body}"
+
+            title = ""
+
+        # Enforce line count
+        if self.body_max_line_count > 0:
+            lines = re.split(r"\r*\n", body)
+            body = "\r\n".join(lines[0 : self.body_max_line_count])
+
+        # UPSTREAM mode: do not touch content
+        if overflow == OverflowMode.UPSTREAM:
+            response.append({"body": body, "title": title})
+            return response
+
+        # a value of '2' allows for the \r\n that is applied when amalgamating
+        overflow_buffer = (
+            max(2, self.overflow_buffer)
+            if (self.title_maxlen == 0 and len(title))
+            else self.overflow_buffer
+        )
+
+        #
+        # TRUNCATE and SPLIT require sizing logic
+        #
+
+        # Handle situations where body and title are amalgamated
+        title_maxlen = (
+            self.title_maxlen
+            if not self.overflow_amalgamate_title
+            else min(
+                len(title) + self.overflow_max_display_count_width,
+                self.title_maxlen,
+                self.body_maxlen,
+            )
+        )
+
+        if len(title) > title_maxlen:
+            # Truncate our title
+            title = title[:title_maxlen].rstrip()
+
+        # Compute body_maxlen as per legacy logic
+        if (
+            self.overflow_amalgamate_title
+            and (self.body_maxlen - overflow_buffer) >= title_maxlen
+        ):
+            # status quo
+            body_maxlen = (
+                self.body_maxlen
+                if not title
+                else (self.body_maxlen - title_maxlen)
+            ) - overflow_buffer
+        else:
+            # If the body fits, we're done
+            body_maxlen = (
+                self.body_maxlen
+                if not self.overflow_amalgamate_title
+                else (self.body_maxlen - overflow_buffer)
+            )
+
+        # If the body fits, we are done
+        if body_maxlen > 0 and len(body) <= body_maxlen:
+            response.append({"body": body, "title": title})
+            return response
+
+        # TRUNCATE mode: hard truncation (no smart-splitting)
+        if overflow == OverflowMode.TRUNCATE:
+            truncated = body[:body_maxlen].lstrip("\r\n\x0b\x0c").rstrip()
+            if body_format == NotifyFormat.MARKDOWN and not body_passthrough:
+                # An odd run of trailing backslashes means the last one
+                # lost the character it escaped; drop it so it does not
+                # dangle at the end of the message.
+                if (len(truncated) - len(truncated.rstrip("\\"))) % 2:
+                    truncated = truncated[:-1].rstrip()
+
+                # Repair truncated constructs before dialect conversion.
+                # Bounded discarded text can identify a possible closer.
+                lookahead_end = body_maxlen + body_maxlen * 8
+                lookahead = body[body_maxlen:lookahead_end]
+                boundary_next_ch = (
+                    body[lookahead_end : lookahead_end + 1] or None
+                )
+                truncated, _ = commonmark_repair_chunk(
+                    truncated,
+                    {},
+                    next_chunk=lookahead or None,
+                    next_chunk_boundary_ch=boundary_next_ch,
+                )
+            response.append({"body": truncated, "title": title})
+            return response
+
+        #
+        # SPLIT mode
+        #
+
+        # Detect if we only display our title once or not (legacy logic)
+        if self.overflow_display_title_once is None:
+            # Detect if we only display our title once or not:
+            overflow_display_title_once = bool(
+                self.overflow_amalgamate_title
+                and body_maxlen < self.overflow_display_count_threshold
+            )
+        else:
+            overflow_display_title_once = self.overflow_display_title_once
+
+        # SPLIT mode with repeated title (with/without counter)
+        if not overflow_display_title_once and not (
+            # edge case: amalgamated title but no body space
+            self.overflow_amalgamate_title and body_maxlen <= 0
+        ):
+            # Decide whether to show a counter (legacy condition)
+            show_counter = (
+                title
+                and len(body) > body_maxlen
+                and (
+                    (
+                        self.overflow_amalgamate_title
+                        and body_maxlen
+                        >= self.overflow_display_count_threshold
+                    )
+                    or (
+                        not self.overflow_amalgamate_title
+                        and title_maxlen
+                        > self.overflow_display_count_threshold
+                    )
+                )
+                and (
+                    title_maxlen
+                    > (self.overflow_max_display_count_width + overflow_buffer)
+                    and self.title_maxlen
+                    >= self.overflow_display_count_threshold
+                )
+            )
+
+            effective_body_maxlen = body_maxlen
+            if show_counter:
+                # introduce padding for the counter
+                effective_body_maxlen -= overflow_buffer
+
+            # Use smart splitting instead of naive slicing
+            chunks = smart_split(
+                body,
+                effective_body_maxlen,
+                body_format,
+            )
+            count = len(chunks)
+
+            template = ""
+            if show_counter:
+                digits = len(str(count))
+                overflow_display_count_width = 4 + (digits * 2)
+
+                if (
+                    overflow_display_count_width
+                    <= self.overflow_max_display_count_width
+                ):
+                    # Truncate title further if needed to make room for counter
+                    t_max = title_maxlen - overflow_display_count_width
+                    if len(title) > t_max:
+                        title = title[:t_max]
+                    template = f" [{{:0{digits}d}}/{{:0{digits}d}}]"
+                else:
+                    # Too many messages; fall back to repeated title without
+                    # counter displayed
+                    show_counter = False
+
+            response = []
+            for idx, chunk_body in enumerate(chunks, start=1):
+                suffix = template.format(idx, count) if show_counter else ""
+                response.append(
+                    {
+                        "body": chunk_body.lstrip("\r\n\x0b\x0c").rstrip(),
+                        "title": f"{title}{suffix}",
+                        # Preserve this repeated title if dialect conversion
+                        # splits the chunk again.
+                        "repeat_title": True,
+                    }
+                )
+
+        else:
+            #
+            # SPLIT mode, display title once and move on
+            # (this covers both overflow_display_title_once=True
+            #  and the edge case body_maxlen <= 0 with amalgamated title)
+            #
+            response = []
+            consumed = 0
+            remainder = body
+
+            if body_maxlen > 0 and body:
+                # First chunk uses body_maxlen (which already accounts for
+                # the title)
+                first_chunks = smart_split(
+                    body,
+                    body_maxlen,
+                    body_format,
+                )
+                first_body = first_chunks[0] if first_chunks else ""
+                consumed = len(first_body)
+                remainder = body[consumed:]
+
+                response.append(
+                    {
+                        "body": first_body.lstrip("\r\n\x0b\x0c").rstrip(),
+                        "title": title,
+                    }
+                )
+
+            else:
+                # body_maxlen <= 0 or no body; send title only, still honouring
+                # body
+                response.append(
+                    {
+                        "body": "",
+                        "title": title,
+                    }
+                )
+                # remainder stays as full body; will be split below
+
+            # Remaining chunks: no title, use the full body_maxlen of the
+            # service
+            if remainder:
+                more_chunks = smart_split(
+                    remainder,
+                    self.body_maxlen,
+                    body_format,
+                )
+                for chunk_body in more_chunks:
+                    response.append(
+                        {
+                            "body": chunk_body.lstrip("\r\n\x0b\x0c").rstrip(),
+                            "title": "",
+                        }
+                    )
+
+        if body_format == NotifyFormat.MARKDOWN and not body_passthrough:
+            # Repair chunks before dialect conversion. Raw lookahead classifies
+            # a trailing delimiter against its real neighbor.
+            pending = {}
+            for idx, chunk in enumerate(response):
+                next_body = (
+                    response[idx + 1]["body"]
+                    if idx + 1 < len(response)
+                    else None
+                )
+                chunk["body"], pending = commonmark_repair_chunk(
+                    chunk["body"], pending, next_chunk=next_body
+                )
+
+        return response
+
+    def _apply_dialect_overflow(
+        self,
+        chunk: dict[str, str],
+        overflow: Union[str, OverflowMode],
+        body_format: Optional[NotifyFormat],
+        body_passthrough: bool,
+    ) -> list[dict[str, str]]:
+        """Re-split or re-truncate one chunk after ``dialect_convert()``.
+
+        Passthrough bodies and plugins without an override remain unchanged.
+        The first piece keeps its title. Later pieces keep it only when the
+        source chunk requested a repeated title.
+        """
+        has_dialect = (
+            type(self).dialect_convert is not NotifyBase.dialect_convert
+        )
+        if not has_dialect or body_passthrough:
+            return [chunk]
+
+        def convert_fn(body: str) -> str:
+            return self.dialect_convert(body, body_format)
+
+        if overflow == OverflowMode.SPLIT:
+            bodies = split_dialect_chunk(
+                chunk["body"], self.body_maxlen, convert_fn, body_format
+            )
+        elif overflow == OverflowMode.TRUNCATE:
+            bodies = [
+                truncate_dialect_chunk(
+                    chunk["body"], self.body_maxlen, convert_fn, body_format
+                )
+            ]
+        else:
+            # UPSTREAM: convert without splitting and let the service
+            # itself handle an oversized payload.
+            bodies = [convert_fn(chunk["body"])]
+
+        # Repeated titles follow every new piece; one-time titles stay first.
+        repeat_title = chunk.get("repeat_title", False)
+        return [
+            {
+                "body": body,
+                "title": chunk["title"] if (idx == 0 or repeat_title) else "",
+            }
+            for idx, body in enumerate(bodies)
+        ]
+
+    def dialect_convert(
+        self,
+        body: str,
+        body_format: Optional[NotifyFormat] = None,
+        *args: Any,
+        **kwargs: Any,
+    ) -> str:
+        """Convert one chunk to the service's final markup dialect.
+
+        Keep overrides stateless, accept ``*args, **kwargs``, and return
+        unsupported formats unchanged. The framework reapplies size limits.
+        """
+        return body
+
+    def send(
+        self,
+        body: str,
+        title: str = "",
+        notify_type: NotifyType = NotifyType.INFO,
+        **kwargs: Any,
+    ) -> bool:
+        """Should preform the actual notification itself."""
+        raise NotImplementedError(
+            "send() is not implemented by the child class."
+        )
+
+    def __len__(self):
+        """Returns the number of HTTP requests this instance will make,
+        factoring in the configured retry count.
+
+        Subclasses that override this are automatically wrapped by
+        __init_subclass__ to apply the same retry multiplier, so they
+        should return their raw target count without worrying about retry.
+        """
+        return self.retry + 1
+
+    def url_parameters(
+        self,
+        *args: Any,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Provides a default set of parameters to work with.
+
+        This can greatly simplify URL construction in the acommpanied url()
+        function in all defined plugin services.
+        """
+
+        params = {"overflow": self.overflow_mode.value}
+
+        # Single-format plugins always serialize their effective format.
+        # Multi-format plugins only serialize format= when the user asked
+        # for an explicit override. Omitting it keeps plain multi-format
+        # URLs flexible on a round trip, so the next send can still align
+        # to that call's body_format.
+        formats = self._formats()
+        if len(formats) == 1:
+            params["format"] = formats[0].value
+        elif self._format_override is not None:
+            params["format"] = self._format_override.value
+
+        # Timezone Information (if ZoneInfo)
+        if self.__tzinfo and isinstance(self.__tzinfo, ZoneInfo):
+            params["tz"] = self.__tzinfo.key
+
+        # Persistent Storage Setting
+        if self.persistent_storage != NotifyBase.persistent_storage:
+            params["store"] = "yes" if self.persistent_storage else "no"
+
+        # Always emit retry=, wait=, and optional= in the URL regardless
+        # of whether they hold their zero/False defaults.  Emitting them
+        # unconditionally keeps the URL fully self-describing: a service
+        # URL that is round-tripped through parse_url() -> __init__() will
+        # reconstruct an identical object with the same settings.  This
+        # property is important for configuration-file generators, UI
+        # tooling, and any code that serialises service objects to strings
+        # and needs to restore them later without silent data loss.
+        #
+        # retry= and wait= are emitted as strings because URL query strings
+        # are inherently text.  The receiving __init__() will re-parse them
+        # with int() and float() respectively.
+        #
+        # optional= is emitted as the canonical lower-case pair "yes"/"no"
+        # that parse_bool() recognises on the receiving end, ensuring the
+        # round-trip is lossless even for the boolean case.
+        params["retry"] = str(self.retry)
+        params["wait"] = str(self.wait)
+        params["optional"] = "yes" if self.optional else "no"
+
+        params.update(super().url_parameters(*args, **kwargs))
+
+        # return default parameters
+        return params
+
+    @staticmethod
+    def parse_url(
+        url: str,
+        verify_host: bool = True,
+        plus_to_space: bool = False,
+    ) -> Optional[dict[str, Any]]:
+        """Parses the URL and returns it broken apart into a dictionary.
+
+        This is very specific and customized for Apprise.
+
+        In addition to the fields extracted by URLBase.parse_url(), this
+        method extracts the NotifyBase-level query-string parameters:
+        ``format``, ``overflow``, ``emojis``, ``tz``, ``store``, ``retry``,
+        ``wait``, and ``optional``.  The extracted values are placed
+        directly in the returned results dict under their respective keys,
+        ready to be consumed by NotifyBase.__init__() (or a subclass).
+        Child classes should call this method via ``super()`` and then
+        layer their own parameter extraction on top of the returned dict.
+
+        Args:
+            url (str): The URL you want to fully parse.
+            verify_host (:obj:`bool`, optional): a flag kept with the parsed
+                 URL which some child classes will later use to verify SSL
+                 keys (if SSL transactions take place).  Unless under very
+                 specific circumstances, it is strongly recomended that
+                 you leave this default value set to True.
+
+        Returns:
+            A dictionary is returned containing the URL fully parsed if
+            successful, otherwise None is returned.
+        """
+        results = URLBase.parse_url(
+            url, verify_host=verify_host, plus_to_space=plus_to_space
+        )
+
+        if not results:
+            # We're done; we failed to parse our url
+            return results
+
+        # Apply the query string options every notification supports
+        return NotifyBase.parse_url_options(results)
+
+    @staticmethod
+    def parse_url_options(results: dict[str, Any]) -> dict[str, Any]:
+        """Apply the query string options every notification supports.
+
+        This reads ``format``, ``overflow``, ``emojis``, ``tz``, ``store``,
+        ``retry``, ``wait`` and ``optional`` from ``results["qsd"]``.
+        """
+        if not isinstance(results.get("qsd"), dict):
+            # There is no query string to read options from
+            return results
+
+        # Allow overriding the default format
+        if "format" in results["qsd"]:
+            results["format"] = results["qsd"].get("format", "").lower()
+            if results["format"] not in NOTIFY_FORMATS:
+                URLBase.logger.warning(
+                    "Unsupported format specified %r",
+                    results["qsd"]["format"],
+                )
+                del results["format"]
+
+        # Allow overriding the default overflow
+        if "overflow" in results["qsd"]:
+            results["overflow"] = results["qsd"].get("overflow", "").lower()
+            if results["overflow"] not in OVERFLOW_MODES:
+                URLBase.logger.warning(
+                    "Unsupported overflow mode specified "
+                    f"{results['qsd']['overflow']!r}"
+                )
+                del results["overflow"]
+
+        # Allow emoji's override
+        if "emojis" in results["qsd"]:
+            results["emojis"] = parse_bool(results["qsd"].get("emojis"))
+            # Store our persistent storage boolean
+
+        # Allow overriding the default timezone
+        if "tz" in results["qsd"]:
+            results["tz"] = results["qsd"].get("tz", "")
+
+        if "store" in results["qsd"]:
+            results["store"] = results["qsd"]["store"]
+
+        # Global per-plugin retry count (?retry=N)
+        if "retry" in results["qsd"] and results["qsd"]["retry"]:
+            results["retry"] = results["qsd"]["retry"]
+
+        # Global per-plugin inter-retry wait (?wait=N)
+        if "wait" in results["qsd"] and results["qsd"]["wait"]:
+            results["wait"] = results["qsd"]["wait"]
+
+        # Global optional flag (?optional=yes/no).
+        #
+        # parse_bool() converts the raw query-string value to a native
+        # Python bool using Apprise's canonical truth table: "yes", "true",
+        # "on", "1" -> True; "no", "false", "off", "0" -> False.
+        # Unrecognised strings fall back to False (the safe default).
+        #
+        # The parsed bool is stored in results["optional"] so that
+        # NotifyBase.__init__() receives a value it can pass straight
+        # through parse_bool() again without loss (parse_bool(True) is
+        # True and parse_bool(False) is False).
+        #
+        # When ?optional= is absent from the URL entirely, this block is
+        # skipped and results["optional"] is never set.  NotifyBase.__init__
+        # will then leave self.optional at its class-level default (False),
+        # which means the absence of the parameter is indistinguishable from
+        # passing ?optional=no -- both result in failures being propagated.
+        if "optional" in results["qsd"]:
+            results["optional"] = parse_bool(results["qsd"]["optional"])
+
+        return results
+
+    @staticmethod
+    def parse_native_url(url: str) -> Optional[dict[str, Any]]:
+        """This is a base class that can be optionally over-ridden by child
+        classes who can build their Apprise URL based on the one provided by
+        the notification service they choose to use.
+
+        The intent of this is to make Apprise a little more userfriendly to
+        people who aren't familiar with constructing URLs and wish to use the
+        ones that were just provied by their notification serivice that they're
+        using.
+
+        This function will return None if the passed in URL can't be matched as
+        belonging to the notification service. Otherwise this function should
+        return the same set of results that parse_url() does.
+        """
+        return None
+
+    @property
+    def store(self):
+        """Returns a pointer to our persistent store for use.
+
+        The best use cases are:
+         self.store.get('key')
+         self.store.set('key', 'value')
+         self.store.delete('key1', 'key2', ...)
+
+        You can also access the keys this way:
+         self.store['key']
+
+        And clear them:
+         del self.store['key']
+        """
+        if self.__store is None:
+            # Initialize our persistent store for use.  With storage turned
+            # off the store still works, it simply keeps everything in
+            # memory so nothing is written to disk for this URL.
+            self.__store = PersistentStore(
+                namespace=self.url_id(),
+                path=self.asset.storage_path,
+                mode=(
+                    self.asset.storage_mode
+                    if self.persistent_storage
+                    else PersistentStoreMode.MEMORY
+                ),
+            )
+
+        return self.__store
+
+    def flush_store(self) -> None:
+        """Write this service's persistent store to disk if it was used."""
+        if self.__store is not None:
+            self.__store.flush()
+
+    @property
+    def tzinfo(self) -> tzinfo:
+        """Returns our tzinfo file associated with this plugin if set
+        otherwise the default timezone is returned.
+        """
+        return self.__tzinfo if self.__tzinfo else self.asset.tzinfo
