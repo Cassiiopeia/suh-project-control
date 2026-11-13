@@ -102,7 +102,7 @@ def test_failed_send_is_recorded(store, monkeypatch):
 
 def test_deliverer_exception_does_not_break_dispatch():
     class BrokenDeliverer:
-        def deliver(self, notification):
+        def deliver(self, notification, is_redispatch_possible=True):
             raise RuntimeError("deliverer broken")
 
     discord_client = FakeDiscordClient()

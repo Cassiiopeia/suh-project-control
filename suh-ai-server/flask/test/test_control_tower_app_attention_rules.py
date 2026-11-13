@@ -265,10 +265,14 @@ def test_프로젝트가_down이거나_소스가_꺼져_있으면_연동_끊김�
 
 
 def test_연동_알림은_프로젝트_error_채널로_끊김은_사유를_복구는_recovered로_보낸다():
-    disconnected = build_source_health_notification(PROJECT_ID, "elum", SOURCE_ID, "disconnected", "unauthorized")
+    disconnected = build_source_health_notification(PROJECT_ID, "elum", SOURCE_ID, "disconnected", "unauthorized",
+                                                    BASE_TIME)
     assert (disconnected.scope, disconnected.kind, disconnected.severity) == (PROJECT_ID, "error", "warning")
     assert disconnected.title == "elum 확인할 일 연동 끊김"
     assert "사유: unauthorized" in disconnected.body
-    recovered = build_source_health_notification(PROJECT_ID, "elum", SOURCE_ID, "recovered", None)
+    recovered = build_source_health_notification(PROJECT_ID, "elum", SOURCE_ID, "recovered", None, BASE_TIME)
     assert (recovered.title, recovered.severity) == ("elum 확인할 일 연동 복구", "recovered")
     assert disconnected.dedupe_key != recovered.dedupe_key
+    later_recovered = build_source_health_notification(PROJECT_ID, "elum", SOURCE_ID, "recovered", None,
+                                                       BASE_TIME + timedelta(hours=1))
+    assert later_recovered.dedupe_key != recovered.dedupe_key

@@ -192,10 +192,15 @@ class AppAttentionIngest:
         verdict = evaluate_source_health(source, state, self._is_project_down(source.project_id), now)
         if verdict is None:
             return state, None
-        failure_alerted_at = now if verdict == SOURCE_HEALTH_DISCONNECTED else None
-        reason = (state.last_error or state.last_result) if verdict == SOURCE_HEALTH_DISCONNECTED else None
+        is_disconnected = verdict == SOURCE_HEALTH_DISCONNECTED
+        failure_alerted_at = now if is_disconnected else None
+        reason = (state.last_error or state.last_result) if is_disconnected else None
+        # 전이 기준 시각: 끊김 = 마지막 성공(없으면 등록 시각), 복구 = 끊김 알림 시각 (재시도에도 그대로 > 같은 key)
+        transition_reference_at = ((state.last_success_at or source.created_at) if is_disconnected
+                                   else state.failure_alerted_at)
         notification = build_source_health_notification(
-            source.project_id, self._project_name(source.project_id), source.source_id, verdict, reason)
+            source.project_id, self._project_name(source.project_id), source.source_id, verdict, reason,
+            transition_reference_at)
         logger.info("[control-tower app-attention] source %s : %s.%s", verdict, source.project_id, source.source_id)
         return replace(state, failure_alerted_at=failure_alerted_at), notification
 

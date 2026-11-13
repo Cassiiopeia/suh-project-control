@@ -54,10 +54,11 @@ class EventDispatcher:
         """디스코드 클라이언트 설정 여부 (미설정이면 발송 실패를 재시도하지 않음)"""
         return self._discord_client_provider() is not None
 
-    def dispatch(self, notification: Notification) -> bool:
-        """알림 1건 발송: 기본 디스코드 채널 > 받을 곳 (반환값 = 기본 발송 결과, 받을 곳 결과와 무관)"""
+    def dispatch(self, notification: Notification, is_redispatch_possible: bool = True) -> bool:
+        """알림 1건 발송: 기본 디스코드 채널 > 받을 곳 (반환값 = 기본 발송 결과, 받을 곳 결과와 무관)
+        is_redispatch_possible: 실패 시 호출부가 같은 알림을 다시 보냄(폴러·확인할 일) > 받을 곳 중복 기억 적용"""
         is_sent = self._send_to_default_channel(notification)
-        self._deliver_to_destinations(notification)
+        self._deliver_to_destinations(notification, is_redispatch_possible)
         return is_sent
 
     def _send_to_default_channel(self, notification: Notification) -> bool:
@@ -71,12 +72,12 @@ class EventDispatcher:
             return False
         return discord_client.send_embed(channel_id, to_embed(notification, self._status_page_url))
 
-    def _deliver_to_destinations(self, notification: Notification) -> None:
+    def _deliver_to_destinations(self, notification: Notification, is_redispatch_possible: bool) -> None:
         """받을 곳 발송 위임 (예외는 기록만, 기본 발송·요청 응답에 영향 없음)"""
         if self._destination_deliverer is None:
             return
         try:
-            self._destination_deliverer.deliver(notification)
+            self._destination_deliverer.deliver(notification, is_redispatch_possible=is_redispatch_possible)
         except Exception as error:
             logger.warning("[control-tower dispatch] destination delivery failed : scope %s kind %s %s",
                            sanitize_log_value(notification.scope), sanitize_log_value(notification.kind),
@@ -109,7 +110,8 @@ class EventDispatcher:
             scope=project_id, kind=payload["kind"], severity=payload["severity"], title=payload["title"],
             body=payload.get("body") or "", service_ids=(), dedupe_key=dedupe_key, link_url=payload.get("url"),
             fields=tuple((field["name"], field["value"]) for field in payload.get("fields") or ()))
-        if not self.dispatch(notification):
+        # 앱 이벤트: event_log 중복 억제(EVENT_DEDUPE_WINDOW)만 적용, 재dispatch 없음 > 받을 곳 기억 우회
+        if not self.dispatch(notification, is_redispatch_possible=False):
             logger.warning("[control-tower dispatch] event accepted but not delivered : project %s kind %s",
                            sanitize_log_value(project_id), notification.kind)
         return HTTP_ACCEPTED, {"accepted": True, "deduplicated": False}

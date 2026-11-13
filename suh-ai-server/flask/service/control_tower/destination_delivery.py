@@ -129,7 +129,7 @@ def build_destination_message(notification: Notification) -> tuple[str, str]:
 
 class DestinationDeliverer:
     """프로젝트 알림 > 같은 (프로젝트, 채널 종류)의 사용 중 받을 곳: 받을 곳마다 백그라운드 발송, 재시도 없음
-    같은 알림 재dispatch(기본 발송 실패 재시도)는 기억 기간 안 1번만 발송"""
+    재dispatch 가능 알림(폴러·확인할 일 재시도)은 같은 dedupe_key를 기억 기간 안 1번만 발송"""
 
     def __init__(self, store, run_in_background: Callable[[Callable[[], None], str], None],
                  environ: Mapping[str, str] = os.environ, now_provider: Callable[[], datetime] = utc_now):
@@ -142,8 +142,9 @@ class DestinationDeliverer:
         self._decrypted_url_cache = DecryptedUrlCache()
         self._delivered_notification_memory = DeliveredNotificationMemory()
 
-    def deliver(self, notification: Notification) -> None:
-        """전역 알림 제외 > 받을 곳 조회 > 비밀값 확인(없으면 백그라운드 생략 기록) > 이미 보낸 알림 생략 > 받을 곳마다 백그라운드 발송"""
+    def deliver(self, notification: Notification, is_redispatch_possible: bool = True) -> None:
+        """전역 알림 제외 > 받을 곳 조회 > 비밀값 확인(없으면 백그라운드 생략 기록) > 이미 보낸 알림 생략(재dispatch 가능 알림만)
+        > 받을 곳마다 백그라운드 발송"""
         if notification.scope == GLOBAL_SCOPE:
             return
         destinations = self._store.list_enabled_destinations(notification.scope, to_channel_kind(notification))
@@ -154,7 +155,8 @@ class DestinationDeliverer:
             self._run_in_background(partial(self._skip_for_missing_secret, notification, destinations),
                                     SECRET_MISSING_THREAD_NAME)
             return
-        if not self._delivered_notification_memory.remember_if_new(notification, self._now_provider()):
+        if is_redispatch_possible and not self._delivered_notification_memory.remember_if_new(
+                notification, self._now_provider()):
             return
         title, body = build_destination_message(notification)
         for destination in destinations:
