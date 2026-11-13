@@ -60,6 +60,9 @@ public final class ControlTowerClient {
         if (event == null || event.kind() == null || event.title() == null || event.severity() == null) {
             throw new IllegalArgumentException("event, kind, title and severity must not be null");
         }
+        if (event.kind().isEmpty() || event.title().isEmpty()) {
+            throw new IllegalArgumentException("kind and title must not be empty");
+        }
         if (event.hasInvalidField()) {
             throw new IllegalArgumentException("field name and value must not be null");
         }

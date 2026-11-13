@@ -118,6 +118,22 @@ class ControlTowerClientTest {
         assertTrue(server.receivedRequests.isEmpty());
     }
 
+    @ParameterizedTest
+    @CsvSource(value = {"'',title", "kind,''", "'',''"})
+    void emptyKindOrTitleIsInvalidInputAndNotSent(String kind, String title) throws IOException {
+        FakeServer server = startServer();
+        NotifyResult result = makeClient(server).notify(ControlTowerEvent.of(kind, title));
+        assertEquals(new NotifyResult(false, null, "invalid_input", false), result);
+        assertTrue(server.receivedRequests.isEmpty());
+    }
+
+    @Test
+    void fullWidthDigitsInUnicodeEscapeAreNotJson() {
+        // 유니코드 이스케이프 뒤 전각 숫자는 JSON이 아니므로 http_<상태>로 처리
+        NotifyResult result = ControlTowerClient.toResult(500, "{\"error\": \"\\u００４１\"}".getBytes(StandardCharsets.UTF_8));
+        assertEquals("http_500", result.errorCode());
+    }
+
     @Test
     void nullEventIsInvalidInput() throws IOException {
         FakeServer server = startServer();

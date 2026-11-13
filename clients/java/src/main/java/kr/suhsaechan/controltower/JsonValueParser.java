@@ -136,7 +136,8 @@ final class JsonValueParser {
         }
         int codeUnit = 0;
         for (int offset = 0; offset < UNICODE_ESCAPE_LENGTH; offset++) {
-            int digit = Character.digit(text.charAt(position + offset), HEX_RADIX);
+            // ASCII 16진 숫자만 (Character.digit은 전각 숫자도 받으므로 직접 판정)
+            int digit = toAsciiHexDigit(text.charAt(position + offset));
             if (digit < 0) {
                 throw error("invalid unicode escape");
             }
@@ -144,6 +145,20 @@ final class JsonValueParser {
         }
         position += UNICODE_ESCAPE_LENGTH;
         return (char) codeUnit;
+    }
+
+    /** ASCII 16진 문자 > 값 (아니면 -1) */
+    private static int toAsciiHexDigit(char character) {
+        if (character >= '0' && character <= '9') {
+            return character - '0';
+        }
+        if (character >= 'a' && character <= 'f') {
+            return character - 'a' + 10;
+        }
+        if (character >= 'A' && character <= 'F') {
+            return character - 'A' + 10;
+        }
+        return -1;
     }
 
     private Object readLiteral(String literal, Object value) {

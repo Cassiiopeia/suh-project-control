@@ -110,6 +110,21 @@ def test_redirect_not_followed_and_token_not_forwarded(make_server):
     assert target.received_requests == []
 
 
+@pytest.mark.parametrize("name", ["body", "url", "dedupe_key"])
+def test_non_string_optional_field_is_invalid_input(make_server, name):
+    server = make_server()
+    result = make_client(server).notify("report", "t", **{name: 123})
+    assert (result.is_accepted, result.error_code) == (False, "invalid_input")
+    assert server.received_requests == []
+
+
+def test_deduplicated_only_when_json_true():
+    from suh_control_tower.client import _to_result
+    assert _to_result(202, b'{"deduplicated": true}').is_deduplicated is True
+    assert _to_result(202, b'{"deduplicated": "yes"}').is_deduplicated is False
+    assert _to_result(202, b'{"deduplicated": 1}').is_deduplicated is False
+
+
 def test_none_field_value_is_invalid_input(make_server):
     server = make_server()
     result = make_client(server).notify("report", "t", fields={"a": None})
@@ -123,6 +138,10 @@ def test_none_field_value_is_invalid_input(make_server):
     {"project": "p", "token": "토큰"},
     {"project": "p", "token": "t", "base_url": "http://example.com"},
     {"project": "p", "token": "t", "base_url": "ftp://x"},
+    {"project": "p", "token": "t", "base_url": "https://example.com:abc"},
+    {"project": "p", "token": "t", "base_url": "https://example.com:99999"},
+    {"project": "p", "token": "t", "base_url": "https://exa mple.com"},
+    {"project": "p", "token": "t", "base_url": " https://example.com"},
 ])
 def test_bad_configuration_raises_value_error(kwargs):
     with pytest.raises(ValueError) as error_info:

@@ -46,12 +46,24 @@ def _validate_configuration(project: str, token: str, base_url: str) -> None:
     # 헤더 값으로 안전한 문자만: ASCII 인쇄 가능, 공백·제어문자 없음
     if not token.isascii() or any(ch.isspace() or not ch.isprintable() for ch in token):
         raise ValueError("token must not contain whitespace, control or non-ASCII characters")
-    parsed = urllib.parse.urlparse(base_url) if isinstance(base_url, str) else None
+    parsed = _parse_base_url(base_url)
     is_https = parsed is not None and parsed.scheme == "https" and bool(parsed.hostname)
     is_local_http = (parsed is not None and parsed.scheme == "http"
                      and parsed.hostname in PLAINTEXT_ALLOWED_HOSTS)
     if not (is_https or is_local_http):
         raise ValueError("base_url must be https (http only for 127.0.0.1 or localhost)")
+
+
+def _parse_base_url(base_url: str):
+    """base_url 파싱: 문자열 아님, 공백·제어문자, 잘못된 포트는 None (Java URI 검증과 같게)"""
+    if not isinstance(base_url, str) or any(ch.isspace() or not ch.isprintable() for ch in base_url):
+        return None
+    try:
+        parsed = urllib.parse.urlparse(base_url)
+        parsed.port  # 잘못된 포트는 접근 시 ValueError
+    except ValueError:
+        return None
+    return parsed
 
 
 def _validate_timeout_seconds(timeout_seconds: float) -> None:
@@ -93,12 +105,13 @@ class ControlTowerClient:
         if not isinstance(severity, str):
             raise ValueError("severity must be a string")
         payload = {"project": self._project, "kind": kind, "severity": severity, "title": title}
-        if body is not None:
-            payload["body"] = body
-        if url is not None:
-            payload["url"] = url
-        if dedupe_key is not None:
-            payload["dedupe_key"] = dedupe_key
+        # 선택 문자열은 값이 있으면 str이어야 함 (Java는 String 타입)
+        for optional_name, optional_value in (("body", body), ("url", url), ("dedupe_key", dedupe_key)):
+            if optional_value is None:
+                continue
+            if not isinstance(optional_value, str):
+                raise ValueError("%s must be a string" % optional_name)
+            payload[optional_name] = optional_value
         if fields is not None:
             pairs = fields.items() if isinstance(fields, Mapping) else fields
             payload["fields"] = []
@@ -138,7 +151,7 @@ class ControlTowerClient:
     def notify_in_background(self, kind: str, title: str, fields: Optional[FieldsInput] = None,
                              body: Optional[str] = None, url: Optional[str] = None,
                              severity: str = "info", dedupe_key: Optional[str] = None) -> threading.Thread:
-        """notify를 데몬 스레드에서 실행하고 즉시 반환 (결과는 버림, 종료 시 진행 중 전송은 유실)"""
+        """notify를 데몬 스레드에서 실행하고 즉시 반환 (호출마다 스레드 1개, 결과는 버림, 종료 시 진행 중 전송은 유실)"""
         thread = threading.Thread(
             target=self.notify, args=(kind, title, fields, body, url, severity, dedupe_key), daemon=True)
         thread.start()
@@ -159,7 +172,7 @@ def _to_result(status_code: int, raw_body: bytes) -> NotifyResult:
     except Exception:
         parsed = None
     if status_code == HTTP_ACCEPTED:
-        is_deduplicated = bool(parsed.get("deduplicated")) if isinstance(parsed, dict) else False
+        is_deduplicated = isinstance(parsed, dict) and parsed.get("deduplicated") is True
         return NotifyResult(is_accepted=True, status_code=status_code, is_deduplicated=is_deduplicated)
     server_error = parsed.get("error") if isinstance(parsed, dict) else None
     error_code = server_error if isinstance(server_error, str) else "http_%d" % status_code

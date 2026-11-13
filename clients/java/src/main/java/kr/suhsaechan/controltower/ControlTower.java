@@ -5,7 +5,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * 관제소 알림 허브 정적 진입점 (서버 전용, 의존성 없음): init > notify / notifyAsync
- * 기본 클라이언트 1개를 공유, init을 다시 호출하면 교체
+ * 기본 클라이언트 1개를 공유, init을 다시 호출하면 교체 (이전 HttpClient는 JDK 17에 close가 없어 진행 중 전송 후 GC에 맡김)
  */
 public final class ControlTower {
 
