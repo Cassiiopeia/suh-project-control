@@ -38,7 +38,9 @@ result = suh_control_tower.notify(
 `init`을 쓰지 않고 `ControlTowerClient(project=..., token=...)`를 직접 만들어 써도 됩니다(스레드 안전, 인자는 모두 키워드 전용).
 
 - 설정 오류는 `init`/생성자에서 `ValueError`로 알립니다: 빈 `project`/`token`, 공백·제어문자·비ASCII가 든 토큰, `https`가 아닌 `base_url`(테스트용 `http://127.0.0.1`, `http://localhost`만 예외). 앱 시작 시 한 번 걸러집니다.
-- `notify`/`notify_in_background`는 예외를 던지지 않습니다.
+- `timeout_seconds`가 0 이하이거나 숫자가 아니면 `ValueError`입니다.
+- `notify`/`notify_in_background`는 예외를 던지지 않습니다. `kind`/`title`이 비었거나 문자열이 아니면, `severity`가 문자열이 아니면 요청을 보내지 않고 `invalid_input`으로 돌려줍니다.
+- 필드 값은 모두 문자열로 보냅니다. `bool`은 Java 클라이언트와 같게 `"true"`/`"false"`(소문자)가 되고, 그 외는 `str()`입니다. 빈 dict/목록을 `fields`에 넘기면 `"fields": []`로 보냅니다.
 - `timeout_seconds`는 소켓 동작(연결, 읽기)마다 적용되며 전체 소요 시간 상한이 아닙니다.
 - 리다이렉트(3xx)는 따라가지 않습니다(토큰 유출 방지). 결과는 `http_302`처럼 실제 상태로 나옵니다.
 

@@ -234,3 +234,35 @@ def test_module_level_notify_in_background(make_server):
 def test_module_level_notify_in_background_before_init_returns_none():
     suh_control_tower._reset_for_test()
     assert suh_control_tower.notify_in_background("report", "t") is None
+
+
+@pytest.mark.parametrize("kind,title,severity", [
+    ("", "t", "info"), ("k", "", "info"), (None, "t", "info"), ("k", None, "info"),
+    (1, "t", "info"), ("k", "t", None), ("k", "t", 3),
+])
+def test_non_string_or_empty_kind_title_severity_is_invalid_input(make_server, kind, title, severity):
+    server = make_server()
+    result = make_client(server).notify(kind, title, severity=severity)
+    assert (result.is_accepted, result.error_code) == (False, "invalid_input")
+    assert server.received_requests == []
+
+
+def test_boolean_field_values_are_lowercase(make_server):
+    server = make_server()
+    make_client(server).notify("report", "t", fields={"a": True, "b": False, "c": 1})
+    fields = json.loads(server.received_requests[0][2])["fields"]
+    assert fields == [{"name": "a", "value": "true"}, {"name": "b", "value": "false"},
+                      {"name": "c", "value": "1"}]
+
+
+@pytest.mark.parametrize("timeout_seconds", [0, -1, 0.0, True, "3", None, float("nan")])
+def test_non_positive_timeout_raises_value_error(timeout_seconds):
+    with pytest.raises(ValueError):
+        ControlTowerClient(project="p", token="t", timeout_seconds=timeout_seconds)
+
+
+@pytest.mark.parametrize("empty_fields", [{}, []])
+def test_empty_fields_sent_as_empty_list(make_server, empty_fields):
+    server = make_server()
+    make_client(server).notify("report", "t", fields=empty_fields)
+    assert json.loads(server.received_requests[0][2])["fields"] == []

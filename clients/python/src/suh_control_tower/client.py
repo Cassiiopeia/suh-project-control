@@ -1,5 +1,6 @@
 """관제소 이벤트 입구 클라이언트: 본문 조립 > POST /control/events > 결과 변환"""
 import json
+import math
 import socket
 import threading
 import urllib.error
@@ -53,12 +54,27 @@ def _validate_configuration(project: str, token: str, base_url: str) -> None:
         raise ValueError("base_url must be https (http only for 127.0.0.1 or localhost)")
 
 
+def _validate_timeout_seconds(timeout_seconds: float) -> None:
+    """시간 제한 검증: 0보다 큰 유한 숫자 (bool 제외)"""
+    is_number = isinstance(timeout_seconds, (int, float)) and not isinstance(timeout_seconds, bool)
+    if not is_number or not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
+        raise ValueError("timeout_seconds must be a positive number")
+
+
+def _to_field_text(value: Any) -> str:
+    """필드 값 > 문자열 (bool은 Java와 같게 true/false, 그 외 str)"""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value)
+
+
 class ControlTowerClient:
     """관제소 알림 전송: 스레드 안전 (요청마다 연결을 새로 만들고 상태를 바꾸지 않음)"""
 
     def __init__(self, *, project: str, token: str, base_url: str = DEFAULT_BASE_URL,
                  timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS):
         _validate_configuration(project, token, base_url)
+        _validate_timeout_seconds(timeout_seconds)
         self._project = project
         self._token = token
         self._events_url = base_url.rstrip("/") + EVENTS_PATH
@@ -71,7 +87,11 @@ class ControlTowerClient:
     def build_payload(self, kind: str, title: str, fields: Optional[FieldsInput] = None,
                       body: Optional[str] = None, url: Optional[str] = None,
                       severity: str = "info", dedupe_key: Optional[str] = None) -> dict:
-        """요청 본문 조립 (값이 없는 선택 필드는 생략)"""
+        """요청 본문 조립 (kind·title 필수 문자열, severity 문자열, 값이 없는 선택 필드는 생략)"""
+        if not isinstance(kind, str) or not kind or not isinstance(title, str) or not title:
+            raise ValueError("kind and title must be non-empty strings")
+        if not isinstance(severity, str):
+            raise ValueError("severity must be a string")
         payload = {"project": self._project, "kind": kind, "severity": severity, "title": title}
         if body is not None:
             payload["body"] = body
@@ -85,7 +105,7 @@ class ControlTowerClient:
             for name, value in pairs:
                 if name is None or value is None:
                     raise ValueError("field name and value must not be None")
-                payload["fields"].append({"name": str(name), "value": str(value)})
+                payload["fields"].append({"name": str(name), "value": _to_field_text(value)})
         return payload
 
     def notify(self, kind: str, title: str, fields: Optional[FieldsInput] = None,
