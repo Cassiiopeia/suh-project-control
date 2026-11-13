@@ -79,8 +79,52 @@ def test_extract_magic_link_accepts_client_query_before_fragment():
     assert extract_magic_link(f'<a href="{link}">로그인</a>') == link
 
 
+@pytest.mark.parametrize('link', [
+    # 2026-11-13 메일 형식 변경: magic-link/{기기}#토큰 (#190)
+    'https://claude.ai/magic-link/android#abc:ZGVm',
+    'https://claude.ai/magic-link/ios#abc:ZGVm',
+    # 경로 + 쿼리 조합 (향후 변경 대비)
+    'https://claude.ai/magic-link/android?client=abc123#abc:ZGVm',
+])
+def test_extract_magic_link_accepts_path_after_magic_link(link):
+    assert extract_magic_link(f'<a href="{link}">로그인</a>') == link
+
+
+def test_extract_magic_link_accepts_single_quoted_href():
+    assert extract_magic_link(f"<a href='{MAGIC_LINK}'>로그인</a>") == MAGIC_LINK
+
+
+def test_extract_magic_link_decodes_html_entities():
+    html = '<a href="https://claude.ai/magic-link?client=a&amp;source=b#abc:ZGVm">로그인</a>'
+    assert extract_magic_link(html) == 'https://claude.ai/magic-link?client=a&source=b#abc:ZGVm'
+
+
 def test_extract_magic_link_returns_none_without_link():
     assert extract_magic_link('<a href="https://example.com">x</a>') is None
+
+
+def test_extract_magic_link_requires_token_fragment():
+    # 토큰(#) 없는 magic-link 안내 링크는 제외
+    assert extract_magic_link('<a href="https://claude.ai/magic-link/help">x</a>') is None
+
+
+def test_search_covers_anthropic_and_claude_sender_domains():
+    fake = FakeImap([])
+    find_with(fake)
+    search_call = next(call for call in fake.calls if call[0] == 'search')
+    assert search_call[1:6] == ('OR', 'FROM', 'anthropic.com', 'FROM', 'claude.com')
+
+
+def test_unrecognized_mail_logs_link_paths_once(caplog):
+    html = '<a href="https://claude.ai/login-link/xyz#token">로그인</a>'
+    fake = FakeImap([build_raw_mail(START_TIME + timedelta(seconds=5), '<changed@anthropic>', html)])
+    with caplog.at_level('WARNING'):
+        assert find_with(fake) is None
+        assert find_with(fake) is None
+    warnings = [record.getMessage() for record in caplog.records if 'not recognized' in record.getMessage()]
+    assert len(warnings) == 1
+    assert 'claude_paths=/login-link/xyz' in warnings[0]
+    assert 'token' not in warnings[0]
 
 
 def test_selects_mail_received_shortly_before_start():
@@ -115,7 +159,7 @@ def test_uses_readonly_select_and_peek():
     assert ('select', 'INBOX', True) in fake.calls
     assert ('fetch', '(BODY.PEEK[])') in fake.calls
     search_call = next(call for call in fake.calls if call[0] == 'search')
-    assert 'mail.anthropic.com' in search_call
+    assert 'anthropic.com' in search_call
 
 
 def test_imap_login_failure_raises_mail_client_error():
