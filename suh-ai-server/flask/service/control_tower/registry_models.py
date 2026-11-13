@@ -35,6 +35,8 @@ RESERVED_EVENT_KINDS = frozenset(
 EVENT_KIND_VISIBLE_ROLE_KEYS = ("dev", "member")
 # 사용자 정의 알림 종류 기본 공개 대상
 DEFAULT_EVENT_KIND_VISIBLE_TO = ("dev",)
+# 공개 대상 역할 키 > 관리 화면 표시 이름 (EVENT_KIND_VISIBLE_ROLE_KEYS와 함께 갱신)
+EVENT_KIND_VISIBLE_ROLE_LABELS = {"dev": "개발자", "member": "멤버"}
 
 DEFAULT_ROLE_NAMES = {"member": "{project}", "dev": "{project}-dev"}
 DEFAULT_CHANNEL_NAMES = {

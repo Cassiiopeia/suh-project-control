@@ -9,6 +9,7 @@ from typing import Callable
 
 from service.control_tower.alert_planner import GLOBAL_SCOPE, INFRASTRUCTURE_KIND, Notification
 from service.control_tower.discord_messages import to_embed
+from service.control_tower.log_text import sanitize_log_value
 from service.control_tower.registry_models import EVENT_KIND_INFO, EVENT_KINDS  # noqa: F401 (EVENT_KINDS 재노출, 허용 목록 단일 원본)
 
 logger = logging.getLogger(__name__)
@@ -73,7 +74,7 @@ class EventDispatcher:
         received_kind = payload.get("kind")
         if isinstance(received_kind, str) and received_kind not in allowed_kinds:
             logger.warning("[control-tower event] unknown kind : project %s kind %s",
-                           _sanitize_log_value(project_id), _sanitize_log_value(received_kind))
+                           sanitize_log_value(project_id), sanitize_log_value(received_kind))
             return HTTP_BAD_REQUEST, {"error": "unknown_kind",
                                       "kind": received_kind[:UNKNOWN_KIND_ECHO_MAX_LENGTH]}
 
@@ -91,7 +92,7 @@ class EventDispatcher:
             fields=tuple((field["name"], field["value"]) for field in payload.get("fields") or ()))
         if not self.dispatch(notification):
             logger.warning("[control-tower dispatch] event accepted but not delivered : project %s kind %s",
-                           _sanitize_log_value(project_id), notification.kind)
+                           sanitize_log_value(project_id), notification.kind)
         return HTTP_ACCEPTED, {"accepted": True, "deduplicated": False}
 
     def _find_channel_id(self, notification: Notification) -> str | None:
@@ -101,7 +102,7 @@ class EventDispatcher:
         if channel_id is not None:
             return channel_id
         logger.warning("[control-tower dispatch] binding missing : scope %s kind %s > fallback global alert",
-                       _sanitize_log_value(notification.scope), channel_kind)
+                       sanitize_log_value(notification.scope), channel_kind)
         channel_id = self._store.get_binding(GLOBAL_SCOPE, INFRASTRUCTURE_KIND)
         if channel_id is None:
             logger.warning("[control-tower dispatch] dropped : global alert binding missing")
@@ -143,9 +144,3 @@ def _is_valid_event_fields(event_fields) -> bool:
         and 0 < len(field["name"]) <= EVENT_FIELD_NAME_MAX_LENGTH
         and 0 < len(field["value"]) <= EVENT_FIELD_VALUE_MAX_LENGTH
         for field in event_fields)
-
-
-def _sanitize_log_value(value: str) -> str:
-    """로그용 값 정리 (제어문자·비ASCII > ?, 50자 제한)"""
-    return "".join(character if character.isprintable() and character.isascii() else "?"
-                   for character in value[:50])

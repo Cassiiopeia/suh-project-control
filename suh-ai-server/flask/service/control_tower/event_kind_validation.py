@@ -8,8 +8,9 @@ from service.control_tower.registry_models import (
     DEFAULT_EVENT_KIND_VISIBLE_TO, EVENT_KIND_VISIBLE_ROLE_KEYS, RESERVED_EVENT_KINDS, EventKindSpec,
 )
 
-# 종류 이름: 소문자로 시작, 소문자·숫자·하이픈 2~32자
+# 종류 이름: 소문자로 시작, 소문자·숫자·하이픈 2~32자 (관리 화면 안내 문구 = EVENT_KIND_RULE_TEXT)
 EVENT_KIND_PATTERN = re.compile(r"^[a-z][a-z0-9-]{1,31}$")
+EVENT_KIND_RULE_TEXT = "소문자로 시작, 소문자·숫자·하이픈 2~32자"
 # 채널 이름 길이 (글자 수)
 CHANNEL_NAME_MIN_LENGTH = 1
 CHANNEL_NAME_MAX_LENGTH = 40

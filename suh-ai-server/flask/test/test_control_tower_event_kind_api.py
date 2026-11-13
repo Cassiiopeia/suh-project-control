@@ -234,4 +234,27 @@ def test_관리_목록의_프로젝트마다_알림_종류가_있다(kind_client
 def test_관리_목록에_공개_대상_선택지와_기본값이_있다(kind_client):
     body = kind_client.get("/control/manage").get_json()
 
-    assert body["event_kind_options"] == {"visible_role_keys": ["dev", "member"], "default_visible_to": ["dev"]}
+    options = body["event_kind_options"]
+    assert options["visible_role_keys"] == ["dev", "member"]
+    assert options["visible_role_labels"] == {"dev": "개발자", "member": "멤버"}
+    assert options["default_visible_to"] == ["dev"]
+
+
+def test_관리_목록의_종류_규칙은_서버_검증과_같은_원본이다(kind_client):
+    options = kind_client.get("/control/manage").get_json()["event_kind_options"]
+
+    assert options["kind_pattern"] == "^[a-z][a-z0-9-]{1,31}$"
+    assert options["kind_rule_text"]
+    assert options["channel_name_max_length"] == 40
+    assert "status" in options["reserved_kinds"] and options["reserved_kinds"] == sorted(options["reserved_kinds"])
+
+
+def test_삭제_감사_상세의_종류는_정리해_기록한다(kind_client):
+    raw_kind = "한글" + "a" * 80
+
+    with patch("util.audit_helper.audit_service.record") as record:
+        response = kind_client.delete(EVENT_KINDS_PATH + "/" + raw_kind)
+
+    assert response.status_code == 404
+    recorded_kind = record.call_args.args[3]["kind"]
+    assert recorded_kind == "??" + "a" * 48

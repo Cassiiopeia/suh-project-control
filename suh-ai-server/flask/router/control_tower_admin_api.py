@@ -14,6 +14,7 @@ from service.control_tower.discord_sync import DISCORD_SYNC_LOCK, sync_discord
 from service.control_tower.overview import build_overview
 from service.control_tower.registry import SERVICE_STATUS_RETIRED
 from service.control_tower.runtime import get_runtime
+from service.control_tower.sync_registry import load_sync_ready_registry
 
 logger = logging.getLogger(__name__)
 
@@ -55,20 +56,19 @@ def _overview():
 
 
 def _sync():
-    """디스코드 동기화 1회 (동기 실행): 설정 확인 > 등록 정보 확인 > 동시 실행 차단 > 동기화 > 리포트"""
+    """디스코드 동기화 1회 (동기 실행): 설정 확인 > 동시 실행 차단 > 실효 등록 정보 재조립·확인 > 동기화 > 리포트"""
     runtime = get_runtime()
     if runtime is None:
         return _unavailable()
     discord_client = runtime.discord_client_provider() if runtime.discord_client_provider else None
     if discord_client is None or not runtime.guild_id:
         return jsonify({"error": "discord_not_configured"}), 503
-    registry = runtime.registry_provider()
-    # 등록 파일을 못 읽은 빈 등록 정보로 동기화하면 기존 프로젝트 카테고리를 전부 보관 처리함
-    if (runtime.poller is not None and runtime.poller.snapshot().registry is None) or not registry.projects:
-        return jsonify({"error": "registry_unavailable"}), 409
     if not DISCORD_SYNC_LOCK.acquire(blocking=False):
         return jsonify({"error": "sync_in_progress"}), 409
     try:
+        registry = load_sync_ready_registry(runtime)
+        if registry is None:
+            return jsonify({"error": "registry_unavailable"}), 409
         report = sync_discord(registry, discord_client, runtime.store, runtime.guild_id)
     except Exception as error:  # 외부 예외 문구는 응답·로그에 싣지 않음
         logger.warning("[control-tower admin] discord sync failed : %s", type(error).__name__)

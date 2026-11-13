@@ -12,10 +12,10 @@ from flask import Blueprint, jsonify, request
 from service.audit_service import AuditAction, AuditCategory
 from service.control_tower.discord_sync import DISCORD_SYNC_LOCK, sync_discord
 from service.control_tower.event_kind_validation import parse_new_event_kind
+from service.control_tower.log_text import sanitize_log_value
 from service.control_tower.manage_view import event_kind_entry, load_manage_context
-from service.control_tower.registry import Registry
-from service.control_tower.registry_overrides import apply_overrides
 from service.control_tower.runtime import get_runtime
+from service.control_tower.sync_registry import load_sync_ready_registry
 from util.audit_helper import audited, set_audit_detail
 
 logger = logging.getLogger(__name__)
@@ -62,9 +62,10 @@ def _delete_event_kind(project_id: str, kind: str):
     runtime = get_runtime()
     if runtime is None:
         return _error("unavailable", 503)
+    # 경로 값은 검증 전 외부 입력 > 정리 후 기록 (404도 시도한 값 남김)
+    set_audit_detail({"project_id": sanitize_log_value(project_id), "kind": sanitize_log_value(kind)})
     if not runtime.store.delete_project_event_kind(project_id, kind):
         return _error("unknown_kind", 404)
-    set_audit_detail({"project_id": project_id, "kind": kind})
     _schedule_discord_sync(runtime)
     return "", 204
 
@@ -83,25 +84,13 @@ def _schedule_discord_sync(runtime) -> None:
 
 
 def _sync_discord_after_change(runtime, discord_client) -> None:
-    """잠금 대기 > 실효 등록 정보 재조립 > 준비 확인 > 동기화 (실패는 기록만)"""
+    """잠금 대기 > 실효 등록 정보 재조립·준비 확인 > 동기화 (실패는 기록만)"""
     try:
         with DISCORD_SYNC_LOCK:  # 기동 동기화·관리 화면 버튼과 동시 실행 방지 (끝날 때까지 대기)
-            registry = _build_fresh_registry(runtime)
-            if not _is_registry_ready(runtime, registry):
+            registry = load_sync_ready_registry(runtime)
+            if registry is None:
                 logger.warning("[control-tower event-kind] discord sync skipped : registry is not loaded")
                 return
             sync_discord(registry, discord_client, runtime.store, runtime.guild_id)
     except Exception as error:  # 외부 예외 문구는 로그에 싣지 않음
         logger.warning("[control-tower event-kind] discord sync failed : %s", type(error).__name__)
-
-
-def _build_fresh_registry(runtime) -> Registry:
-    """등록 파일 원본 + 지금 저장소 덮어쓰기 (폴러 캐시는 방금 바꾼 종류를 아직 모름)"""
-    file_registry_provider = runtime.file_registry_provider or runtime.registry_provider
-    return apply_overrides(file_registry_provider(), runtime.store)
-
-
-def _is_registry_ready(runtime, registry: Registry) -> bool:
-    """등록 파일을 한 번이라도 읽음 + 프로젝트 1개 이상 (빈 등록 정보 동기화는 기존 카테고리 전부 보관 처리)"""
-    is_file_loaded = runtime.poller is None or runtime.poller.snapshot().registry is not None
-    return is_file_loaded and bool(registry.projects)

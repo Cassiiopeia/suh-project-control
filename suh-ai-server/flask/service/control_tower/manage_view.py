@@ -12,8 +12,12 @@ from service.control_tower.bootstrap import DEFAULT_STATUS_PAGE_URL, STATUS_PAGE
 from service.control_tower.override_models import RegistryOverrides
 from service.control_tower.overview import check_entry, incident_entry, iso_text
 from service.control_tower.registry import SERVICE_STATUS_RETIRED, CheckSpec, Registry, ServiceSpec
+from service.control_tower.event_kind_validation import (
+    CHANNEL_NAME_MAX_LENGTH, EVENT_KIND_PATTERN, EVENT_KIND_RULE_TEXT,
+)
 from service.control_tower.registry_models import (
-    DEFAULT_EVENT_KIND_VISIBLE_TO, EVENT_KIND_VISIBLE_ROLE_KEYS, EventKindSpec,
+    DEFAULT_EVENT_KIND_VISIBLE_TO, EVENT_KIND_VISIBLE_ROLE_KEYS, EVENT_KIND_VISIBLE_ROLE_LABELS, RESERVED_EVENT_KINDS,
+    EventKindSpec,
 )
 from service.control_tower.registry_overrides import merge_overrides
 from service.control_tower.state_machine import STATUS_UNKNOWN
@@ -73,9 +77,22 @@ def build_manage(runtime, context: ManageContext) -> dict:
         "services": [_service_entry(service, context, states)
                      for service in context.effective.services + context.effective.infrastructure],
         "external_checks": {"used": count_external_checks(context.effective), "maximum": MAX_EXTERNAL_CHECKS},
-        # 알림 종류 추가 폼 선택지 (공개 대상 역할 키·기본값, 서버 검증과 같은 원본)
-        "event_kind_options": {"visible_role_keys": list(EVENT_KIND_VISIBLE_ROLE_KEYS),
-                               "default_visible_to": list(DEFAULT_EVENT_KIND_VISIBLE_TO)},
+        "event_kind_options": _event_kind_options(),
+    }
+
+
+def _event_kind_options() -> dict:
+    """알림 종류 추가 폼 규칙·선택지 (서버 검증과 같은 상수, 화면은 이 값만 사용)
+    kind_pattern: JS RegExp로 그대로 쓸 수 있는 원문"""
+    return {
+        "visible_role_keys": list(EVENT_KIND_VISIBLE_ROLE_KEYS),
+        "visible_role_labels": {role_key: EVENT_KIND_VISIBLE_ROLE_LABELS.get(role_key, role_key)
+                                for role_key in EVENT_KIND_VISIBLE_ROLE_KEYS},
+        "default_visible_to": list(DEFAULT_EVENT_KIND_VISIBLE_TO),
+        "kind_pattern": EVENT_KIND_PATTERN.pattern,
+        "kind_rule_text": EVENT_KIND_RULE_TEXT,
+        "reserved_kinds": sorted(RESERVED_EVENT_KINDS),
+        "channel_name_max_length": CHANNEL_NAME_MAX_LENGTH,
     }
 
 
