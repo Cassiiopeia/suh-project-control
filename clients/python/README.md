@@ -39,14 +39,14 @@ result = suh_control_tower.notify(
 
 - 설정 오류는 `init`/생성자에서 `ValueError`로 알립니다: 빈 `project`/`token`, 공백·제어문자·비ASCII가 든 토큰, `https`가 아닌 `base_url`(테스트용 `http://127.0.0.1`, `http://localhost`만 예외). 앱 시작 시 한 번 걸러집니다.
 - `timeout_seconds`가 0 이하이거나 숫자가 아니면 `ValueError`입니다.
-- `notify`/`notify_in_background`는 예외를 던지지 않습니다. `kind`/`title`이 비었거나 문자열이 아니면, `severity`가 문자열이 아니면 요청을 보내지 않고 `invalid_input`으로 돌려줍니다.
+- `notify`/`notify_in_background`는 예외를 던지지 않습니다. `kind`/`title`이 비었거나 문자열이 아니면, `severity`·`body`·`url`·`dedupe_key`가 문자열이 아니면 요청을 보내지 않고 `invalid_input`으로 돌려줍니다.
 - 필드 값은 모두 문자열로 보냅니다. `bool`은 Java 클라이언트와 같게 `"true"`/`"false"`(소문자)가 되고, 그 외는 `str()`입니다. 빈 dict/목록을 `fields`에 넘기면 `"fields": []`로 보냅니다.
 - `timeout_seconds`는 소켓 동작(연결, 읽기)마다 적용되며 전체 소요 시간 상한이 아닙니다.
 - 리다이렉트(3xx)는 따라가지 않습니다(토큰 유출 방지). 결과는 `http_302`처럼 실제 상태로 나옵니다.
 
 ### Flask / FastAPI 요청 처리 안에서
 
-알림 때문에 응답이 늦어지지 않도록 `notify_in_background`를 씁니다. 데몬 스레드라서 프로세스가 종료되면 진행 중이던 전송은 버려지고, 결과는 받을 수 없습니다(`init` 전에 호출하면 `None`을 돌려줍니다).
+알림 때문에 응답이 늦어지지 않도록 `notify_in_background`를 씁니다. 호출마다 데몬 스레드를 하나 만들므로 짧은 시간에 호출이 몰리면 스레드 수에 상한이 없습니다(대량 전송은 직접 큐나 스레드 풀로 제한). 데몬 스레드라서 프로세스가 종료되면 진행 중이던 전송은 버려지고, 결과는 받을 수 없습니다(`init` 전에 호출하면 `None`을 돌려줍니다).
 
 ```python
 @app.post("/reports")           # Flask, FastAPI 모두 동일

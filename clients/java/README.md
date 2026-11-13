@@ -123,7 +123,7 @@ public class ReportService {
 |---|---|
 | `isAccepted()` | 서버가 접수(202)했는지 |
 | `statusCode()` | HTTP 상태 (`Integer`, 네트워크 오류, 시간 초과, init 전, 로컬 검증 실패는 `null`) |
-| `errorCode()` | 서버 `error` 값(`invalid`, `unknown_kind`, `unauthorized`, `unknown_project`, `unavailable`), JSON이 아닌 응답은 `http_<상태>`(예 `http_413`), `timeout`, `connection_error`, `not_initialized`, `invalid_input`(보내기 전 로컬 검증 실패, 예 필드 이름이나 값이 `null`. 서버의 `invalid`와 구분) |
+| `errorCode()` | 서버 `error` 값(`invalid`, `unknown_kind`, `unauthorized`, `unknown_project`, `unavailable`), JSON이 아닌 응답은 `http_<상태>`(예 `http_413`), `timeout`, `connection_error`, `not_initialized`, `invalid_input`(보내기 전 로컬 검증 실패, 예 빈 `kind`/`title`, 필드 이름이나 값이 `null`. 서버의 `invalid`와 구분) |
 | `isDeduplicated()` | `dedupeKey` 중복으로 알림 없이 접수만 됨 |
 
 ```java

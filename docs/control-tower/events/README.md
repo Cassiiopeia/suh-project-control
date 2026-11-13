@@ -90,7 +90,7 @@ flowchart TD
 - 관리 화면에서 **한 번도 발급하지 않은** 프로젝트는 기존 방식대로 서버 환경변수 `CONTROL_EVENT_TOKEN_<PROJECT>`를 쓴다(`<PROJECT>`는 프로젝트 id를 대문자로, `-`는 `_`로: `suh-ai` > `CONTROL_EVENT_TOKEN_SUH_AI`). 교체 중에는 `CONTROL_EVENT_TOKEN_<PROJECT>_PREVIOUS`에 이전 값을 함께 두면 둘 다 통과한다.
 - 관리 화면에서 **한 번이라도 발급하면** 그 프로젝트는 관리 화면 토큰만 인정한다. 환경변수 토큰은 더 이상 통과하지 않으며, 폐기해도 환경변수 방식으로 돌아가지 않는다.
 - **주의: 환경변수 토큰을 쓰던 프로젝트(예: elum)는 첫 발급 순간 환경변수 토큰이 바로 막힌다(유예 없음).** 새 토큰으로 앱을 다시 배포할 때까지 그 프로젝트의 이벤트·push는 401이다. 앱 배포를 준비해 둔 뒤 발급한다.
-- Java, Python 클라이언트 라이브러리는 이후 단계에서 제공할 예정이다(설계 문서 4단계).
+- Java, Python 클라이언트 라이브러리는 [라이브러리로 보내기](#라이브러리로-보내기-python-java)를 본다.
 
 ## 4. 알림 종류 추가
 
@@ -120,7 +120,7 @@ pip install "git+https://github.com/Cassiiopeia/suh-project-control.git#subdirec
 import os
 import suh_control_tower
 
-suh_control_tower.init(project="my-project", token=os.environ["CONTROL_EVENT_TOKEN"])
+suh_control_tower.init(project="my-project", token=os.environ["CONTROL_TOWER_TOKEN"])
 suh_control_tower.notify_in_background(kind="deploy", title="v1.2.3 배포 완료", dedupe_key="deploy-1.2.3")
 ```
 
@@ -139,7 +139,7 @@ dependencies { implementation 'kr.suhsaechan:suh-control-tower-client:0.1.0' }
 ```
 
 ```java
-ControlTower.init("my-project", System.getenv("CONTROL_EVENT_TOKEN"));
+ControlTower.init("my-project", System.getenv("CONTROL_TOWER_TOKEN"));
 ControlTower.notifyAsync(ControlTowerEvent.of("deploy", "v1.2.3 배포 완료").dedupeKey("deploy-1.2.3"));
 ```
 
@@ -150,7 +150,7 @@ ControlTower.notifyAsync(ControlTowerEvent.of("deploy", "v1.2.3 배포 완료").
 ```bash
 curl -sS -m 5 -X POST "https://ai.suhsaechan.kr/api/flask/control/events" \
   -H "Content-Type: application/json" \
-  -H "X-Control-Token: $CONTROL_EVENT_TOKEN" \
+  -H "X-Control-Token: $CONTROL_TOWER_TOKEN" \
   -d '{"project":"suh-ai","kind":"deploy","severity":"info","title":"v1.2.3 배포 완료","url":"https://example.com/releases/1.2.3","dedupe_key":"deploy-1.2.3"}'
 ```
 
