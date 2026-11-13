@@ -104,6 +104,49 @@ flowchart TD
 - **쌓인 개수는 events가 아니라 attention으로 보낸다.** "새 의견 N건", "처리 안 된 신고 N건" 같은 누적 개수는 [attention 가이드](../attention/README.md)가 맞다. events는 한 번 일어나고 끝나는 사건용이다.
 - **본 업무를 막지 않는다.** 타임아웃을 짧게(2~5초) 두고, 실패해도 예외를 삼키고 로그만 남기며, 가능하면 비동기로 보낸다. 같은 사건의 재시도에는 같은 `dedupe_key`를 쓰고, 서로 다른 사건과 키가 겹치지 않게 한다.
 
+### 라이브러리로 보내기 (Python, Java)
+
+위 예시를 직접 짜는 대신, 이 레포의 클라이언트 라이브러리(의존성 0개, 예외 없음, 짧은 타임아웃, 백그라운드 전송)를 쓸 수 있다. 아직 PyPI·Maven Central에는 게시하지 않았으므로 소스에서 설치한다. 모바일 앱에는 넣지 않는다.
+
+**Python** (`suh-control-tower`, Python 3.9 이상, 자세한 사용법은 [clients/python/README.md](../../../clients/python/README.md))
+
+```bash
+pip install ./clients/python
+# 또는 git 주소로 (하위 폴더 지정)
+pip install "git+https://github.com/Cassiiopeia/suh-project-control.git#subdirectory=clients/python"
+```
+
+```python
+import os
+import suh_control_tower
+
+suh_control_tower.init(project="my-project", token=os.environ["CONTROL_EVENT_TOKEN"])
+suh_control_tower.notify_in_background(kind="deploy", title="v1.2.3 배포 완료", dedupe_key="deploy-1.2.3")
+```
+
+**Java** (`kr.suhsaechan:suh-control-tower-client:0.1.0`, Java 17 이상, Spring 자동 설정 없음, 자세한 사용법은 [clients/java/README.md](../../../clients/java/README.md))
+
+```bash
+# 로컬 Maven 저장소에 설치 (init 스크립트가 필요하므로 clients/java/README.md의 설치 절 참고)
+cd clients/java && ./gradlew publishToMavenLocal --init-script /tmp/control-tower-local-publish.gradle
+```
+
+```groovy
+// build.gradle: mavenLocal() 사용 시
+repositories { mavenLocal(); mavenCentral() }
+dependencies { implementation 'kr.suhsaechan:suh-control-tower-client:0.1.0' }
+// 또는 settings.gradle에서 includeBuild('../suh-project-control/clients/java')
+```
+
+```java
+ControlTower.init(ControlTowerOptions.builder()
+    .project("my-project").token(System.getenv("CONTROL_EVENT_TOKEN")).build());
+ControlTower.notifyInBackground(ControlTowerEvent.builder()
+    .kind("deploy").title("v1.2.3 배포 완료").dedupeKey("deploy-1.2.3").build());
+```
+
+클라이언트 버전(0.1.0~)은 서버 릴리스(v2.0.x)와 따로 올린다. 아래 curl 예시는 라이브러리 없이 보낼 때의 기준이다.
+
 ### curl
 
 ```bash

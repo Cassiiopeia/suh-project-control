@@ -127,7 +127,12 @@ flowchart TD
   - 보내기 실패가 앱 요청을 막지 않음: 짧은 타임아웃(3초), 예외 대신 결과 반환, 백그라운드 전송 옵션
   - 토큰은 로그에 남기지 않음
 - 배포: Python > PyPI, Java > Maven Central (기존 suh-logger·pro-sejong-auth 배포 방식 재사용). 이름은 구현 계획에서 확정.
-- **4단계 시작 전 확인할 것** (1~3단계에는 영향 없음): Java·Spring Boot 최소 버전, Spring 자동 설정 필요 여부, Maven namespace·PyPI 계정, 배포 비밀값을 이 레포 CI에 둘지, 클라이언트 버전을 서버 릴리스와 분리할지
+- **4단계 시작 전 확인할 것 (결정됨)**:
+  - Python 패키지 `suh-control-tower` (import `suh_control_tower`), 버전 0.1.0, Python 3.9 이상, 의존성 0개
+  - Java `kr.suhsaechan:suh-control-tower-client:0.1.0`, Java 17, 의존성 0개 (Spring Boot 버전 요구 없음)
+  - Spring 자동 설정 없음: 정적 `ControlTower.init`
+  - 클라이언트 버전은 서버 릴리스(v2.0.x)와 분리
+  - 게시(PyPI, Maven Central)와 계정, 배포 비밀값을 이 레포 CI에 둘지는 사용자 확인 후 별도 진행 (지금은 소스 설치만)
 - 규격 원본: `docs/control-tower/events/README.md` + `events-v1.schema.json` (attention과 같은 구성). 클라이언트 테스트가 이 스키마 예시를 읽어 검증.
 
 ### 5.6 첫 사례: Claude 로그인 (G5)
