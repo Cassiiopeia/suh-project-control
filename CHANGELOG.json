@@ -1,14 +1,45 @@
 {
   "metadata": {
-    "lastUpdated": "2026-11-10T12:46:01Z",
-    "currentVersion": "2.0.91",
+    "lastUpdated": "2026-11-13T11:27:58Z",
+    "currentVersion": "2.0.92",
     "projectType": "python",
-    "totalReleases": 87,
+    "totalReleases": 88,
     "projectTypes": [
       "python"
     ]
   },
   "releases": [
+    {
+      "version": "2.0.92",
+      "project_type": "python",
+      "project_types": [
+        "python"
+      ],
+      "date": "2026-11-13",
+      "pr_number": 191,
+      "raw_summary": "## Summary by CodeRabbit\n\n## 릴리스 노트\n\n* **버그 수정**\n  * Claude 로그인 메일 링크 형식이 바뀌어 인증 코드가 표시되지 않던 문제 수정\n\n* **개선**\n  * 로그인 메일 링크 형식이 다시 바뀌어도 인식하고, 인식하지 못하면 원인을 기록\n\n* **문서**\n  * 보안 취약점 조치 구현 보고서 추가",
+      "parsed_changes": {
+        "버그_수정": {
+          "title": "버그 수정",
+          "items": [
+            "Claude 로그인 메일 링크 형식이 바뀌어 인증 코드가 표시되지 않던 문제 수정"
+          ]
+        },
+        "개선": {
+          "title": "개선",
+          "items": [
+            "로그인 메일 링크 형식이 다시 바뀌어도 인식하고, 인식하지 못하면 원인을 기록"
+          ]
+        },
+        "문서": {
+          "title": "문서",
+          "items": [
+            "보안 취약점 조치 구현 보고서 추가"
+          ]
+        }
+      },
+      "parse_method": "markdown"
+    },
     {
       "version": "2.0.91",
       "project_type": "python",
