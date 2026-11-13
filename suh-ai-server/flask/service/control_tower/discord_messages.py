@@ -23,7 +23,7 @@ DOWNTIME_FIELD_NAME = "다운 시간"
 
 
 def to_embed(notification: Notification, status_page_url: str) -> dict:
-    """알림 1건 > 임베드: 색 > 제목·본문 자르기 > 복구 다운 시간 필드 > 링크·푸터"""
+    """알림 1건 > 임베드: 색 > 제목·본문 자르기 > 알림 fields·복구 다운 시간 필드 > 링크·푸터"""
     description = notification.body
     downtime_text = None
     if notification.severity == SEVERITY_RECOVERED:
@@ -35,8 +35,12 @@ def to_embed(notification: Notification, status_page_url: str) -> dict:
         "color": EMBED_COLOR_BY_SEVERITY.get(notification.severity, EMBED_COLOR_BY_SEVERITY["info"]),
         "footer": {"text": FOOTER_TEXT},
     }
+    # 알림 fields > 복구 다운 시간 (다운 시간은 항상 마지막)
+    embed_fields = [{"name": name, "value": value, "inline": True} for name, value in notification.fields]
     if downtime_text:
-        embed["fields"] = [{"name": DOWNTIME_FIELD_NAME, "value": downtime_text, "inline": True}]
+        embed_fields.append({"name": DOWNTIME_FIELD_NAME, "value": downtime_text, "inline": True})
+    if embed_fields:
+        embed["fields"] = embed_fields
     link_url = notification.link_url or status_page_url
     if link_url:
         embed["url"] = link_url
