@@ -139,10 +139,8 @@ dependencies { implementation 'kr.suhsaechan:suh-control-tower-client:0.1.0' }
 ```
 
 ```java
-ControlTower.init(ControlTowerOptions.builder()
-    .project("my-project").token(System.getenv("CONTROL_EVENT_TOKEN")).build());
-ControlTower.notifyInBackground(ControlTowerEvent.builder()
-    .kind("deploy").title("v1.2.3 배포 완료").dedupeKey("deploy-1.2.3").build());
+ControlTower.init("my-project", System.getenv("CONTROL_EVENT_TOKEN"));
+ControlTower.notifyAsync(ControlTowerEvent.of("deploy", "v1.2.3 배포 완료").dedupeKey("deploy-1.2.3"));
 ```
 
 클라이언트 버전(0.1.0~)은 서버 릴리스(v2.0.x)와 따로 올린다. 아래 curl 예시는 라이브러리 없이 보낼 때의 기준이다.
