@@ -23,3 +23,7 @@ DISCORD_BOT_TOKEN_ENV = "DISCORD_BOT_TOKEN"
 DISCORD_GUILD_ID_ENV = "DISCORD_GUILD_ID"
 # .env: 프로젝트별 이벤트 토큰 접두사 (CONTROL_EVENT_TOKEN_<PROJECT_ID 대문자, '-' > '_'>)
 EVENT_TOKEN_ENV_PREFIX = "CONTROL_EVENT_TOKEN_"
+# .env: 관제소 비밀값 원본 (DB 발급 이벤트 토큰 해시 키 파생, 없으면 발급·DB 토큰 검증 불가)
+CONTROL_TOWER_SECRET_ENV = "CONTROL_TOWER_SECRET"
+# 토큰 교체 후 이전 토큰 유효 기간 (일)
+PREVIOUS_EVENT_TOKEN_VALID_DAYS = 7

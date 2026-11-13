@@ -10,6 +10,7 @@ from flask import Flask
 from service.control_tower import runtime as runtime_module
 from service.control_tower.alert_planner import Notification
 from service.control_tower.event_dispatcher import EventDispatcher
+from service.control_tower.project_token_store import ProjectTokenState
 from service.control_tower.runtime import ControlTowerRuntime
 from control_tower_discord_fakes import ELUM, SAMPLE, make_registry
 
@@ -37,6 +38,10 @@ class FakeStore:
 
     def get_binding(self, scope: str, kind: str) -> str | None:
         return self.bindings.get((scope, kind))
+
+    def load_project_token_state(self, project_id: str) -> ProjectTokenState:
+        # DB 발급 토큰 없음 = 환경변수 토큰 경로
+        return ProjectTokenState(False, None, None, ())
 
     def record_event(self, project_id: str, kind: str, dedupe_key: str | None, created_at: datetime) -> bool:
         if dedupe_key and any(entry[0] == project_id and entry[2] == dedupe_key for entry in self.recorded):

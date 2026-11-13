@@ -2,7 +2,6 @@
 토큰 값은 싣지 않고 환경변수 이름과 설정 여부만, 꺼진 소스와 스냅샷에서 빠진 항목은 현황·요약에서 제외"""
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 
 from service.control_tower.app_attention_effective import (
@@ -16,6 +15,7 @@ from service.control_tower.app_attention_store import (
 from service.control_tower.app_attention_tokens import (
     event_token_env_name, is_pull_token_configured, pull_token_env_name,
 )
+from service.control_tower.project_event_tokens import is_project_token_configured
 
 LEVEL_WARNING = "warning"
 STATE_OK = "ok"
@@ -160,7 +160,7 @@ def build_source_entry(store, source: AttentionSource, state: AttentionSourceSta
     is_pull_used = source.mode != SOURCE_MODE_PUSH
     is_push_used = source.mode != SOURCE_MODE_PULL
     is_pull_configured = is_pull_token_configured(source.project_id, source.source_id) if is_pull_used else None
-    is_push_configured = bool(os.environ.get(event_token_env_name(source.project_id))) if is_push_used else None
+    is_push_configured = is_project_token_configured(store, source.project_id) if is_push_used else None
     viewed_items = view_source_items(store, source)
     return {
         "project_id": source.project_id,

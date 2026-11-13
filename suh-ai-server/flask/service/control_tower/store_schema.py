@@ -108,6 +108,20 @@ SCHEMA_STATEMENTS = (
         created_at TEXT NOT NULL,
         PRIMARY KEY (project_id, kind)
     )""",
+    # 프로젝트 이벤트 토큰 해시 (slot: current | previous, expires_at = 이전 토큰 만료 시각, 현재는 NULL)
+    """CREATE TABLE IF NOT EXISTS project_event_token (
+        project_id TEXT NOT NULL,
+        slot TEXT NOT NULL,
+        token_hash TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        expires_at TEXT,
+        PRIMARY KEY (project_id, slot)
+    )""",
+    # 행 있음 = DB 토큰만 인정하는 프로젝트 (폐기 후에도 유지)
+    """CREATE TABLE IF NOT EXISTS project_event_token_policy (
+        project_id TEXT PRIMARY KEY,
+        managed_since TEXT NOT NULL
+    )""",
     # 프로젝트 썸네일 (128px WebP 바이트, content_hash = 상태 페이지 캐시 버전)
     """CREATE TABLE IF NOT EXISTS project_icon (
         project_id TEXT PRIMARY KEY,

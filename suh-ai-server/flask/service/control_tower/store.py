@@ -6,7 +6,7 @@ import os
 import sqlite3
 import threading
 from contextlib import contextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from service.control_tower.app_attention_store import AppAttentionStoreMixin
 from service.control_tower.check_runner import CheckResult
@@ -14,10 +14,12 @@ from service.control_tower.event_kind_store import EventKindStoreMixin
 from service.control_tower.invite_store import InviteStoreMixin
 from service.control_tower.override_store import OverrideStoreMixin
 from service.control_tower.project_icon_store import ProjectIconStoreMixin
+from service.control_tower.project_token_store import ProjectTokenStoreMixin
 from service.control_tower.registry import MaintenanceWindow
 from service.control_tower.state_machine import Observation, ServiceState
 from service.control_tower.store_schema import SCHEMA_STATEMENTS, apply_column_migrations
 from service.control_tower.time_zones import KST
+from service.control_tower.utc_text import from_utc_text as _from_text, to_utc_text as _to_text
 
 CONNECTION_TIMEOUT_SECONDS = 10  # 쓰기 잠금 대기
 BUSY_TIMEOUT_MILLISECONDS = 10000
@@ -25,15 +27,6 @@ EVENT_DEDUPE_WINDOW = timedelta(minutes=10)
 CHECK_RESULT_RETENTION = timedelta(days=7)
 EVENT_LOG_RETENTION = timedelta(days=30)
 LONG_TERM_RETENTION = timedelta(days=400)  # 일별 집계, 종료된 장애
-
-
-def _to_text(moment: datetime) -> str:
-    """aware datetime > UTC ISO 문자열 (고정 형식이라 문자열 비교 = 시각 비교)"""
-    return moment.astimezone(timezone.utc).isoformat(timespec="microseconds")
-
-
-def _from_text(text: str | None) -> datetime | None:
-    return datetime.fromisoformat(text) if text else None
 
 
 def _kst_day(moment: datetime) -> str:
@@ -56,7 +49,8 @@ def _check_columns(check: CheckResult | None) -> tuple:
     return (int(check.is_ok), int(check.is_slow), check.status_code, check.latency_milliseconds, check.error)
 
 
-class ControlTowerStore(OverrideStoreMixin, EventKindStoreMixin, InviteStoreMixin, ProjectIconStoreMixin, AppAttentionStoreMixin):
+class ControlTowerStore(OverrideStoreMixin, EventKindStoreMixin, InviteStoreMixin, ProjectIconStoreMixin,
+                        AppAttentionStoreMixin, ProjectTokenStoreMixin):
     def __init__(self, path: str):
         self._path = path
         self._thread_local = threading.local()

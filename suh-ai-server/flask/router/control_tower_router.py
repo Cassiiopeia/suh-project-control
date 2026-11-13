@@ -14,7 +14,7 @@ from router.control_tower_event_kind_api import register_event_kind_api
 from router.control_tower_icon_api import register_icon_api
 from router.control_tower_invite_api import register_invite_api
 from router.control_tower_manage_api import register_manage_api
-from service.control_tower.app_attention_tokens import event_token_env_name, is_presented_token_valid
+from service.control_tower.project_event_tokens import is_project_token_valid
 from service.control_tower.runtime import get_runtime
 
 control_tower_bp = Blueprint('control_tower', __name__)
@@ -41,16 +41,12 @@ def receive_event():
     if not isinstance(project_id, str):
         return jsonify({'error': 'invalid', 'fields': ['project']}), 400
 
-    if not _is_token_valid(project_id, request.headers.get(TOKEN_HEADER_NAME, '')):
+    now = datetime.now(timezone.utc)
+    if not is_project_token_valid(runtime.store, project_id, request.headers.get(TOKEN_HEADER_NAME, ''), now):
         return jsonify({'error': 'unauthorized'}), 401
 
     if project_id not in {project.id for project in runtime.registry_provider().projects}:
         return jsonify({'error': 'unknown_project'}), 404
 
-    status_code, body = runtime.dispatcher.accept_event(project_id, payload, datetime.now(timezone.utc))
+    status_code, body = runtime.dispatcher.accept_event(project_id, payload, now)
     return jsonify(body), status_code
-
-
-def _is_token_valid(project_id: str, presented_token: str) -> bool:
-    """토큰 env(현재·_PREVIOUS) 둘 다 없음 > 거부, 있으면 상수 시간 비교"""
-    return is_presented_token_valid(event_token_env_name(project_id), presented_token)
