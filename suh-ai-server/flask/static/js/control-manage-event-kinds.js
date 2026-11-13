@@ -1,6 +1,6 @@
 /* 관제소 프로젝트 카드의 "알림 종류" 접이식 영역: 종류 표(종류·채널 이름·공개 대상·삭제) + 추가 폼
    POST·DELETE /control/projects/{id}/event-kinds > 성공 시 ControlManage.reload() / window.ControlManageEventKinds 로 노출
-   종류 규칙·채널 이름 길이·공개 대상 선택지·표시 이름은 GET /control/manage 의 event_kind_options (서버 검증과 같은 원본) */
+   종류 규칙·채널 이름 길이·공개 대상 선택지(역할 키)는 GET /control/manage 의 event_kind_options (서버 검증과 같은 원본) */
 (function () {
   const actions = window.ControlManageActions;
   const controlFormat = window.ControlFormat;
@@ -31,11 +31,6 @@
     return new RegExp(options.kind_pattern).test(kind) && options.reserved_kinds.indexOf(kind) === -1;
   }
 
-  // 역할 키 > 표시 이름 (모르는 키는 키 그대로)
-  function toRoleLabel(roleKey, options) {
-    return options.visible_role_labels[roleKey] || roleKey;
-  }
-
   // 요청 1건: 실패 안내 > 성공 문구 > 목록 재조회
   async function requestEventKind(method, path, payload, successMessage, options) {
     try {
@@ -55,9 +50,10 @@
     return '/projects/' + encodeURIComponent(projectId) + '/event-kinds';
   }
 
-  function describeVisibleTo(visibleTo, options) {
+  // 공개 대상 역할 키 (등록 파일 discord.roles 키 그대로) > 표시 문구
+  function describeVisibleTo(visibleTo) {
     if (!visibleTo.length) return ADMIN_ONLY_LABEL;
-    return visibleTo.map(function (roleKey) { return toRoleLabel(roleKey, options); }).join(', ') + ' (+ 관리자)';
+    return visibleTo.join(', ') + ' (+ 관리자)';
   }
 
   /* ---------- 1. 종류 표 ---------- */
@@ -79,7 +75,7 @@
     const row = createElement('tr');
     row.appendChild(controlFormat.createCell(eventKind.kind, 'font-mono'));
     row.appendChild(controlFormat.createCell('#' + eventKind.channel_name));
-    row.appendChild(controlFormat.createCell(describeVisibleTo(eventKind.visible_to, options)));
+    row.appendChild(controlFormat.createCell(describeVisibleTo(eventKind.visible_to)));
     const deleteButton = createElement('button', 'btn btn-ghost btn-xs');
     deleteButton.type = 'button';
     deleteButton.title = '삭제';
@@ -119,7 +115,7 @@
       checkbox.value = roleKey;
       checkbox.checked = options.default_visible_to.indexOf(roleKey) !== -1;
       label.appendChild(checkbox);
-      label.appendChild(createElement('span', '', toRoleLabel(roleKey, options)));
+      label.appendChild(createElement('span', '', roleKey));  // 등록 파일 역할 키 그대로
       group.appendChild(label);
       return checkbox;
     });

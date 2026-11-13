@@ -38,15 +38,14 @@ def start_control_tower(environ: Mapping[str, str] = os.environ, database_path: 
     store.initialize()
 
     discord_client = _build_discord_client(environ)
-    # 발송기 <-> 폴러 상호 참조: 람다는 호출 시점에 poller를 찾음 (아래에서 생성)
     dispatcher = EventDispatcher(
-        registry_provider=lambda: poller.current_registry(),
         store=store,
         discord_client_provider=lambda: discord_client,
         status_page_url=environ.get(STATUS_PAGE_URL_ENV) or DEFAULT_STATUS_PAGE_URL,
     )
     invite_attribution = InviteAttributionStep(discord_client, store) if discord_client is not None else None
     # 앱 확인할 일: 프로젝트 서비스 중 하나라도 down이면 앱 연동 끊김 알림 생략 (서비스 장애에 묻음)
+    # 수집기 <-> 폴러 상호 참조: 람다는 호출 시점에 poller를 찾음 (아래에서 생성)
     app_attention_ingest = AppAttentionIngest(
         store, dispatcher, lambda: poller.current_registry(),
         lambda project_id: is_any_project_service_down(

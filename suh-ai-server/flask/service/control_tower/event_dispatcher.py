@@ -39,9 +39,7 @@ HTTP_BAD_REQUEST = 400
 
 
 class EventDispatcher:
-    def __init__(self, registry_provider: Callable, store, discord_client_provider: Callable,
-                 status_page_url: str):
-        self._registry_provider = registry_provider
+    def __init__(self, store, discord_client_provider: Callable, status_page_url: str):
         self._store = store
         self._discord_client_provider = discord_client_provider
         self._status_page_url = status_page_url
@@ -62,10 +60,8 @@ class EventDispatcher:
         return discord_client.send_embed(channel_id, to_embed(notification, self._status_page_url))
 
     def allowed_event_kinds(self, project_id: str) -> frozenset[str]:
-        """프로젝트가 받는 이벤트 종류: 기본 종류 + 사용자 정의 종류 (모르는 프로젝트는 기본만)"""
-        project = next((spec for spec in self._registry_provider().projects if spec.id == project_id), None)
-        custom_kinds = {kind_spec.kind for kind_spec in project.event_kinds} if project else set()
-        return frozenset(EVENT_KINDS) | custom_kinds
+        """프로젝트가 받는 이벤트 종류: 기본 종류 + 사용자 정의 종류 (저장소 원본 즉시 조회, 추가·삭제 바로 반영)"""
+        return frozenset(EVENT_KINDS) | self._store.list_event_kind_names_of_project(project_id)
 
     def accept_event(self, project_id: str, payload: dict, now: datetime) -> tuple[int, dict]:
         """앱 이벤트 접수: 종류 확인 > 검증 > 중복 억제 기록 > 발송 (발송 실패해도 접수 응답)"""
@@ -136,11 +132,12 @@ def validate_event_payload(payload: dict, allowed_kinds: frozenset[str]) -> list
 
 
 def _is_valid_event_fields(event_fields) -> bool:
-    """fields 형태 확인: [{name, value}] 문자열 쌍, 개수·길이 상한 이내"""
+    """fields 형태 확인: [{name, value}] 문자열 쌍 (공백만 불가), 개수·길이 상한 이내"""
     if not isinstance(event_fields, list) or len(event_fields) > EVENT_FIELDS_MAX_COUNT:
         return False
     return all(
         isinstance(field, dict) and isinstance(field.get("name"), str) and isinstance(field.get("value"), str)
-        and 0 < len(field["name"]) <= EVENT_FIELD_NAME_MAX_LENGTH
-        and 0 < len(field["value"]) <= EVENT_FIELD_VALUE_MAX_LENGTH
+        # 공백만인 이름·값은 디스코드가 거부 > 앞뒤 공백 제거 후 비어 있지 않아야 함
+        and 0 < len(field["name"].strip()) and len(field["name"]) <= EVENT_FIELD_NAME_MAX_LENGTH
+        and 0 < len(field["value"].strip()) and len(field["value"]) <= EVENT_FIELD_VALUE_MAX_LENGTH
         for field in event_fields)

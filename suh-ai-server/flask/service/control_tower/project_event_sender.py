@@ -4,14 +4,11 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 
-from service.control_tower.event_dispatcher import EVENT_FIELD_VALUE_MAX_LENGTH
+from service.control_tower.event_dispatcher import EVENT_FIELD_VALUE_MAX_LENGTH, HTTP_ACCEPTED
 from service.control_tower.log_text import sanitize_log_value
 from service.control_tower.runtime import get_runtime
 
 logger = logging.getLogger(__name__)
-
-# 접수 성공 응답 코드 (중복 억제된 접수 포함)
-HTTP_ACCEPTED = 202
 
 
 def send_project_event(project_id: str, kind: str, title: str, *,

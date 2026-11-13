@@ -5,7 +5,15 @@ from __future__ import annotations
 
 from service.control_tower.discord_sync_models import ROLE_KIND_PREFIX
 from service.control_tower.registry import Registry
-from service.control_tower.registry_models import RESERVED_EVENT_KINDS
+from service.control_tower.registry_models import (
+    RESERVED_EVENT_KINDS, DiscordPolicy, EventKindSpec, event_kind_visible_role_keys,
+)
+
+
+def known_visible_role_keys(event_kind: EventKindSpec, discord: DiscordPolicy) -> tuple[str, ...]:
+    """저장된 공개 대상 중 지금 discord.roles에 있는 키만 (등록 파일에서 빠진 역할은 권한 주지 않고 건너뜀)"""
+    allowed_role_keys = event_kind_visible_role_keys(discord)
+    return tuple(role_key for role_key in event_kind.visible_to if role_key in allowed_role_keys)
 
 
 class RemovedEventKindFinder:

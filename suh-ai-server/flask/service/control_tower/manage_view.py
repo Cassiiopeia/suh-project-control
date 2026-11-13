@@ -16,8 +16,7 @@ from service.control_tower.event_kind_validation import (
     CHANNEL_NAME_MAX_LENGTH, EVENT_KIND_PATTERN, EVENT_KIND_RULE_TEXT,
 )
 from service.control_tower.registry_models import (
-    DEFAULT_EVENT_KIND_VISIBLE_TO, EVENT_KIND_VISIBLE_ROLE_KEYS, EVENT_KIND_VISIBLE_ROLE_LABELS, RESERVED_EVENT_KINDS,
-    EventKindSpec,
+    RESERVED_EVENT_KINDS, DiscordPolicy, EventKindSpec, default_event_kind_visible_to, event_kind_visible_role_keys,
 )
 from service.control_tower.registry_overrides import merge_overrides
 from service.control_tower.state_machine import STATUS_UNKNOWN
@@ -77,18 +76,16 @@ def build_manage(runtime, context: ManageContext) -> dict:
         "services": [_service_entry(service, context, states)
                      for service in context.effective.services + context.effective.infrastructure],
         "external_checks": {"used": count_external_checks(context.effective), "maximum": MAX_EXTERNAL_CHECKS},
-        "event_kind_options": _event_kind_options(),
+        "event_kind_options": _event_kind_options(context.effective.discord),
     }
 
 
-def _event_kind_options() -> dict:
-    """알림 종류 추가 폼 규칙·선택지 (서버 검증과 같은 상수, 화면은 이 값만 사용)
-    kind_pattern: JS RegExp로 그대로 쓸 수 있는 원문"""
+def _event_kind_options(discord: DiscordPolicy) -> dict:
+    """알림 종류 추가 폼 규칙·선택지 (서버 검증과 같은 원본, 화면은 이 값만 사용)
+    visible_role_keys: 등록 파일 discord.roles 역할 키 (화면은 키 그대로 표시), kind_pattern: JS RegExp 원문"""
     return {
-        "visible_role_keys": list(EVENT_KIND_VISIBLE_ROLE_KEYS),
-        "visible_role_labels": {role_key: EVENT_KIND_VISIBLE_ROLE_LABELS.get(role_key, role_key)
-                                for role_key in EVENT_KIND_VISIBLE_ROLE_KEYS},
-        "default_visible_to": list(DEFAULT_EVENT_KIND_VISIBLE_TO),
+        "visible_role_keys": list(event_kind_visible_role_keys(discord)),
+        "default_visible_to": list(default_event_kind_visible_to(discord)),
         "kind_pattern": EVENT_KIND_PATTERN.pattern,
         "kind_rule_text": EVENT_KIND_RULE_TEXT,
         "reserved_kinds": sorted(RESERVED_EVENT_KINDS),

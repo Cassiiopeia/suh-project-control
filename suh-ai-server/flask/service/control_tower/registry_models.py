@@ -31,12 +31,8 @@ EVENT_KINDS = ("report", "error", "deploy", "status", EVENT_KIND_INFO)
 # 사용자 정의 알림 종류 이름으로 쓸 수 없는 예약어 (role: 접두는 검증 함수가 별도 확인)
 RESERVED_EVENT_KINDS = frozenset(
     PROJECT_CHANNEL_KINDS + GLOBAL_CHANNEL_KINDS + EVENT_KINDS + (CATEGORY_KIND,))
-# 사용자 정의 알림 종류 공개 대상으로 지정 가능한 역할 키 (관리자는 항상 볼 수 있어 저장 안 함)
-EVENT_KIND_VISIBLE_ROLE_KEYS = ("dev", "member")
-# 사용자 정의 알림 종류 기본 공개 대상
+# 사용자 정의 알림 종류 기본 공개 대상 (등록 파일 discord.roles에 있는 키만 적용, 없으면 관리자만)
 DEFAULT_EVENT_KIND_VISIBLE_TO = ("dev",)
-# 공개 대상 역할 키 > 관리 화면 표시 이름 (EVENT_KIND_VISIBLE_ROLE_KEYS와 함께 갱신)
-EVENT_KIND_VISIBLE_ROLE_LABELS = {"dev": "개발자", "member": "멤버"}
 
 DEFAULT_ROLE_NAMES = {"member": "{project}", "dev": "{project}-dev"}
 DEFAULT_CHANNEL_NAMES = {
@@ -115,6 +111,17 @@ class DiscordPolicy:
     global_channels: dict[str, tuple[str, ...]] = field(default_factory=lambda: dict(DEFAULT_GLOBAL_CHANNELS))
     # 프로젝트 채널 전역 기본 공개 대상 (프로젝트별 덮어쓰기 전)
     channel_visibility: dict[str, tuple[str, ...]] = field(default_factory=lambda: dict(DEFAULT_CHANNEL_VISIBILITY))
+
+
+def event_kind_visible_role_keys(discord: DiscordPolicy) -> tuple[str, ...]:
+    """사용자 정의 알림 종류 공개 대상 선택지: discord.roles 역할 키 (예약 키 제외, 관리자는 항상 볼 수 있어 저장 안 함)"""
+    return tuple(role_key for role_key in discord.role_names if role_key not in RESERVED_ROLE_KEYS)
+
+
+def default_event_kind_visible_to(discord: DiscordPolicy) -> tuple[str, ...]:
+    """기본 공개 대상 중 지금 역할 목록에 있는 키만 (dev 역할이 없으면 빈 튜플 = 관리자만)"""
+    allowed_role_keys = event_kind_visible_role_keys(discord)
+    return tuple(role_key for role_key in DEFAULT_EVENT_KIND_VISIBLE_TO if role_key in allowed_role_keys)
 
 
 @dataclass(frozen=True)

@@ -11,7 +11,7 @@ from service.control_tower.discord_sync_models import (
     CATEGORY_CHANNEL_TYPE, CATEGORY_KIND, EVERYONE_ROLE_KEY, GLOBAL_SCOPE, PROJECT_NAME_PLACEHOLDER, ROLE_KIND_PREFIX,
     ROLE_OVERWRITE_TYPE, VIEW_CHANNEL_PERMISSION, SyncOperation, role_reference,
 )
-from service.control_tower.discord_sync_event_kinds import RemovedEventKindFinder
+from service.control_tower.discord_sync_event_kinds import RemovedEventKindFinder, known_visible_role_keys
 from service.control_tower.registry import ProjectSpec, Registry
 from service.control_tower.registry_models import ATTENTION_CHANNEL_KIND
 
@@ -60,8 +60,8 @@ class _SyncPlanner:
         # 사용자 정의 종류: 기본 채널이 먼저 바인딩을 잡은 뒤 계획 (같은 이름 기본 채널을 가져가지 않음)
         for project in self._registry.projects:
             for event_kind in project.event_kinds:
-                self._plan_channel(project.id, event_kind.kind, event_kind.visible_to, parent_scope=project.id,
-                                   name=event_kind.channel_name)
+                self._plan_channel(project.id, event_kind.kind, known_visible_role_keys(event_kind, self._policy),
+                                   parent_scope=project.id, name=event_kind.channel_name)
         self._plan_archives()
         self._plan_removed_event_kind_archives()
         return self._operations

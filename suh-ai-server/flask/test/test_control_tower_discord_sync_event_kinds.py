@@ -6,9 +6,9 @@ from dataclasses import replace
 import pytest
 from control_tower_discord_fakes import ELUM, GUILD_ID, VIEW_CHANNEL, FakeDiscordClient, make_registry, overwrite_map
 
-from service.control_tower.discord_sync import plan_sync, sync_discord
+from service.control_tower.discord_sync import apply_sync, plan_sync, sync_discord
 from service.control_tower.discord_sync_models import (
-    ACTION_ARCHIVE_CHANNEL, ACTION_BIND, ACTION_CREATE_CHANNEL, ACTION_UPDATE_CHANNEL,
+    ACTION_ARCHIVE_CATEGORY, ACTION_ARCHIVE_CHANNEL, ACTION_BIND, ACTION_CREATE_CHANNEL, ACTION_UPDATE_CHANNEL,
 )
 from service.control_tower.registry_models import EventKindSpec
 from service.control_tower.store import ControlTowerStore
@@ -150,3 +150,34 @@ def test_plan_does_not_archive_removed_kind_channel_taken_by_new_kind_with_same_
 
     # 같은 채널에 바인딩과 보관이 함께 계획되지 않음
     assert (operation.action, operation.kind, operation.target_id) == (ACTION_BIND, "new-kind", shared_channel_id)
+
+
+def test_plan_skips_stored_visible_role_missing_from_registry_roles(store):
+    client = _synced_client(store)
+    # 저장된 공개 대상 qa가 등록 파일 discord.roles에 없음 > 권한 주지 않고 관리자만
+    registry = _registry_with_event_kinds(EventKindSpec("qa-log", "qa로그", ("qa",)))
+
+    [operation] = _operations_for_kind(_plan(client, store, registry), "qa-log")
+
+    assert operation.action == ACTION_CREATE_CHANNEL
+    assert operation.overwrites == (
+        {"id": GUILD_ID, "type": 0, "allow": 0, "deny": VIEW_CHANNEL},
+        {"ref": "global:admin", "type": 0, "allow": VIEW_CHANNEL, "deny": 0},
+    )
+    assert sync_discord(registry, client, store, GUILD_ID).errors == []
+    assert _plan(client, store, registry) == []
+
+
+def test_plan_with_full_default_bindings_and_no_custom_kinds_archives_nothing(store):
+    # attention 채널까지 만든 뒤 소스가 없어진 상태 (attention 바인딩만 남음)
+    client = FakeDiscordClient()
+    operations = plan_sync(BASE_REGISTRY, client.list_channels(), client.list_roles(), GUILD_ID,
+                           store.all_bindings(), frozenset({"elum"}))
+    assert apply_sync(client, store, operations).errors == []
+    assert store.get_binding("elum", "attention") is not None
+
+    operations = _plan(client, store, BASE_REGISTRY)
+
+    assert [operation for operation in operations
+            if operation.action in (ACTION_ARCHIVE_CHANNEL, ACTION_ARCHIVE_CATEGORY)] == []
+    assert operations == []

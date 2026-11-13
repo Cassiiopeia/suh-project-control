@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import logging
-import threading
 from datetime import datetime, timezone
-from typing import Callable
 
 from flask import Blueprint, jsonify, request
 
@@ -17,6 +15,7 @@ from service.control_tower.manage_view import event_kind_entry, load_manage_cont
 from service.control_tower.runtime import get_runtime
 from service.control_tower.sync_registry import load_sync_ready_registry
 from util.audit_helper import audited, set_audit_detail
+from util.background_runner import run_in_background
 
 logger = logging.getLogger(__name__)
 
@@ -42,10 +41,12 @@ def _create_event_kind(project_id: str):
     runtime = get_runtime()
     if runtime is None:
         return _error("unavailable", 503)
-    spec, invalid_fields = parse_new_event_kind(request.get_json(silent=True))
+    # 공개 대상 선택지 = 실효 등록 정보의 discord.roles (등록 파일에서 역할 추가·삭제 시 코드 변경 없음)
+    context = load_manage_context(runtime)
+    spec, invalid_fields = parse_new_event_kind(request.get_json(silent=True), context.effective.discord)
     if invalid_fields:
         return _error("invalid", 400, fields=invalid_fields)
-    if not load_manage_context(runtime).is_known_project(project_id):
+    if not context.is_known_project(project_id):
         return _error("unknown_project", 404)
     if not runtime.store.insert_project_event_kind(project_id, spec, datetime.now(timezone.utc)):
         return _error("duplicate_kind", 409)
@@ -70,17 +71,12 @@ def _delete_event_kind(project_id: str, kind: str):
     return "", 204
 
 
-def run_in_background(task: Callable[[], None]) -> None:
-    """데몬 스레드 1개로 실행 (테스트에서 동기 실행으로 교체)"""
-    threading.Thread(target=task, daemon=True, name=SYNC_THREAD_NAME).start()
-
-
 def _schedule_discord_sync(runtime) -> None:
     """디스코드 설정(클라이언트·서버 ID) 있을 때만 동기화 1회 예약"""
     discord_client = runtime.discord_client_provider() if runtime.discord_client_provider else None
     if discord_client is None or not runtime.guild_id:
         return
-    run_in_background(lambda: _sync_discord_after_change(runtime, discord_client))
+    run_in_background(lambda: _sync_discord_after_change(runtime, discord_client), SYNC_THREAD_NAME)
 
 
 def _sync_discord_after_change(runtime, discord_client) -> None:

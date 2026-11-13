@@ -24,6 +24,12 @@ class EventKindStoreMixin:
                 EventKindSpec(row["kind"], row["channel_name"], visible_to))
         return {project_id: tuple(specs) for project_id, specs in specs_by_project.items()}
 
+    def list_event_kind_names_of_project(self, project_id: str) -> frozenset[str]:
+        """프로젝트 1개의 종류 이름 (이벤트 접수 시점 조회, 폴러 캐시 지연 없음)"""
+        rows = self._connection().execute(
+            "SELECT kind FROM project_event_kind WHERE project_id = ?", (project_id,)).fetchall()
+        return frozenset(row["kind"] for row in rows)
+
     def insert_project_event_kind(self, project_id: str, spec: EventKindSpec, now: datetime) -> bool:
         """종류 1개 추가 > 이미 있으면 False"""
         with self._write_transaction() as connection:

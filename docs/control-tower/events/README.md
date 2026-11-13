@@ -25,7 +25,7 @@ flowchart TD
 |---|---|
 | 주소 | `POST https://ai.suhsaechan.kr/api/flask/control/events` |
 | 헤더 | `X-Control-Token: <프로젝트 토큰>`, `Content-Type: application/json` |
-| 본문 | 아래 필드 표 (JSON 객체) |
+| 본문 | 아래 필드 표 (JSON 객체), 요청 본문 최대 64KB (넘으면 nginx가 413) |
 
 원본 스키마: [events-v1.schema.json](./events-v1.schema.json) (JSON Schema 2020-12). 예시: [examples/](./examples/) (`valid_*` 유효, `invalid_*` 무효).
 스키마의 길이, 개수 상한은 서버 검증기 상수와 같아야 하며 계약 테스트(`test/test_control_tower_events_contract.py`)가 비교한다.

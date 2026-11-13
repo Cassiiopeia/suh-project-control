@@ -34,7 +34,7 @@ class SyncRecorder:
 def sync_recorder(monkeypatch):
     """백그라운드 실행을 동기 실행으로 바꾸고 동기화 호출 기록"""
     recorder = SyncRecorder()
-    monkeypatch.setattr(control_tower_event_kind_api, "run_in_background", lambda task: task())
+    monkeypatch.setattr(control_tower_event_kind_api, "run_in_background", lambda task, thread_name: task())
     monkeypatch.setattr(control_tower_event_kind_api, "sync_discord", recorder)
     return recorder
 
@@ -235,9 +235,31 @@ def test_관리_목록에_공개_대상_선택지와_기본값이_있다(kind_cl
     body = kind_client.get("/control/manage").get_json()
 
     options = body["event_kind_options"]
-    assert options["visible_role_keys"] == ["dev", "member"]
-    assert options["visible_role_labels"] == {"dev": "개발자", "member": "멤버"}
+    assert options["visible_role_keys"] == ["member", "dev"]
     assert options["default_visible_to"] == ["dev"]
+
+
+def test_공개_대상_선택지는_등록_파일_역할_목록을_따른다(store, dispatcher, discord_client, sync_recorder):
+    # 역할을 바꾼 등록 파일: dev 없음 > 기본 공개 대상 관리자만, qa 선택 가능
+    custom_registry = replace(REGISTRY, discord=replace(
+        REGISTRY.discord, role_names={"member": "{project}", "qa": "{project}-qa"}))
+    runtime_module.set_runtime(ControlTowerRuntime(
+        lambda: custom_registry, store, dispatcher, poller=FakePoller(_snapshot()),
+        discord_client_provider=lambda: discord_client, guild_id="9000",
+        file_registry_provider=lambda: custom_registry))
+    try:
+        client = make_app().test_client()
+        options = client.get("/control/manage").get_json()["event_kind_options"]
+        created = client.post(EVENT_KINDS_PATH, json={"kind": "qa-report", "visible_to": ["qa"]})
+        rejected = client.post(EVENT_KINDS_PATH, json={"kind": "build", "visible_to": ["dev"]})
+        defaulted = client.post(EVENT_KINDS_PATH, json={"kind": "feedback"})
+    finally:
+        runtime_module.set_runtime(None)
+
+    assert (options["visible_role_keys"], options["default_visible_to"]) == (["member", "qa"], [])
+    assert created.status_code == 201
+    assert (rejected.status_code, rejected.get_json()["fields"]) == (400, ["visible_to"])
+    assert defaulted.get_json()["visible_to"] == []
 
 
 def test_관리_목록의_종류_규칙은_서버_검증과_같은_원본이다(kind_client):

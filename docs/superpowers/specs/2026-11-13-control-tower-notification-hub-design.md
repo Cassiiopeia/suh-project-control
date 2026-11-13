@@ -83,7 +83,7 @@ flowchart TD
 
 - **정의 위치: 관리 화면 (DB).** [내 결정] 등록 파일이 아니라 DB로 둔다. 이유: 관리 화면에서 만든 프로젝트(`custom_project`)도 있고, 토큰·받을 곳도 관리 화면에서 다루므로 한 화면에서 끝나야 한다. 기본 5종은 지금처럼 코드 기본값 유지.
 - 새 테이블 `project_event_kind`
-  - `project_id`, `kind` (`^[a-z][a-z0-9-]{1,31}$`, 예 `claude-code`, `feedback`), `channel_name` (Discord 채널 이름, 기본 = kind), `visible_to` (`admin`/`dev`/`member` 조합, 기본 `dev`), `created_at`
+  - `project_id`, `kind` (`^[a-z][a-z0-9-]{1,31}$`, 예 `claude-code`, `feedback`), `channel_name` (Discord 채널 이름, 기본 = kind), `visible_to` (등록 파일 `discord.roles`의 역할 키 조합, 관리자는 항상 포함되어 저장 안 함, 빈 목록 = 관리자만, 기본 `dev` (역할 목록에 `dev`가 없으면 관리자만), 등록 파일에서 빠진 역할 키는 동기화에서 건너뜀), `created_at`
   - 기본 5종과 같은 kind는 등록 불가
 - 동기화(`discord_sync_plan`)가 프로젝트 채널 목록 = 기본 채널 종류 + 그 프로젝트의 사용자 정의 종류로 계산. 생성·권한은 기존 경로 재사용, 삭제는 지금 정책 그대로 하지 않음(종류를 지우면 채널은 보관 처리).
 - `/control/events` kind 검증 = 기본 5종 ∪ 그 프로젝트의 사용자 정의 종류. 모르는 kind는 400 `unknown_kind` + 경고 로그 (오타가 조용히 사라지지 않게).

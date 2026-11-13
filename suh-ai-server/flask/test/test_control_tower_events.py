@@ -10,7 +10,6 @@ from flask import Flask
 from service.control_tower import runtime as runtime_module
 from service.control_tower.alert_planner import Notification
 from service.control_tower.event_dispatcher import EventDispatcher
-from service.control_tower.registry_models import EventKindSpec
 from service.control_tower.runtime import ControlTowerRuntime
 from control_tower_discord_fakes import ELUM, SAMPLE, make_registry
 
@@ -31,6 +30,10 @@ class FakeStore:
     def __init__(self, bindings: dict[tuple[str, str], str] | None = None):
         self.bindings = bindings or {}
         self.recorded: list[tuple] = []
+        self.event_kind_names: dict[str, set[str]] = {}  # 프로젝트 id > 사용자 정의 종류 이름
+
+    def list_event_kind_names_of_project(self, project_id: str) -> frozenset[str]:
+        return frozenset(self.event_kind_names.get(project_id, ()))
 
     def get_binding(self, scope: str, kind: str) -> str | None:
         return self.bindings.get((scope, kind))
@@ -55,9 +58,8 @@ class FakeDiscordClient:
 DEFAULT_BINDINGS = {("elum", "report"): "c-report", ("elum", "status"): "c-status", ("global", "alert"): "c-alert"}
 
 
-def _make_dispatcher(store: FakeStore, client: FakeDiscordClient | None, registry=None) -> EventDispatcher:
-    registry = registry or make_registry(ELUM, SAMPLE)
-    return EventDispatcher(lambda: registry, store, lambda: client, STATUS_PAGE_URL)
+def _make_dispatcher(store: FakeStore, client: FakeDiscordClient | None) -> EventDispatcher:
+    return EventDispatcher(store, lambda: client, STATUS_PAGE_URL)
 
 
 def _notification(scope="elum", kind="report", **overrides) -> Notification:
@@ -144,7 +146,7 @@ def test_hyphenated_project_id_uses_underscore_env_name(monkeypatch, store, disc
     registry = make_registry(make_project("my-app", "마이앱"))
     monkeypatch.setenv("CONTROL_EVENT_TOKEN_MY_APP", TOKEN)
     runtime_module.set_runtime(ControlTowerRuntime(
-        lambda: registry, store, EventDispatcher(lambda: registry, store, lambda: discord_client, STATUS_PAGE_URL)))
+        lambda: registry, store, EventDispatcher(store, lambda: discord_client, STATUS_PAGE_URL)))
     try:
         app = Flask(__name__)
         app.register_blueprint(control_tower_bp)
@@ -267,14 +269,13 @@ def test_link_url_overrides_status_page_url_in_embed():
 # ---- 사용자 정의 종류·fields ----
 
 def _custom_kind_client(monkeypatch, store, discord_client):
-    """elum 에 claude-code 종류를 등록한 레지스트리로 라우터 구성"""
-    from dataclasses import replace
+    """저장소에만 elum claude-code 종류 등록 (등록 정보 캐시는 종류 없음 = 폴러 갱신 전) > 라우터 구성"""
     from router.control_tower_router import control_tower_bp
-    elum_with_kind = replace(ELUM, event_kinds=(EventKindSpec("claude-code", "claude-code"),))
-    registry = make_registry(elum_with_kind, SAMPLE)
+    store.event_kind_names["elum"] = {"claude-code"}
+    registry = make_registry(ELUM, SAMPLE)
     monkeypatch.setenv(TOKEN_ENV_NAME, TOKEN)
     runtime_module.set_runtime(ControlTowerRuntime(
-        lambda: registry, store, _make_dispatcher(store, discord_client, registry)))
+        lambda: registry, store, _make_dispatcher(store, discord_client)))
     app = Flask(__name__)
     app.register_blueprint(control_tower_bp)
     return app.test_client()
@@ -306,6 +307,8 @@ def test_event_with_unregistered_kind_returns_unknown_kind(client, store, discor
     [{"name": "n", "value": "값" * 201}],
     "not-a-list",
     [{"name": "n"}],
+    [{"name": "   ", "value": "v"}],
+    [{"name": "n", "value": " \t "}],
 ])
 def test_event_fields_validation(client, fields):
     response = _post(client, {**VALID_PAYLOAD, "fields": fields})
