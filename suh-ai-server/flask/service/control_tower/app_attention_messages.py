@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 
 from service.control_tower.alert_planner import (
     GLOBAL_SCOPE, INFRASTRUCTURE_KIND, SEVERITY_CRITICAL, SEVERITY_INFO, SEVERITY_RECOVERED, Notification,
@@ -52,8 +53,9 @@ def build_item_notifications(project_id: str, project_name: str, source_id: str,
 
 
 def build_source_health_notification(project_id: str, project_name: str, source_id: str, verdict: str,
-                                     reason: str | None) -> Notification:
-    """연동 판정 > 프로젝트 error 채널 1건 (끊김 = warning + 사유, 복구 = recovered)"""
+                                     reason: str | None, transition_reference_at: datetime) -> Notification:
+    """연동 판정 > 프로젝트 error 채널 1건 (끊김 = warning + 사유, 복구 = recovered)
+    transition_reference_at: 전이마다 다르고 재시도엔 같은 시각 (끊김 = 마지막 성공, 복구 = 끊김 알림 시각)"""
     is_recovered = verdict == SOURCE_HEALTH_RECOVERED
     status_text = "연동 복구" if is_recovered else "연동 끊김"
     body = f"소스 {source_id}"
@@ -63,7 +65,7 @@ def build_source_health_notification(project_id: str, project_name: str, source_
         scope=project_id, kind=SOURCE_HEALTH_CHANNEL_KIND,
         severity=SEVERITY_RECOVERED if is_recovered else SEVERITY_WARNING,
         title=f"{project_name} 확인할 일 {status_text}", body=body, service_ids=(),
-        dedupe_key=f"attention:{project_id}:{source_id}:{verdict}",
+        dedupe_key=f"attention:{project_id}:{source_id}:{verdict}:{transition_reference_at.isoformat()}",
     )
 
 

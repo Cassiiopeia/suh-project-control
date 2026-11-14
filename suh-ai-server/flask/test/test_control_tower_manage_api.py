@@ -38,9 +38,15 @@ def test_manage는_retired_인프라_포함_목록과_출처_페이지_설정을
     assert services["nas"]["is_infrastructure"] is True and services["nas"]["url"] is None
     assert services["elum-api"]["source"] == "registry" and services["elum-api"]["runtime_status"] == "up"
     assert body["page"]["title"] == "SUHSAECHAN Status" and body["page"]["preview_url"].startswith("https://")
+    # 토큰 상태 상세는 test_control_tower_event_token_api 에서 검사
+    assert body["projects"][0].pop("event_token")["is_db_managed"] is False
+    # 받을 곳 목록·종류 선택지 상세는 test_control_tower_destination_api 에서 검사
+    assert body["projects"][0].pop("destinations") == []
+    assert body["projects"][0].pop("destination_kinds")
     assert body["projects"][0] == {"id": "elum", "name": "이룸", "is_hidden": False, "sort_order": None,
                                    "source": "registry", "original_name": "이룸", "overridden_fields": [],
-                                   "invite_url": None, "icon_data_url": None, "icon_source_url": None}
+                                   "invite_url": None, "icon_data_url": None, "icon_source_url": None,
+                                   "event_kinds": []}
     assert body["external_checks"]["used"] == 1
     assert "nas.local" not in str(body)
 

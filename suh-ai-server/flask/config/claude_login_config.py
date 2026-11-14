@@ -17,6 +17,12 @@ CODE_SEARCH_TIMEOUT_SECONDS = 15
 # Chromium 설치 위치 고정 (배포 스크립트 설치 <-> NSSM 서비스 실행 계정 공통)
 PLAYWRIGHT_BROWSERS_DIRECTORY = r"C:\AI\playwright-browsers"
 
+# 관제소 알림 허브: 코드 발급·열람 알림을 받는 프로젝트 ID와 알림 종류
+CONTROL_TOWER_PROJECT_ID = "suh-ai"
+CONTROL_TOWER_EVENT_KIND = "claude-code"
+# 알림 필드: 브라우저(User-Agent) 표시 최대 글자 수
+EVENT_USER_AGENT_MAX_LENGTH = 60
+
 # .env: 앱 비밀번호 암호화 비밀 문구 (DB 밖 보관, 서버 이전 시 같은 값으로 복호화)
 ENV_ACCOUNT_SECRET = "CLAUDE_LOGIN_ACCOUNT_SECRET"
 

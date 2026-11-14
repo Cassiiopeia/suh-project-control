@@ -10,7 +10,7 @@ from flask import Blueprint, jsonify, request
 
 from service.control_tower.app_attention_fetch import FETCH_RESULT_OK, TOKEN_HEADER_NAME, FetchOutcome
 from service.control_tower.app_attention_models import MAX_BODY_BYTES, SOURCE_MODE_PULL
-from service.control_tower.app_attention_tokens import event_token_env_name, is_presented_token_valid
+from service.control_tower.project_event_tokens import is_project_token_valid
 from service.control_tower.runtime import get_runtime
 
 logger = logging.getLogger(__name__)
@@ -47,7 +47,7 @@ def _receive_snapshot(project_id: str, source_id: str):
     except ValueError:  # JSON 문법 오류·잘못된 UTF-8
         return _error("invalid", 400)
 
-    if not is_presented_token_valid(event_token_env_name(project_id), request.headers.get(TOKEN_HEADER_NAME, "")):
+    if not is_project_token_valid(runtime.store, project_id, request.headers.get(TOKEN_HEADER_NAME, ""), _now()):
         return _error("unauthorized", 401)
     source = runtime.store.get_attention_source(project_id, source_id)
     if source is None:

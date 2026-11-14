@@ -1,38 +1,29 @@
 """관제소 저장소: 점검 결과·일별 집계·장애·서비스 상태·이벤트 중복·바인딩·점검 창·메타 (+ 덮어쓰기·초대 믹스인)
-스레드마다 SQLite 연결(WAL), 시각은 UTC ISO 문자열 저장 > aware datetime 복원"""
+스레드마다 SQLite 연결(WAL, store_connection), 시각은 UTC ISO 문자열 저장 > aware datetime 복원"""
 from __future__ import annotations
 
 import os
-import sqlite3
-import threading
-from contextlib import contextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from service.control_tower.app_attention_store import AppAttentionStoreMixin
 from service.control_tower.check_runner import CheckResult
+from service.control_tower.destination_store import DestinationStoreMixin
+from service.control_tower.event_kind_store import EventKindStoreMixin
 from service.control_tower.invite_store import InviteStoreMixin
 from service.control_tower.override_store import OverrideStoreMixin
 from service.control_tower.project_icon_store import ProjectIconStoreMixin
+from service.control_tower.project_token_store import ProjectTokenStoreMixin
 from service.control_tower.registry import MaintenanceWindow
 from service.control_tower.state_machine import Observation, ServiceState
+from service.control_tower.store_connection import ThreadLocalConnectionStore
 from service.control_tower.store_schema import SCHEMA_STATEMENTS, apply_column_migrations
 from service.control_tower.time_zones import KST
+from service.control_tower.utc_text import from_utc_text as _from_text, to_utc_text as _to_text
 
-CONNECTION_TIMEOUT_SECONDS = 10  # 쓰기 잠금 대기
-BUSY_TIMEOUT_MILLISECONDS = 10000
 EVENT_DEDUPE_WINDOW = timedelta(minutes=10)
 CHECK_RESULT_RETENTION = timedelta(days=7)
 EVENT_LOG_RETENTION = timedelta(days=30)
 LONG_TERM_RETENTION = timedelta(days=400)  # 일별 집계, 종료된 장애
-
-
-def _to_text(moment: datetime) -> str:
-    """aware datetime > UTC ISO 문자열 (고정 형식이라 문자열 비교 = 시각 비교)"""
-    return moment.astimezone(timezone.utc).isoformat(timespec="microseconds")
-
-
-def _from_text(text: str | None) -> datetime | None:
-    return datetime.fromisoformat(text) if text else None
 
 
 def _kst_day(moment: datetime) -> str:
@@ -55,46 +46,8 @@ def _check_columns(check: CheckResult | None) -> tuple:
     return (int(check.is_ok), int(check.is_slow), check.status_code, check.latency_milliseconds, check.error)
 
 
-class ControlTowerStore(OverrideStoreMixin, InviteStoreMixin, ProjectIconStoreMixin, AppAttentionStoreMixin):
-    def __init__(self, path: str):
-        self._path = path
-        self._thread_local = threading.local()
-        self._opened_connections: list[sqlite3.Connection] = []  # close()에서 전부 닫기 위한 추적
-        self._opened_connections_lock = threading.Lock()
-
-    def _connection(self) -> sqlite3.Connection:
-        """현재 스레드 전용 연결 (없으면 생성)"""
-        connection = getattr(self._thread_local, "connection", None)
-        if connection is None:
-            connection = sqlite3.connect(self._path, timeout=CONNECTION_TIMEOUT_SECONDS, check_same_thread=False)
-            connection.row_factory = sqlite3.Row
-            connection.execute("PRAGMA journal_mode=WAL")
-            connection.execute(f"PRAGMA busy_timeout={BUSY_TIMEOUT_MILLISECONDS}")
-            self._thread_local.connection = connection
-            with self._opened_connections_lock:
-                self._opened_connections.append(connection)
-        return connection
-
-    def close(self) -> None:
-        """모든 스레드의 연결 닫기 (이후 호출 시 연결을 새로 엶)"""
-        with self._opened_connections_lock:
-            for connection in self._opened_connections:
-                connection.close()
-            self._opened_connections.clear()
-            self._thread_local = threading.local()
-
-    @contextmanager
-    def _write_transaction(self):
-        """쓰기 잠금을 먼저 잡는 트랜잭션: 조회 > 기록 사이 경합 방지 (성공 시 커밋, 예외 시 롤백)"""
-        connection = self._connection()
-        connection.execute("BEGIN IMMEDIATE")
-        try:
-            yield connection
-        except BaseException:
-            connection.rollback()
-            raise
-        connection.commit()
-
+class ControlTowerStore(ThreadLocalConnectionStore, OverrideStoreMixin, EventKindStoreMixin, InviteStoreMixin,
+                        ProjectIconStoreMixin, AppAttentionStoreMixin, ProjectTokenStoreMixin, DestinationStoreMixin):
     def initialize(self) -> None:
         """상위 폴더 생성 > 테이블·인덱스 생성 > 기존 DB 열 추가"""
         parent_directory = os.path.dirname(self._path)

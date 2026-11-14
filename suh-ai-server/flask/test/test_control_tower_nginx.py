@@ -52,7 +52,7 @@ def test_event_intake_caps_body_and_uses_dedicated_rate_limit():
     conf_text = _read_conf()
     event_block = _location_blocks(conf_text)[EVENT_LOCATION]
 
-    assert re.search(r"client_max_body_size\s+16k;", event_block)
+    assert re.search(r"client_max_body_size\s+64k;", event_block)
     assert re.search(r"limit_req\s+zone=control_events\s+burst=10\s+nodelay;", event_block)
     assert "python_limit" not in event_block
     assert re.search(r"limit_req_zone\s+\$binary_remote_addr\s+zone=control_events:1m\s+rate=5r/s;", conf_text)

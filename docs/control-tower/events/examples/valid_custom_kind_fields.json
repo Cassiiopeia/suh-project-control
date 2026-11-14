@@ -1,0 +1,10 @@
+{
+  "project": "suh-ai",
+  "kind": "claude-code",
+  "severity": "info",
+  "title": "로그인 인증코드 발급",
+  "fields": [
+    { "name": "요청 경로", "value": "메일 링크" },
+    { "name": "유효 시간", "value": "10분" }
+  ]
+}

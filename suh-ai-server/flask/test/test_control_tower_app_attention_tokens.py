@@ -8,6 +8,7 @@ from service.control_tower import runtime as runtime_module
 from service.control_tower.app_attention_tokens import (
     event_token_env_name, is_presented_token_valid, is_pull_token_configured, pull_token_env_name,
     read_pull_token, to_env_id)
+from service.control_tower.project_token_store import ProjectTokenState
 from service.control_tower.runtime import ControlTowerRuntime
 from control_tower_discord_fakes import ELUM, make_registry
 
@@ -68,11 +69,18 @@ class _AcceptingDispatcher:
         return 202, {"accepted": True, "deduplicated": False}
 
 
+class _EnvTokenOnlyStore:
+    """DB 발급 토큰 없는 저장소 (환경변수 토큰 경로만 검사)"""
+
+    def load_project_token_state(self, project_id):
+        return ProjectTokenState.not_managed()
+
+
 @pytest.fixture
 def event_client():
     from router.control_tower_router import control_tower_bp
     registry = make_registry(ELUM)
-    runtime_module.set_runtime(ControlTowerRuntime(lambda: registry, None, _AcceptingDispatcher()))
+    runtime_module.set_runtime(ControlTowerRuntime(lambda: registry, _EnvTokenOnlyStore(), _AcceptingDispatcher()))
     app = Flask(__name__)
     app.register_blueprint(control_tower_bp)
     yield app.test_client()

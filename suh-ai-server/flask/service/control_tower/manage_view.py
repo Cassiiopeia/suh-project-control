@@ -5,13 +5,25 @@ from __future__ import annotations
 import base64
 import os
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 
-from config.control_tower_config import MAX_EXTERNAL_CHECKS
+from config.control_tower_config import (
+    MAX_EXTERNAL_CHECKS, MAX_PREVIOUS_EVENT_TOKEN_COUNT, PREVIOUS_EVENT_TOKEN_VALID_DAYS,
+)
 from service.control_tower.bootstrap import DEFAULT_STATUS_PAGE_URL, STATUS_PAGE_URL_ENV
+from service.control_tower.destination_validation import (
+    destination_entry, destination_form_options, destination_kind_choices,
+)
 from service.control_tower.override_models import RegistryOverrides
 from service.control_tower.overview import check_entry, incident_entry, iso_text
+from service.control_tower.project_event_tokens import describe_project_token, is_token_secret_configured
 from service.control_tower.registry import SERVICE_STATUS_RETIRED, CheckSpec, Registry, ServiceSpec
+from service.control_tower.event_kind_validation import (
+    CHANNEL_NAME_MAX_LENGTH, EVENT_KIND_PATTERN, EVENT_KIND_RULE_TEXT,
+)
+from service.control_tower.registry_models import (
+    RESERVED_EVENT_KINDS, DiscordPolicy, EventKindSpec, default_event_kind_visible_to, event_kind_visible_role_keys,
+)
 from service.control_tower.registry_overrides import merge_overrides
 from service.control_tower.state_machine import STATUS_UNKNOWN
 
@@ -57,19 +69,52 @@ def count_external_checks(registry: Registry) -> int:
 
 
 def build_manage(runtime, context: ManageContext) -> dict:
-    """관리 화면 본문: 상태 페이지 설정 > 프로젝트 > 서비스(인프라 포함, 표시 순서) > 외부 점검 사용량"""
+    """관리 화면 본문: 상태 페이지 설정 > 프로젝트 > 서비스(인프라 포함, 표시 순서) > 외부 점검 사용량 > 알림 종류 선택지
+    > 토큰 비밀값 설정 여부 (CONTROL_TOWER_SECRET, 없으면 화면 발급 버튼 비활성) > 이전 토큰 유예 일수·최대 개수 (화면 안내 문구 원본)
+    프로젝트마다 받을 곳(url_hint만)·받을 곳 종류 선택지 (같은 비밀값이 URL 암호화 키 > 미설정이면 추가·전환 비활성)"""
     states = _current_states(runtime)
+    now = datetime.now(timezone.utc)
     page = context.effective.page
     invites = runtime.store.all_project_invites()
     icon_images = runtime.store.load_project_icon_images()
+    destinations_by_project = _destinations_by_project(runtime.store)
     return {
         "page": {"title": page.title, "notice_text": page.notice_text, "notice_level": page.notice_level,
                  "preview_url": os.environ.get(STATUS_PAGE_URL_ENV) or DEFAULT_STATUS_PAGE_URL},
-        "projects": [_project_entry(project, context, invites.get(project.id), icon_images.get(project.id))
+        "projects": [{**_project_entry(project, context, invites.get(project.id), icon_images.get(project.id)),
+                      "event_token": describe_project_token(runtime.store, project.id, now),
+                      "destinations": destinations_by_project.get(project.id, []),
+                      "destination_kinds": list(destination_kind_choices(runtime.store, project.id))}
                      for project in context.effective.projects],
         "services": [_service_entry(service, context, states)
                      for service in context.effective.services + context.effective.infrastructure],
         "external_checks": {"used": count_external_checks(context.effective), "maximum": MAX_EXTERNAL_CHECKS},
+        "event_kind_options": _event_kind_options(context.effective.discord),
+        "is_token_secret_configured": is_token_secret_configured(),
+        "previous_token_valid_days": PREVIOUS_EVENT_TOKEN_VALID_DAYS,
+        "max_previous_token_count": MAX_PREVIOUS_EVENT_TOKEN_COUNT,
+        "destination_options": destination_form_options(),
+    }
+
+
+def _destinations_by_project(store) -> dict[str, list[dict]]:
+    """받을 곳 전체 1회 조회 > 프로젝트별 항목 목록 (추가 순)"""
+    entries_by_project: dict[str, list[dict]] = {}
+    for destination in store.list_destinations():
+        entries_by_project.setdefault(destination.project_id, []).append(destination_entry(destination))
+    return entries_by_project
+
+
+def _event_kind_options(discord: DiscordPolicy) -> dict:
+    """알림 종류 추가 폼 규칙·선택지 (서버 검증과 같은 원본, 화면은 이 값만 사용)
+    visible_role_keys: 등록 파일 discord.roles 역할 키 (화면은 키 그대로 표시), kind_pattern: JS RegExp 원문"""
+    return {
+        "visible_role_keys": list(event_kind_visible_role_keys(discord)),
+        "default_visible_to": list(default_event_kind_visible_to(discord)),
+        "kind_pattern": EVENT_KIND_PATTERN.pattern,
+        "kind_rule_text": EVENT_KIND_RULE_TEXT,
+        "reserved_kinds": sorted(RESERVED_EVENT_KINDS),
+        "channel_name_max_length": CHANNEL_NAME_MAX_LENGTH,
     }
 
 
@@ -104,7 +149,7 @@ def _current_states(runtime) -> dict:
 
 def _project_entry(project, context: ManageContext, invite=None, icon_image: bytes | None = None) -> dict:
     """invite_url: 디스코드 초대 링크 (없으면 null), icon_data_url: 썸네일 data URL (없으면 null),
-    icon_source_url: 등록 파일의 기본 이미지 주소 (없으면 null)"""
+    icon_source_url: 등록 파일의 기본 이미지 주소 (없으면 null), event_kinds: 사용자 정의 알림 종류 (생성 순)"""
     override = context.overrides.project_overrides.get(project.id)
     original = next((item for item in context.file_registry.projects if item.id == project.id), None)
     custom = next((item for item in context.overrides.custom_projects if item.id == project.id), None)
@@ -117,7 +162,13 @@ def _project_entry(project, context: ManageContext, invite=None, icon_image: byt
         "invite_url": invite.url if invite is not None else None,
         "icon_data_url": _to_webp_data_url(icon_image),
         "icon_source_url": original.icon_source_url if original is not None else None,
+        "event_kinds": [event_kind_entry(spec) for spec in project.event_kinds],
     }
+
+
+def event_kind_entry(spec: EventKindSpec) -> dict:
+    """알림 종류 1개 > {kind, channel_name, visible_to} (관리 목록·추가 응답 공용)"""
+    return {"kind": spec.kind, "channel_name": spec.channel_name, "visible_to": list(spec.visible_to)}
 
 
 def _to_webp_data_url(image_bytes: bytes | None) -> str | None:

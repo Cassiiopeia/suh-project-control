@@ -2,7 +2,7 @@
 _connection·_write_transaction·get_meta·set_meta는 ControlTowerStore가 제공"""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 from service.control_tower.meta_keys import (
     META_KEY_STATUS_PAGE_NOTICE_LEVEL, META_KEY_STATUS_PAGE_NOTICE_TEXT, META_KEY_STATUS_PAGE_TITLE,
@@ -13,6 +13,7 @@ from service.control_tower.override_models import (
 )
 from service.control_tower.registry import StatusPage
 from service.control_tower.registry_models import DEFAULT_STATUS_PAGE_TITLE, NOTICE_LEVEL_INFO, NOTICE_LEVELS
+from service.control_tower.utc_text import from_utc_text, to_utc_text
 
 # 0/1로 저장하는 boolean 칸
 BOOLEAN_COLUMNS = ("is_public", "is_hidden")
@@ -22,14 +23,6 @@ STATUS_PAGE_META_KEYS = {
     "notice_text": META_KEY_STATUS_PAGE_NOTICE_TEXT,
     "notice_level": META_KEY_STATUS_PAGE_NOTICE_LEVEL,
 }
-
-
-def _to_utc_text(moment: datetime) -> str:
-    return moment.astimezone(timezone.utc).isoformat(timespec="microseconds")
-
-
-def _from_utc_text(text: str | None) -> datetime | None:
-    return datetime.fromisoformat(text) if text else None
 
 
 def _to_column(name: str, value):
@@ -55,26 +48,27 @@ class OverrideStoreMixin:
         service_overrides = {
             row["service_id"]: ServiceOverride(
                 row["service_id"], *(_from_column(row, name) for name in SERVICE_OVERRIDE_FIELDS),
-                _from_utc_text(row["updated_at"]))
+                from_utc_text(row["updated_at"]))
             for row in connection.execute("SELECT * FROM service_override").fetchall()
         }
         custom_services = tuple(
             CustomService(row["id"], row["project_id"], row["name"], row["external_url"], row["status"],
-                          bool(row["is_public"]), row["sort_order"], _from_utc_text(row["created_at"]))
+                          bool(row["is_public"]), row["sort_order"], from_utc_text(row["created_at"]))
             for row in connection.execute("SELECT * FROM custom_service ORDER BY created_at, id").fetchall()
         )
         project_overrides = {
             row["project_id"]: ProjectOverride(
                 row["project_id"], *(_from_column(row, name) for name in PROJECT_OVERRIDE_FIELDS),
-                _from_utc_text(row["updated_at"]))
+                from_utc_text(row["updated_at"]))
             for row in connection.execute("SELECT * FROM project_override").fetchall()
         }
         custom_projects = tuple(
-            CustomProject(row["id"], row["name"], row["sort_order"], _from_utc_text(row["created_at"]))
+            CustomProject(row["id"], row["name"], row["sort_order"], from_utc_text(row["created_at"]))
             for row in connection.execute("SELECT * FROM custom_project ORDER BY created_at, id").fetchall()
         )
         return RegistryOverrides(service_overrides, custom_services, project_overrides, custom_projects,
-                                 self.load_status_page(), self.load_project_icon_versions())
+                                 self.load_status_page(), self.load_project_icon_versions(),
+                                 self.list_project_event_kinds())
 
     # ---- 덮어쓰기 (changes 값 None = 그 칸 지움, 전부 비면 행 삭제) ----
 
@@ -98,7 +92,7 @@ class OverrideStoreMixin:
             placeholders = ",".join("?" for _ in column_names)
             connection.execute(
                 f"INSERT OR REPLACE INTO {table_name} ({','.join(column_names)}) VALUES ({placeholders})",
-                (key, *(values[name] for name in field_names), _to_utc_text(now)))
+                (key, *(values[name] for name in field_names), to_utc_text(now)))
 
     # ---- 사용자 추가 서비스·프로젝트 ----
 
@@ -107,7 +101,7 @@ class OverrideStoreMixin:
             connection.execute(
                 "INSERT INTO custom_service VALUES (?,?,?,?,?,?,?,?)",
                 (service.id, service.project_id, service.name, service.external_url, service.status,
-                 int(service.is_public), service.sort_order, _to_utc_text(now)))
+                 int(service.is_public), service.sort_order, to_utc_text(now)))
 
     def delete_custom_service(self, service_id: str) -> bool:
         """사용자 추가 서비스 + 그 덮어쓰기 삭제 > 지운 행이 있었는지"""
@@ -119,7 +113,7 @@ class OverrideStoreMixin:
     def insert_custom_project(self, project: CustomProject, now: datetime) -> None:
         with self._connection() as connection:
             connection.execute("INSERT INTO custom_project VALUES (?,?,?,?)",
-                               (project.id, project.name, project.sort_order, _to_utc_text(now)))
+                               (project.id, project.name, project.sort_order, to_utc_text(now)))
 
     # ---- 상태 페이지 설정 (meta) ----
 

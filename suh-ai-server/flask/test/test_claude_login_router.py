@@ -143,6 +143,39 @@ def test_status_records_view_once_per_account_job(client):
     assert '027696' not in repr(record.call_args)
 
 
+def test_status_sends_view_project_event_once_without_code(client):
+    state = ISSUED_STATE | {'display_name': '회사'}
+    with patch(f'{CODE_SERVICE}.get_states', return_value=[state]), \
+            patch('router.claude_login_router.audit_service.record'), \
+            patch('router.claude_login_router.run_in_background', lambda task, thread_name: task()), \
+            patch('service.claude_login_event_notifier.send_project_event') as send:
+        client.get('/claude-login/code/status', headers={'X-Forwarded-For': '8.8.8.8', 'User-Agent': 'UA'})
+        client.get('/claude-login/code/status', headers={'X-Forwarded-For': '8.8.8.8', 'User-Agent': 'UA'})
+    assert send.call_count == 1
+    assert send.call_args.args[:3] == ('suh-ai', 'claude-code', 'Claude 코드 열람')
+    assert dict(send.call_args.kwargs['fields'])['계정'] == '회사'
+    assert send.call_args.kwargs['dedupe_key'] == 'claude-code:view:job1:8.8.8.8'
+    assert '027696' not in repr(send.call_args)
+    assert 'gmail.com' not in repr(send.call_args)
+
+
+def test_status_sends_view_alert_in_background_without_waiting(client):
+    background_tasks = []
+    with patch(f'{CODE_SERVICE}.get_states', return_value=[ISSUED_STATE]), \
+            patch('router.claude_login_router.audit_service.record'), \
+            patch('router.claude_login_router.run_in_background',
+                  lambda task, thread_name: background_tasks.append((task, thread_name))), \
+            patch('service.claude_login_event_notifier.send_project_event') as send:
+        response = client.get('/claude-login/code/status', headers={'X-Forwarded-For': '7.7.7.7'})
+        # 응답 시점에는 발송 전 (백그라운드에 1건 예약만)
+        assert response.get_json()['accounts'][0]['code'] == '027696'
+        assert send.call_count == 0
+        [(task, thread_name)] = background_tasks
+        task()
+    assert thread_name == 'claude-code-view-alert'
+    assert send.call_args.kwargs['dedupe_key'] == 'claude-code:view:job1:7.7.7.7'
+
+
 def test_screenshot_requires_account_id_and_404_when_missing(client, tmp_path):
     assert client.get('/claude-login/code/screenshot').status_code == 400
     with patch(f'{CODE_SERVICE}.SCREENSHOT_DIRECTORY', str(tmp_path)):

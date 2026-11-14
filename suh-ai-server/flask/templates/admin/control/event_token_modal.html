@@ -1,0 +1,25 @@
+{# 관제소 이벤트 토큰 발급 결과 창: control-manage-event-token.js가 토큰 채움 (닫으면 값 비움, 다시 볼 수 없음) #}
+<dialog id="control-event-token-modal" class="modal">
+  <div class="modal-box max-w-xl">
+    <h3 class="font-bold text-lg flex items-center gap-2">
+      <i data-lucide="key-round" class="size-5 text-primary"></i><span id="control-event-token-modal-title">이벤트 토큰</span>
+    </h3>
+    <div class="py-3 space-y-3 text-sm">
+      <div role="alert" class="alert alert-warning text-sm">
+        <i data-lucide="triangle-alert" class="size-4"></i>
+        <span>이 토큰은 지금만 볼 수 있어요. 앱 서버 환경변수에 넣고 창을 닫으세요.</span>
+      </div>
+      <div class="join w-full">
+        <input id="control-event-token-value" type="text" readonly autocomplete="off" spellcheck="false"
+               class="input input-sm join-item font-mono w-full" aria-label="발급한 이벤트 토큰">
+        <button id="control-event-token-copy" type="button" class="btn btn-sm join-item">
+          <i data-lucide="copy" class="size-4"></i>복사
+        </button>
+      </div>
+      <div id="control-event-token-previous" class="text-xs opacity-70"></div>
+    </div>
+    <div class="modal-action">
+      <form method="dialog"><button class="btn btn-sm">닫기</button></form>
+    </div>
+  </div>
+</dialog>

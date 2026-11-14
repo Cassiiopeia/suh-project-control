@@ -5,7 +5,7 @@ from unittest.mock import patch
 import pytest
 
 from service import claude_login_account_service as account_service
-from service import claude_login_secret_cipher as cipher
+from service import secret_cipher as cipher
 from service.claude_login_account_repository import ClaudeLoginAccount
 from service.claude_login_mail_client import MailClientError
 

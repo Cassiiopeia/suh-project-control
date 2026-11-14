@@ -1,0 +1,2 @@
+// 관제소 알림 허브 Java 클라이언트 (독립 프로젝트, 서버 Gradle과 분리)
+rootProject.name = 'suh-control-tower-client'

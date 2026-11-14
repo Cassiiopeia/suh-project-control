@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hmac
 import os
+from collections.abc import Mapping
 
 from config.control_tower_config import EVENT_TOKEN_ENV_PREFIX
 
@@ -38,10 +39,20 @@ def is_pull_token_configured(project_id: str, source_id: str) -> bool:
     return read_pull_token(project_id, source_id) is not None
 
 
-def is_presented_token_valid(env_name: str, presented: str) -> bool:
+def _read_env_tokens(env_name: str, environ: Mapping[str, str]) -> list[str]:
+    """현재·이전 토큰 중 값이 있는 것만"""
+    env_tokens = [environ.get(name) for name in (env_name, env_name + PREVIOUS_TOKEN_SUFFIX)]
+    return [token for token in env_tokens if token]
+
+
+def is_env_token_configured(env_name: str, environ: Mapping[str, str] = os.environ) -> bool:
+    """현재·이전 토큰 중 하나라도 있는지"""
+    return bool(_read_env_tokens(env_name, environ))
+
+
+def is_presented_token_valid(env_name: str, presented: str, environ: Mapping[str, str] = os.environ) -> bool:
     """받은 토큰 <-> 현재·이전 토큰 상수 시간 비교 (둘 다 없거나 받은 값이 비면 거부)"""
-    expected_tokens = [os.environ.get(name) for name in (env_name, env_name + PREVIOUS_TOKEN_SUFFIX)]
-    expected_tokens = [token for token in expected_tokens if token]
+    expected_tokens = _read_env_tokens(env_name, environ)
     if not expected_tokens or not presented:
         return False
     presented_bytes = presented.encode("utf-8")

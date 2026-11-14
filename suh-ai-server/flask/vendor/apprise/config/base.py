@@ -1,0 +1,1987 @@
+# BSD 2-Clause License
+#
+# Apprise - Push Notification Library.
+# Copyright (c) 2026, Chris Caron <lead2gold@gmail.com>
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# 1. Redistributions of source code must retain the above copyright notice,
+#    this list of conditions and the following disclaimer.
+#
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+#    this list of conditions and the following disclaimer in the documentation
+#    and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+from __future__ import annotations
+
+from collections import deque
+import os
+import re
+import time
+
+from .. import common, plugins
+from ..asset import AppriseAsset
+from ..exception import AppriseImproperlyConfigured, AppriseTemplateError
+from ..locale import AppriseLocale
+from ..logger import logging
+from ..manager_config import ConfigurationManager
+from ..manager_plugins import NotificationManager
+from ..tag import AppriseTag
+from ..template import NotifyTemplate
+from ..url import URL_TOKEN_ALIASES, URLBase
+from ..utils.cwe312 import cwe312_loggable
+from ..utils.parse import (
+    GET_SCHEMA_RE,
+    QSD_FULL_MODE_KEYS,
+    parse_bool,
+    parse_list,
+    parse_urls,
+)
+from ..utils.template import (
+    TemplatePlaceholderMap,
+    TemplateSchema,
+)
+from ..utils.time import zoneinfo
+from ..utils.yaml import (
+    YAML_DEPTH_MAX,
+    YAML_EXPANDED_MAX,
+    YAML_REAPPLY_SKIP,
+    dropped_template,
+    expanded_size,
+    template_in_schema,
+    template_references,
+    templated_tag,
+)
+
+# Test whether token is valid or not
+VALID_TOKEN = re.compile(r"(?P<token>[a-z0-9][a-z0-9_]+)", re.I)
+
+# Grant access to our Notification Manager Singleton
+N_MGR = NotificationManager()
+
+# Grant access to our Configuration Manager Singleton
+C_MGR = ConfigurationManager()
+
+
+class ConfigBase(URLBase):
+    """This is the base class for all supported configuration sources."""
+
+    # The Default Encoding to use if not otherwise detected
+    encoding = "utf-8"
+
+    # The default expected configuration format unless otherwise
+    # detected by the sub-modules
+    default_config_format = common.ConfigFormat.TEXT
+
+    # This is only set if the user overrides the config format on the URL
+    # this should always initialize itself as None
+    config_format = None
+
+    # Don't read any more of this amount of data into memory as there is no
+    # reason we should be reading in more. This is more of a safe guard then
+    # anything else. 128KB (131072B)
+    max_buffer_size = 131072
+
+    # The most group memberships tag groups may add across all of one
+    # configuration's services. Thousands of services that each join
+    # thousands of groups would otherwise take minutes and gigabytes.
+    max_group_memberships = 100000
+
+    # By default all configuration is not includable using the 'include'
+    # line found in configuration files.
+    allow_cross_includes = common.ContentIncludeMode.NEVER
+
+    # the config path manages the handling of relative include
+    config_path = os.getcwd()
+
+    def __init__(
+        self,
+        cache: bool | int = True,
+        recursion: int = 0,
+        insecure_includes: bool = False,
+        **kwargs: object,
+    ) -> None:
+        """Initialize behavior shared by all configuration plugins.
+
+        ``cache=True`` retains parsed services after the first read.
+        ``cache=False`` reads and parses the source whenever :meth:`services`
+        is called, and a non-negative integer retains results for that many
+        seconds. Reloading is especially significant for an ``http://`` or
+        ``https://`` source because it performs another network request.
+
+        ``recursion`` controls how many levels of ``include`` entries are
+        followed. Zero ignores all includes; one reads sources included by this
+        source; two also follows includes found in those child sources, and so
+        on. A low limit protects against unexpectedly large or circular trees.
+
+        Each configuration plugin declares an
+        :class:`~apprise.common.ContentIncludeMode`. ``ALWAYS`` sources may be
+        included normally, ``NEVER`` sources cannot be included, and ``STRICT``
+        sources may only be included by a compatible source type. For example,
+        a local ``file://`` configuration can include another local file, but
+        an ``http://`` configuration cannot include a local file.
+        ``insecure_includes=True`` relaxes the ``STRICT`` compatibility check,
+        effectively treating strict sources as always includable; it never
+        overrides ``NEVER``. This is useful when trusted in-memory content must
+        include a local file, but it should not be enabled for untrusted input.
+
+        Additional keyword arguments are handled by :class:`URLBase`. The
+        optional ``encoding`` and ``format`` values select the source encoding
+        and force ``text`` or ``yaml`` parsing respectively.
+        """
+
+        super().__init__(**kwargs)
+
+        # Tracks the time the content was last retrieved on.  This place a role
+        # for cases where we are not caching our response and are required to
+        # re-retrieve our settings.
+        self._cached_time = None
+
+        # Tracks previously loaded content for speed
+        self._cached_services = None
+
+        # Initialize our recursion value
+        self.recursion = recursion
+
+        # Initialize our insecure_includes flag
+        self.insecure_includes = insecure_includes
+
+        if "encoding" in kwargs:
+            # Store the encoding
+            self.encoding = kwargs.get("encoding")
+
+        fmt = kwargs.get("format")
+        if fmt:
+            try:
+                self.config_format = (
+                    fmt
+                    if isinstance(fmt, common.ConfigFormat)
+                    else common.ConfigFormat(fmt.lower())
+                )
+
+            except (AttributeError, ValueError):
+                err = f"An invalid config format ({fmt}) was specified."
+                self.logger.warning(err)
+                raise AppriseImproperlyConfigured(err) from None
+
+        # Set our cache flag; it can be True or a (positive) integer
+        try:
+            self.cache = cache if isinstance(cache, bool) else int(cache)
+            if self.cache < 0:
+                err = f"A negative cache value ({cache}) was specified."
+                self.logger.warning(err)
+                raise AppriseImproperlyConfigured(err)
+
+        except (ValueError, TypeError):
+            err = f"An invalid cache value ({cache}) was specified."
+            self.logger.warning(err)
+            raise AppriseImproperlyConfigured(err) from None
+
+        return
+
+    def services(
+        self,
+        asset: AppriseAsset | None = None,
+        **kwargs: object,
+    ) -> list[plugins.NotifyBase]:
+        """Read, parse, and return all services defined by this source.
+
+        A valid cache is returned immediately. Otherwise :meth:`read` obtains
+        the raw text, the selected text or YAML parser creates service plugins,
+        and any permitted ``include`` entries are loaded recursively. Included
+        services are appended to the direct services in the returned list.
+
+        ``asset`` overrides the source's asset for newly parsed services and is
+        propagated to included sources. A read failure or source with no
+        usable content returns an empty list. The result becomes this object's
+        mutable cache; methods such as ``len()``, iteration, indexing, and
+        :meth:`pop` all operate on that same list.
+        """
+
+        if not self.expired():
+            # We already have cached results to return; use them
+            return self._cached_services
+
+        # Our cached response object
+        self._cached_services = []
+
+        # read() causes the child class to do whatever it takes for the
+        # config plugin to load the data source and return unparsed content
+        # None is returned if there was an error or simply no data
+        content = self.read(**kwargs)
+        if not isinstance(content, str):
+            # Set the time our content was cached at
+            self._cached_time = time.time()
+
+            # Nothing more to do; return our empty cache list
+            return self._cached_services
+
+        # Our Configuration format uses a default if one wasn't one detected
+        # or enfored.
+        config_format = (
+            self.default_config_format
+            if self.config_format is None
+            else self.config_format
+        )
+
+        # Dynamically load our parse_ function based on our config format
+        fn = getattr(ConfigBase, f"config_parse_{config_format.value}")
+
+        # Initialize our asset object
+        asset = asset if isinstance(asset, AppriseAsset) else self.asset
+
+        # Execute our config parse function which always returns a tuple
+        # of our services and our configuration
+        services, configs = fn(content=content, asset=asset)
+
+        # Free memory
+        del content
+
+        # Add entry to our service list
+        self._cached_services.extend(services)
+
+        # Configuration files were detected; recursively populate them
+        # If we have been configured to do so
+        for url in configs:
+            if self.recursion > 0:
+                # Attempt to acquire the schema at the very least to allow
+                # our configuration based urls.
+                schema = GET_SCHEMA_RE.match(url)
+                if schema is None:
+                    # Plan B is to assume we're dealing with a file
+                    schema = "file"
+                    if not os.path.isabs(url):
+                        # We're dealing with a relative path; prepend
+                        # our current config path
+                        url = os.path.join(self.config_path, url)
+
+                    url = f"{schema}://{URLBase.quote(url)}"
+
+                else:
+                    # Ensure our schema is always in lower case
+                    schema = schema.group("schema").lower()
+
+                    # Some basic validation
+                    if schema not in C_MGR:
+                        ConfigBase.logger.error(
+                            f"Unsupported include schema {schema}."
+                        )
+                        continue
+
+                # CWE-312 (Secure Logging) Handling
+                loggable_url = cwe312_loggable(url, asset.secure_logging)
+
+                # Parse the included configuration URL into constructor args.
+                results = C_MGR[schema].parse_url(url)
+                if not results:
+                    # The included configuration URL could not be parsed.
+                    self.logger.error(
+                        f"Unparseable include URL {loggable_url}"
+                    )
+                    continue
+
+                # Handle cross inclusion based on allow_cross_includes rules
+                if (
+                    C_MGR[schema].allow_cross_includes
+                    == common.ContentIncludeMode.STRICT
+                    and schema not in self.schemas()
+                    and not self.insecure_includes
+                ) or C_MGR[
+                    schema
+                ].allow_cross_includes == common.ContentIncludeMode.NEVER:
+                    # Prevent the loading if insecure base protocols
+                    ConfigBase.logger.warning(
+                        f"Including {schema}:// based configuration is"
+                        f" prohibited. Ignoring URL {loggable_url}"
+                    )
+                    continue
+
+                # Prepare our Asset Object
+                results["asset"] = asset
+
+                # No cache is required because we're just lumping this in
+                # and associating it with the cache value we've already
+                # declared (prior to our recursion)
+                results["cache"] = False
+
+                # Recursion can never be parsed from the URL; we decrement
+                # it one level
+                results["recursion"] = self.recursion - 1
+
+                # Insecure Includes flag can never be parsed from the URL
+                results["insecure_includes"] = self.insecure_includes
+
+                try:
+                    # Attempt to create an instance of our plugin using the
+                    # parsed URL information
+                    cfg_plugin = C_MGR[results["schema"]](**results)
+
+                except Exception as e:
+                    # the arguments are invalid or can not be used.
+                    self.logger.error(
+                        f"Could not load include URL: {loggable_url}"
+                    )
+                    self.logger.debug(f"Loading Exception: {e!s}")
+                    continue
+
+                # Add services found in the included configuration.
+                self._cached_services.extend(cfg_plugin.services(asset=asset))
+
+            else:
+                # CWE-312 (Secure Logging) Handling
+                loggable_url = cwe312_loggable(url, asset.secure_logging)
+
+                self.logger.debug(
+                    "Recursion limit reached; ignoring Include URL: %s",
+                    loggable_url,
+                )
+
+        if self._cached_services:
+            self.logger.debug(
+                f"Loaded {len(self._cached_services)} entries from"
+                f" {self.url(privacy=asset.secure_logging)}"
+            )
+        else:
+            self.logger.warning(
+                "Failed to load Apprise configuration from"
+                f" {self.url(privacy=asset.secure_logging)}"
+            )
+
+        # Set the time our content was cached at
+        self._cached_time = time.time()
+
+        return self._cached_services
+
+    def read(self) -> str | None:
+        """This object should be implimented by the child classes."""
+        return None
+
+    def expired(self) -> bool:
+        """Simply returns True if the configuration should be considered as
+        expired or False if content should be retrieved."""
+        if isinstance(self._cached_services, list) and self.cache:
+            # We have enough reason to look further into our cached content
+            # and verify it has not expired.
+            if self.cache is True:
+                # we have not expired, return False
+                return False
+
+            # Verify our cache time to determine whether we will get our
+            # content again.
+            age_in_sec = time.time() - self._cached_time
+            if age_in_sec <= self.cache:
+                # We have not expired; return False
+                return False
+
+        # If we reach here our configuration should be considered
+        # missing and/or expired.
+        return True
+
+    @staticmethod
+    def __tag_group_lookup(group_tags: dict[str, set[str]]):
+        """Return a function that lists the groups a service's tags reach.
+
+        - A tag belongs to every group that lists it, then to every group
+          that lists one of those groups, and so on.
+        - Groups may list each other in a loop (a=b and b=a).
+        - Only plain tags count; a service tagged with a group's name does
+          not join the groups that list that group.
+        - It returns None once all services together have been added to
+          more than ``max_group_memberships`` groups.
+
+        Example: with ``a=x,b`` and ``b=y``, the tags ``{y}`` reach the
+        groups ``{a, b}``.
+        """
+        groups = {str(group) for group in group_tags}
+
+        # For each tag or group, the groups that list it
+        parents = {}
+        for group, members in group_tags.items():
+            for member in members:
+                parents.setdefault(member, set()).add(str(group))
+
+        def reach(tags):
+            # Walk up from each plain tag through the groups that list it;
+            # remembering where we have been stops us going round a loop
+            found = set()
+            pending = [tag for tag in tags if tag not in groups]
+            while pending:
+                for group in parents.get(pending.pop(), ()):
+                    if group not in found:
+                        found.add(group)
+                        pending.append(group)
+            return found
+
+        # A group that reaches no plain tag can never match a service
+        reached = reach(tag for tag in parents if tag not in groups)
+        for group in sorted(groups - reached):
+            ConfigBase.logger.warning(
+                "The group %s has no tags assigned to it", group
+            )
+
+        # Every group added to a service counts against one budget for the
+        # whole configuration
+        remaining = ConfigBase.max_group_memberships
+
+        def groups_for(tags):
+            # The groups these tags reach, or None once over budget
+            nonlocal remaining
+            found = reach(tags)
+            remaining -= len(found)
+            if remaining < 0:
+                ConfigBase.logger.error(
+                    "Tag groups add more than %d group memberships across"
+                    " this configuration's services.",
+                    ConfigBase.max_group_memberships,
+                )
+                return None
+            return found
+
+        return groups_for
+
+    @staticmethod
+    def parse_url(
+        url: str,
+        verify_host: bool = True,
+    ) -> dict[str, object] | None:
+        """Parses the URL and returns it broken apart into a dictionary.
+
+        This is very specific and customized for Apprise.
+
+        Args:
+            url (str): The URL you want to fully parse.
+            verify_host (:obj:`bool`, optional): a flag kept with the parsed
+                 URL which some child classes will later use to verify SSL
+                 keys (if SSL transactions take place).  Unless under very
+                 specific circumstances, it is strongly recomended that
+                 you leave this default value set to True.
+
+        Returns:
+            A dictionary is returned containing the URL fully parsed if
+            successful, otherwise None is returned.
+        """
+
+        results = URLBase.parse_url(url, verify_host=verify_host)
+
+        if not results:
+            # We're done; we failed to parse our url
+            return results
+
+        # Allow overriding the default config format
+        if "format" in results["qsd"]:
+            results["format"] = results["qsd"].get("format")
+            if results["format"] not in common.CONFIG_FORMATS:
+                URLBase.logger.warning(
+                    "Unsupported format specified {}".format(results["format"])
+                )
+                del results["format"]
+
+        # Defines the encoding of the payload
+        if "encoding" in results["qsd"]:
+            results["encoding"] = results["qsd"].get("encoding")
+
+        # Our cache value
+        if "cache" in results["qsd"]:
+            # First try to get it's integer value
+            try:
+                results["cache"] = int(results["qsd"]["cache"])
+
+            except (ValueError, TypeError):
+                # No problem, it just isn't an integer; now treat it as a bool
+                # instead:
+                results["cache"] = parse_bool(results["qsd"]["cache"])
+
+        return results
+
+    @staticmethod
+    def detect_config_format(
+        content: str,
+        **kwargs: object,
+    ) -> common.ConfigFormat | None:
+        """Takes the specified content and attempts to detect the format type.
+
+        The function returns the actual format type if detected, otherwise it
+        returns None
+        """
+
+        # Detect Format Logic:
+        #  - A pound/hashtag (#) is alawys a comment character so we skip over
+        #     lines matched here.
+        #  - Detection begins on the first non-comment and non blank line
+        #     matched.
+        #  - If we find a string followed by a colon, we know we're dealing
+        #     with a YAML file.
+        #  - If we find a string that starts with a URL, or our tag
+        #     definitions (accepting commas) followed by an equal sign we know
+        #     we're dealing with a TEXT format.
+
+        # Define what a valid line should look like.
+        # The tag group allows an optional "N:" priority prefix so that
+        # "2:endpoint=ntfy://..." is recognised as TEXT format.
+        # A tag group assignment such as "family=me,wife" carries tags instead
+        # of a URL on the right hand side; it is TEXT format as well.
+        # Leading whitespace is stripped before matching; matching it here
+        # is very slow on long runs of spaces.
+        valid_line_re = re.compile(
+            r"^(?P<line>([;#]+(?P<comment>.*))|"
+            r"(?P<text>((?P<tag>[ \t,a-z0-9_:-]*)=)?[a-z0-9]+://.*)|"
+            r"((?P<yaml>[a-z0-9]+):.*)|"
+            r"(?P<assign>[ \t,a-z0-9_:-]*=[a-z0-9, \t_-]+))?$",
+            re.I,
+        )
+
+        try:
+            # split our content up to read line by line
+            content = [line.rstrip("\r") for line in content.split("\n")]
+
+        except (AttributeError, TypeError):
+            # content was not expected string type
+            ConfigBase.logger.error("Invalid Apprise configuration specified.")
+            return None
+
+        # By default set our return value to None since we don't know
+        # what the format is yet
+        config_format = None
+
+        # iterate over each line of the file to attempt to detect it
+        # stop the moment a the type has been determined
+        for line, entry in enumerate(content, start=1):
+            result = valid_line_re.match(entry.lstrip())
+            if not result:
+                # Invalid syntax
+                ConfigBase.logger.error(
+                    "Undetectable Apprise configuration found "
+                    f"based on line {line}."
+                )
+                # Take an early exit
+                return None
+
+            # Attempt to detect configuration
+            if result.group("yaml"):
+                config_format = common.ConfigFormat.YAML
+                ConfigBase.logger.debug(
+                    f"Detected YAML configuration based on line {line}."
+                )
+                break
+
+            elif result.group("text") or result.group("assign"):
+                config_format = common.ConfigFormat.TEXT
+                ConfigBase.logger.debug(
+                    f"Detected TEXT configuration based on line {line}."
+                )
+                break
+
+            # If we reach here, we have a comment entry
+            # Adjust default format to TEXT
+            config_format = common.ConfigFormat.TEXT
+
+        return config_format
+
+    @staticmethod
+    def config_parse(
+        content: str,
+        asset: AppriseAsset | None = None,
+        config_format: str | common.ConfigFormat | None = None,
+        **kwargs: object,
+    ) -> tuple[list[object], list[str]]:
+        """Takes the specified config content and loads it based on the
+        specified config_format.
+
+        If a format isn't specified, then it is auto detected.
+        """
+
+        if config_format is None:
+            # Detect the format
+            config_format = ConfigBase.detect_config_format(content)
+
+            if not config_format:
+                # We couldn't detect configuration
+                ConfigBase.logger.error("Could not detect configuration")
+                return ([], [])
+
+        try:
+            config_format = (
+                config_format
+                if isinstance(config_format, common.ConfigFormat)
+                else common.ConfigFormat(config_format.lower())
+            )
+
+        except (AttributeError, ValueError):
+            ConfigBase.logger.error(
+                f"An invalid configuration format ({config_format}) was"
+                " specified"
+            )
+            return ([], [])
+
+        # Dynamically load our parse_ function based on our config format
+        fn = getattr(ConfigBase, f"config_parse_{config_format.value}")
+
+        # Execute our config parse function which always returns a list
+        return fn(content=content, asset=asset)
+
+    @staticmethod
+    def config_parse_text(
+        content: str,
+        asset: AppriseAsset | None = None,
+    ) -> tuple[list[object], list[str]]:
+        """Parse the specified content as though it were a simple text file
+        only containing a list of URLs.
+
+        Return a tuple that looks like (services, configs) where:
+          - services contains a list of loaded notification plugins
+          - configs contains a list of additional configuration files
+            referenced.
+
+        You may also optionally associate an asset with the notification.
+
+        The file syntax is:
+
+            #
+            # pound/hashtag allow for line comments
+            #
+            # One or more tags can be idenified using comma's (,) to separate
+            # them.
+            <Tag(s)>=<URL>
+
+            # Or you can use this format (no tags associated)
+            <URL>
+
+            # you can also use the keyword 'include' and identify a
+            # configuration location (like this file) which will be included
+            # as additional configuration entries when loaded.
+            include <ConfigURL>
+
+            # Assign tag contents to a group identifier
+            <Group(s)>=<Tag(s)>
+        """
+        # A list of loaded Notification Services
+        services = []
+
+        # A list of additional configuration files referenced using
+        # the include keyword
+        configs = []
+
+        # Track all of the tags we want to assign later on
+        group_tags = {}
+
+        # Track our entries to preload
+        preloaded = []
+
+        # Prepare our Asset Object
+        asset = asset if isinstance(asset, AppriseAsset) else AppriseAsset()
+
+        # Define what a valid line should look like.
+        # The tags group allows an optional leading "N:" priority prefix so
+        # that entries like "2:endpoint=ntfy://..." are parsed correctly.
+        # Each line is stripped first, and tag lists are words separated by
+        # spaces or tabs; letting whitespace match in more than one place is
+        # very slow on long runs of spaces.
+        valid_line_re = re.compile(
+            r"^(?P<line>([;#]+(?P<comment>.*))|"
+            r"((?P<tags>[a-z0-9,_:-]+([ \t]+[a-z0-9,_:-]+)*)\s*=|=)?\s*"
+            r"((?P<url>[a-z0-9]{1,32}://.*)|"
+            r"(?P<assign>[a-z0-9,_-]+([ \t]+[a-z0-9,_-]+)*))|"
+            r"include\s+(?P<config>.+))?$",
+            re.I,
+        )
+
+        try:
+            # split our content up to read line by line
+            content = [line.rstrip("\r") for line in content.split("\n")]
+
+        except (AttributeError, TypeError):
+            # content was not expected string type
+            ConfigBase.logger.error(
+                "Invalid Apprise TEXT based configuration specified."
+            )
+            return ([], [])
+
+        for line, entry in enumerate(content, start=1):
+            result = valid_line_re.match(entry.strip())
+            if not result:
+                # Invalid syntax
+                ConfigBase.logger.error(
+                    "Invalid Apprise TEXT configuration format found "
+                    f"{entry} on line {line}."
+                )
+
+                # Assume this is a file we shouldn't be parsing. It's owner
+                # can read the error printed to screen and take action
+                # otherwise.
+                return ([], [])
+
+            # Retrieve our line
+            url, assign, config = (
+                result.group("url"),
+                result.group("assign"),
+                result.group("config"),
+            )
+
+            if not (url or config or assign):
+                # Comment/empty line; do nothing
+                continue
+
+            if config:
+                # CWE-312 (Secure Logging) Handling
+                loggable_url = cwe312_loggable(config, asset.secure_logging)
+
+                ConfigBase.logger.debug(f"Include URL: {loggable_url}")
+
+                # Store our include line
+                configs.append(config.strip())
+                continue
+
+            # CWE-312 (Secure Logging) Handling
+            loggable_url = cwe312_loggable(url, asset.secure_logging)
+
+            if assign:
+                groups = set(parse_list(result.group("tags"), cast=str))
+                if not groups:
+                    # no tags were assigned
+                    ConfigBase.logger.warning(
+                        "Unparseable tag assignment - no group(s) "
+                        f"on line {line}"
+                    )
+                    continue
+
+                # Get our tags
+                tags = set(parse_list(assign, cast=str))
+                if not tags:
+                    # no tags were assigned
+                    ConfigBase.logger.warning(
+                        "Unparseable tag assignment - no tag(s) to assign "
+                        f"on line {line}"
+                    )
+                    continue
+
+                # Update our tag group map
+                for tag_group in groups:
+                    if tag_group not in group_tags:
+                        group_tags[tag_group] = set()
+
+                    # ensure our tag group is never included in the assignment
+                    group_tags[tag_group] |= tags - {tag_group}
+                continue
+
+            # Acquire our url tokens
+            results = plugins.url_to_dict(
+                url, secure_logging=asset.secure_logging
+            )
+            if results is None:
+                # url_to_dict() already logged an error with the URL;
+                # repeat at debug level with line number for context.
+                ConfigBase.logger.debug(
+                    f"Unparseable URL {loggable_url} on line {line}."
+                )
+                continue
+
+            # Build a list of tags to associate with the newly added
+            # notifications if any were set
+            results["tag"] = set(parse_list(result.group("tags"), cast=str))
+
+            # A retry count on a service tag (e.g. "alerts:3=slack://...") is
+            # not valid here: per-service retry belongs on the URL (?retry=N)
+            # and call-time retry overrides belong on the notify() filter.
+            if any(
+                AppriseTag.parse(t).retry is not None for t in results["tag"]
+            ):
+                ConfigBase.logger.warning(
+                    "You can not specify a retry count as part of a service"
+                    f" tag on line {line}; use ?retry=N in the URL instead."
+                )
+                continue
+
+            # Set our Asset Object
+            results["asset"] = asset
+
+            # Store our preloaded entries
+            preloaded.append(
+                {
+                    "results": results,
+                    "line": line,
+                    "loggable_url": loggable_url,
+                }
+            )
+
+        #
+        # Tag Groups
+        # - Find which groups (and groups of groups) each service is in
+        #
+        groups_for = ConfigBase.__tag_group_lookup(group_tags)
+
+        #
+        # URL Processing
+        #
+        for entry in preloaded:
+            # Point to our results entry for easier reference below
+            results = entry["results"]
+
+            #
+            # Apply our tag groups if they're defined
+            #
+            found = groups_for(results["tag"])
+            if found is None:
+                # Too many group memberships; refuse the configuration
+                return ([], [])
+            results["tag"] |= found
+
+            try:
+                # Attempt to create an instance of our plugin using the
+                # parsed URL information
+                plugin = N_MGR[results["schema"]](**results)
+
+                # Create log entry of loaded URL
+                ConfigBase.logger.debug(
+                    "Loaded URL: %s",
+                    plugin.url(privacy=results["asset"].secure_logging),
+                )
+
+            except Exception as e:
+                # the arguments are invalid or can not be used.
+                ConfigBase.logger.error(
+                    "Could not load URL {} on line {}.".format(
+                        entry["loggable_url"], entry["line"]
+                    )
+                )
+                ConfigBase.logger.debug(f"Loading Exception: {e!s}")
+                continue
+
+            # if we reach here, we successfully loaded our data
+            services.append(plugin)
+
+        # Return what was loaded
+        return (services, configs)
+
+    @staticmethod
+    def config_parse_yaml(
+        content: str,
+        asset: AppriseAsset | None = None,
+    ) -> tuple[list[object], list[str]]:
+        """Parse the specified content as though it were a yaml file
+        specifically formatted for Apprise.
+
+        Return a tuple that looks like (services, configs) where:
+          - services contains a list of loaded notification plugins
+          - configs contains a list of additional configuration files
+            referenced.
+
+        You may optionally associate an asset with the notification.
+        """
+
+        try:
+            # PyYAML is only loaded once a YAML configuration is parsed.
+            import yaml
+
+        except ImportError:
+            # Only possible when PyYAML was removed from the install.
+            ConfigBase.logger.error(
+                "YAML configuration requires the PyYAML package."
+            )
+            return ([], [])
+
+        # A list of loaded Notification Services
+        services = []
+
+        # A list of additional configuration files referenced using
+        # the include keyword
+        configs = []
+
+        # Group Assignments
+        group_tags = {}
+
+        # Track our entries to preload
+        preloaded = []
+
+        try:
+            # Load our data safely. PyYAML keeps the last value when a mapping
+            # repeats a key, matching Apprise's long-standing behavior.
+            result = yaml.load(content, Loader=yaml.SafeLoader)
+
+        except (
+            AttributeError,
+            # PyYAML runs out of stack on very deeply nested lists or maps
+            RecursionError,
+            yaml.parser.ParserError,
+            yaml.error.MarkedYAMLError,
+        ) as e:
+            # Invalid content
+            ConfigBase.logger.error("Invalid Apprise YAML data specified.")
+            ConfigBase.logger.debug(f"YAML Exception:{os.linesep}{e}")
+            return ([], [])
+
+        # Aliases (*name) let a few lines describe a huge, deep or looping
+        # structure; refuse those before anything walks through them
+        measured = expanded_size(result)
+        if measured is None:
+            ConfigBase.logger.error(
+                "Looping structure found in Apprise YAML configuration."
+            )
+            return ([], [])
+
+        size, depth = measured
+        if size > YAML_EXPANDED_MAX:
+            ConfigBase.logger.error(
+                "Apprise YAML configuration expands to more than %d values"
+                " once its aliases are followed.",
+                YAML_EXPANDED_MAX,
+            )
+            return ([], [])
+
+        if depth > YAML_DEPTH_MAX:
+            ConfigBase.logger.error(
+                "Apprise YAML configuration is nested more than %d levels"
+                " deep once its aliases are followed.",
+                YAML_DEPTH_MAX,
+            )
+            return ([], [])
+
+        # The host decides whether this configuration may use templates.
+        asset = asset if isinstance(asset, AppriseAsset) else AppriseAsset()
+        ConfigBase.logger.debug(
+            "Apprise YAML template variables are {}.".format(
+                "enabled" if asset.allow_templates else "disabled"
+            )
+        )
+
+        if not isinstance(result, dict):
+            # Invalid content
+            ConfigBase.logger.error(
+                "Invalid Apprise YAML based configuration specified."
+            )
+            return ([], [])
+
+        # YAML Version
+        version = result.get("version", 1)
+        if version != 1:
+            # Invalid syntax
+            ConfigBase.logger.error(
+                f"Invalid Apprise YAML version specified {version}."
+            )
+            return ([], [])
+
+        #
+        # global asset object
+        #
+        #
+        # template root directive
+        #
+        # Only declared variables are replaced; other ${...} text is literal.
+        #
+        template_schema = TemplateSchema()
+        placeholders = None
+
+        entries = None
+        if asset.allow_templates:
+            # Disabled templates leave the section and markers untouched.
+            entries = result.get("template", None)
+
+        if entries is not None:
+            try:
+                template_schema = TemplateSchema.parse(entries)
+
+            except AppriseTemplateError as e:
+                ConfigBase.logger.error(
+                    f"Invalid Apprise YAML template section. {e}"
+                )
+                return ([], [])
+
+            if template_schema:
+                try:
+                    placeholders = TemplatePlaceholderMap(
+                        template_schema, content
+                    )
+
+                except AppriseTemplateError as e:
+                    ConfigBase.logger.error(str(e))
+                    return ([], [])
+
+        # Prepare our default timezone
+        default_timezone = asset.tzinfo
+
+        # Acquire our asset tokens
+        tokens = result.get("asset", None)
+        if tokens and isinstance(tokens, dict):
+            raw_tz = tokens.get("timezone", tokens.get("tz"))
+            if isinstance(raw_tz, str):
+                default_timezone = zoneinfo(re.sub(r"[^\w/-]+", "", raw_tz))
+                if not default_timezone:
+                    ConfigBase.logger.warning(
+                        'Ignored invalid timezone "%s"', raw_tz
+                    )
+                    default_timezone = asset.tzinfo
+                else:
+                    asset._tzinfo = default_timezone
+
+            elif raw_tz is not None:
+                ConfigBase.logger.warning(
+                    'Ignored invalid timezone "%r"', raw_tz
+                )
+
+            # A missing value leaves the language of the asset we were
+            # given alone; it is not reset here.
+            raw_lang = tokens.get("language", tokens.get("lang"))
+            if isinstance(raw_lang, str) and raw_lang.strip():
+                language = AppriseLocale.normalize_language(raw_lang)
+                if not language:
+                    ConfigBase.logger.warning(
+                        'Ignored invalid language "%s"', raw_lang
+                    )
+
+                else:
+                    asset._language = language
+
+            elif raw_lang is not None:
+                # %r quotes a string on its own, so no quotes are added
+                # around it here.
+                ConfigBase.logger.warning(
+                    "Ignored invalid language %r", raw_lang
+                )
+
+            # Iterate over remaining tokens
+            for k, v in tokens.items():
+                if k in ("lang", "language", "timezone", "tz"):
+                    # These validated settings were already applied above.
+                    continue
+
+                if k.startswith("_") or k.endswith("_"):
+                    # Entries are considered reserved if they start or end
+                    # with an underscore
+                    ConfigBase.logger.warning(f'Ignored asset key "{k}".')
+                    continue
+
+                if not (
+                    hasattr(asset, k)
+                    and isinstance(getattr(asset, k), (bool, str))
+                ):
+                    # We can't set a function or non-string set value
+                    ConfigBase.logger.warning(f'Invalid asset key "{k}".')
+                    continue
+
+                if v is None:
+                    # Convert to an empty string
+                    v = ""
+
+                if isinstance(v, (bool, str)) and isinstance(
+                    getattr(asset, k), bool
+                ):
+                    # If the object in the Asset is a boolean, then
+                    # we want to convert the specified string to
+                    # match that.
+                    setattr(asset, k, parse_bool(v))
+
+                elif isinstance(v, str):
+                    # Set our asset object with the new value
+                    setattr(asset, k, v.strip())
+
+                else:
+                    # we must set strings with a string
+                    ConfigBase.logger.warning(f'Invalid asset value to "{k}".')
+                    continue
+        #
+        # global tag root directive
+        #
+        global_tags = set()
+
+        tags = result.get("tag", result.get("tags", None))
+        if tags and isinstance(tags, (list, tuple, str)):
+            # Store any preset tags
+            global_tags = set(parse_list(tags, cast=str))
+
+        #
+        # groups root directive
+        #
+        groups = result.get("groups", None)
+        if isinstance(groups, dict):
+            #
+            # Dictionary
+            #
+            for groups_, tags in groups.items():
+                for group in parse_list(groups_, cast=str):
+                    if isinstance(tags, (list, tuple)):
+                        tags_ = set()
+                        for e in tags:
+                            if isinstance(e, dict):
+                                tags_ |= set(e.keys())
+                            else:
+                                tags_ |= set(parse_list(e, cast=str))
+
+                        # Final assignment
+                        tags = tags_
+
+                    else:
+                        tags = set(parse_list(tags, cast=str))
+
+                    if group not in group_tags:
+                        group_tags[group] = tags
+
+                    else:
+                        group_tags[group] |= tags
+
+        elif isinstance(groups, (list, tuple)):
+            #
+            # List of Dictionaries
+            #
+
+            # Iterate over each group defined and store it
+            for no, entry in enumerate(groups):
+                if not isinstance(entry, dict):
+                    ConfigBase.logger.warning(
+                        f"No assignment for group {entry}, entry #{no + 1}"
+                    )
+                    continue
+
+                for groups_, tags in entry.items():
+                    for group in parse_list(groups_, cast=str):
+                        if isinstance(tags, (list, tuple)):
+                            tags_ = set()
+                            for e in tags:
+                                if isinstance(e, dict):
+                                    tags_ |= set(e.keys())
+                                else:
+                                    tags_ |= set(parse_list(e, cast=str))
+
+                            # Final assignment
+                            tags = tags_
+
+                        else:
+                            tags = set(parse_list(tags, cast=str))
+
+                        if group not in group_tags:
+                            group_tags[group] = tags
+
+                        else:
+                            group_tags[group] |= tags
+
+        # include root directive
+        #
+        includes = result.get("include", None)
+        if isinstance(includes, str):
+            # Support a single inline string or multiple ones separated by a
+            # comma and/or space
+            includes = parse_urls(includes)
+
+        elif not isinstance(includes, (list, tuple)):
+            # Not a problem; we simply have no includes
+            includes = []
+
+        # Iterate over each config URL
+        for _no, url in enumerate(includes):
+            if isinstance(url, str):
+                # Support a single inline string or multiple ones separated by
+                # a comma and/or space
+                configs.extend(parse_urls(url))
+
+            elif isinstance(url, dict):
+                # Store the url and ignore arguments associated
+                configs.extend(u for u in url)
+
+        #
+        # urls root directive
+        #
+        urls = result.get("urls", None)
+        if not isinstance(urls, (list, tuple)):
+            # Not a problem; we simply have no urls
+            urls = []
+
+        # Explaining declaration mistakes requires walking every URL value.
+        # Keep that optional work behind DEBUG even though an unused
+        # declaration is emitted as a warning within a debugging session.
+        explain = asset.allow_templates and ConfigBase.logger.isEnabledFor(
+            logging.DEBUG
+        )
+        if explain:
+            # This is guidance only: undeclared ${NAME} text remains literal,
+            # and unused declarations are valid. Inspect the already-parsed
+            # URL values so helpful diagnostics do not require a custom YAML
+            # loader or a second parse solely to recover source locations.
+            referenced = template_references(urls)
+            declared = set(template_schema.names)
+
+            for name in sorted(referenced - declared):
+                ConfigBase.logger.debug(
+                    "Template entry '{}' is not defined in the template"
+                    " section; it is kept as written.".format(name)
+                )
+
+            for name in sorted(declared - referenced):
+                ConfigBase.logger.warning(
+                    "Template entry '{}' is defined but not referenced by a"
+                    " service entry.".format(name)
+                )
+
+        # Iterate over each URL
+        for no, url in enumerate(urls):
+            # Our results object is what we use to instantiate our object if
+            # we can. Reset it to None on each iteration
+            results = []
+
+            # CWE-312 (Secure Logging) Handling
+            loggable_url = cwe312_loggable(url, asset.secure_logging)
+
+            if isinstance(url, str):
+                # We're just a simple URL string...
+                if placeholders and template_in_schema(
+                    url, template_schema.names
+                ):
+                    # The schema selects the temporary plugin parser before a
+                    # template value exists. Allowing it to vary would make the
+                    # same configuration change type at notification time.
+                    ConfigBase.logger.error(
+                        "Template variables are not permitted in URL schemas"
+                        " (YAML entry #{})".format(no + 1)
+                    )
+                    continue
+
+                if placeholders:
+                    url = placeholders.encode_url(url)
+
+                schema = GET_SCHEMA_RE.match(url)
+                if schema is None:
+                    # Log invalid entries so that maintainer of config
+                    # config file at least has something to take action
+                    # with.
+                    ConfigBase.logger.warning(
+                        f"Invalid URL {loggable_url}, entry #{no + 1}"
+                    )
+                    continue
+
+                # We found a valid schema worthy of tracking; store it's
+                # details:
+                results_ = plugins.url_to_dict(
+                    url, secure_logging=asset.secure_logging
+                )
+                if results_ is None:
+                    if placeholders and placeholders.used(url):
+                        # Some services must validate this field while parsing.
+                        ConfigBase.logger.error(
+                            "A template variable can not be used at this"
+                            " position for {}://, entry #{}".format(
+                                schema.group("schema").lower(), no + 1
+                            )
+                        )
+                        continue
+
+                    # url_to_dict() already logged an error with the URL;
+                    # repeat at debug level with entry number for context.
+                    ConfigBase.logger.debug(
+                        f"Unparseable URL {loggable_url}, entry #{no + 1}"
+                    )
+                    continue
+
+                # Parsing can succeed while silently dropping a marker.
+                offender = dropped_template(url, results_, placeholders)
+                if offender:
+                    # Do not keep a partially parsed template entry.
+                    ConfigBase.logger.error(
+                        "Template variable '{}' can not be used at this"
+                        " position for {}://, entry #{}".format(
+                            offender, schema.group("schema").lower(), no + 1
+                        )
+                    )
+                    continue
+
+                # A plain URL string has no settings written under it.
+                results.append((results_, {}, {}))
+
+            elif isinstance(url, dict):
+                # We are a url string with additional unescaped options. In
+                # this case we want to iterate over all of our options so we
+                # can at least tell the end user what entries were ignored
+                # due to errors
+
+                it = iter(url.items())
+
+                # Track the URL to-load
+                url_ = None
+
+                # Keep the original key for matching sibling YAML settings.
+                url_key = None
+
+                # Track last acquired schema
+                schema = None
+
+                # Distinguish a forbidden variable schema from an ordinary
+                # mapping that simply contains no recognizable URL key.
+                invalid_schema = False
+
+                for key, tokens_ in it:
+                    if (
+                        placeholders
+                        and isinstance(key, str)
+                        and "://" in key
+                        and template_in_schema(key, template_schema.names)
+                    ):
+                        # Mapping-style URL keys obey the same fixed-schema
+                        # rule as plain URL strings. The quick separator check
+                        # only distinguishes URL-shaped keys from literal YAML
+                        # setting names. template_in_schema() locates the first
+                        # separator itself and rejects a declared marker only
+                        # when that marker occurs before it, so a later :// in
+                        # the path cannot bypass this check.
+                        ConfigBase.logger.error(
+                            "Template variables are not permitted in URL"
+                            " schemas (YAML entry #{})".format(no + 1)
+                        )
+                        invalid_schema = True
+                        break
+
+                    encoded = (
+                        placeholders.encode_url(key) if placeholders else key
+                    )
+
+                    if not isinstance(encoded, str):
+                        # Non-text sibling settings cannot identify a URL.
+                        continue
+
+                    # Test our schema
+                    schema_ = GET_SCHEMA_RE.match(encoded)
+                    if schema_ is None:
+                        # Non-schema key -- may be a sibling token sitting
+                        # before the URL key in the YAML mapping.  Sibling
+                        # tokens are collected later via url.items(), so
+                        # nothing is "ignored" here.  Skip silently.
+                        continue
+
+                    # Store our schema
+                    schema = schema_.group("schema").lower()
+
+                    # Store our URL and Schema Regex
+                    url_ = encoded
+                    url_key = key
+
+                    # Update our token assignment
+                    tokens = tokens_
+
+                    # We're done
+                    break
+
+                if invalid_schema:
+                    continue
+
+                if url_ is None:
+                    # the loop above failed to match anything
+                    ConfigBase.logger.warning(
+                        f"Unsupported URL, entry #{no + 1}"
+                    )
+                    continue
+
+                # Read sibling settings from the whole mapping, not just the
+                # items that follow the URL key. YAML mapping order must not
+                # affect the result.
+                #
+                # Settings are applied from highest to lowest priority:
+                #   1. Child settings nested below the URL
+                #   2. Sibling settings beside the URL
+                #   3. Values parsed from the URL and its query string
+                #
+                # This lets both of the following YAML forms work:
+                #
+                #   # sibling form (same indentation)
+                #   - mailtos://_:
+                #     smtp: smtp.example.com
+                #     from: no-reply@example.com
+                #
+                #   # child form (indented one level deeper)
+                #   - mailtos://_:
+                #       smtp: smtp.example.com
+                #       from: no-reply@example.com
+                sibling_tokens = {
+                    k: v
+                    for k, v in url.items()
+                    if k not in (url_key, "schema")
+                }
+                if placeholders:
+                    # Template YAML values, but keep setting names literal.
+                    sibling_tokens = placeholders.encode_obj(sibling_tokens)
+                    tokens = placeholders.encode_obj(tokens)
+
+                results_ = plugins.url_to_dict(
+                    url_, secure_logging=asset.secure_logging
+                )
+                if results_ is None:
+                    if placeholders and placeholders.used(url_):
+                        # Report placeholders rejected during URL parsing.
+                        ConfigBase.logger.error(
+                            "A template variable can not be used at this"
+                            " position for {}://, entry #{}".format(
+                                schema, no + 1
+                            )
+                        )
+                        continue
+
+                    # Setup dictionary
+                    results_ = {
+                        # Minimum requirements
+                        "schema": schema,
+                    }
+
+                else:
+                    # Check the parsed URL before applying YAML settings.
+                    offender = dropped_template(url_, results_, placeholders)
+                    if offender:
+                        # Settings underneath cannot repair a lost URL marker.
+                        ConfigBase.logger.error(
+                            "Template variable '{}' can not be used at this"
+                            " position for {}://, entry #{}".format(
+                                offender, schema, no + 1
+                            )
+                        )
+                        continue
+
+                if isinstance(tokens, (list, tuple, set)):
+                    # Keep YAML names before aliases are mapped (smtp to
+                    # smtp_host). Name and from can both feed from_addr,
+                    # so a listing must show which name was written.
+                    written_ = dict(sibling_tokens) if sibling_tokens else {}
+
+                    # Normalize shared sibling settings once before expanding
+                    # the list. Each entry then starts with the same mapped
+                    # values, such as smtp becoming smtp_host.
+                    if sibling_tokens and schema in N_MGR:
+                        sibling_tokens = ConfigBase._special_token_handler(
+                            schema, sibling_tokens
+                        )
+
+                    # populate and/or override any results populated
+                    # by parse_url()
+                    for entries in tokens:
+                        # Copy ourselves a template of our parsed URL
+                        # as a base to work with
+                        r = results_.copy()
+
+                        # Apply sibling tokens as a shared base before
+                        # per-entry tokens (sibling < per-entry)
+                        if sibling_tokens:
+                            r.update(sibling_tokens)
+
+                        # We are a url string with additional options
+                        if isinstance(entries, dict):
+                            # Tags you just can't over-ride
+                            if "schema" in entries:
+                                del entries["schema"]
+
+                            # Add this entry's written names over shared ones.
+                            written_entry = dict(written_)
+                            written_entry.update(entries)
+
+                            # support our special tokens
+                            if schema in N_MGR:
+                                entries = ConfigBase._special_token_handler(
+                                    schema, entries
+                                )
+
+                            # Extend our dictionary with our new entries
+                            r.update(entries)
+
+                            # Keep every YAML contribution together so later
+                            # URL post-processing cannot overwrite it. Child
+                            # values are added last and therefore keep priority
+                            # over sibling values.
+                            yaml_ = {}
+                            if sibling_tokens:
+                                yaml_.update(sibling_tokens)
+                            yaml_.update(entries)
+
+                            # add our results to our global set
+                            results.append((r, yaml_, written_entry))
+
+                elif isinstance(tokens, dict):
+                    # The URL key selects the schema. A child setting must not
+                    # replace it, matching the list-expansion path above.
+                    tokens.pop("schema", None)
+
+                    # Record the names as written before any mapping.
+                    written_ = dict(sibling_tokens) if sibling_tokens else {}
+                    written_.update(tokens)
+
+                    # Normalize siblings and children separately before they
+                    # are merged. Otherwise a sibling alias such as smtp could
+                    # map onto smtp_host and replace an explicit child value.
+                    if schema in N_MGR:
+                        if sibling_tokens:
+                            sibling_tokens = ConfigBase._special_token_handler(
+                                schema, sibling_tokens
+                            )
+
+                        tokens = ConfigBase._special_token_handler(
+                            schema, tokens
+                        )
+
+                    # Merge from lowest to highest YAML priority: siblings
+                    # first, then the settings nested below the URL.
+                    if sibling_tokens:
+                        merged = sibling_tokens.copy()
+                        merged.update(tokens)
+                        tokens = merged
+
+                    # Copy ourselves a template of our parsed URL as
+                    # a base to work with
+                    r = results_.copy()
+
+                    # add our result set
+                    r.update(tokens)
+
+                    # add our results to our global set
+                    results.append((r, dict(tokens), written_))
+
+                elif sibling_tokens:
+                    # A URL with a null child can still receive settings from
+                    # sibling keys. Preserve their written names before aliases
+                    # and plugin-specific names are normalized.
+                    written_ = dict(sibling_tokens)
+                    if schema in N_MGR:
+                        sibling_tokens = ConfigBase._special_token_handler(
+                            schema, sibling_tokens
+                        )
+
+                    # Copy ourselves a template of our parsed URL as
+                    # a base to work with
+                    r = results_.copy()
+
+                    # Apply the sibling token overrides
+                    r.update(sibling_tokens)
+
+                    # add our results to our global set
+                    results.append((r, dict(sibling_tokens), written_))
+
+                else:
+                    # add our results to our global set
+                    results.append((results_, {}, {}))
+
+            else:
+                # Unsupported
+                ConfigBase.logger.warning(
+                    f"Unsupported Apprise YAML entry #{no + 1}"
+                )
+                continue
+
+            # Track our entries
+            entry = 0
+
+            # Prepare our results for post-processing
+            results = deque(results)
+
+            while len(results):
+                # Increment our entry count
+                entry += 1
+
+                # Grab our first item
+                results_, yaml_tokens_, written_tokens_ = results.popleft()
+
+                if results_["schema"] not in N_MGR:
+                    # the arguments are invalid or can not be used.
+                    ConfigBase.logger.warning(
+                        "An invalid Apprise schema ({}) in YAML configuration "
+                        "entry #{}, item #{}".format(
+                            results_["schema"], no + 1, entry
+                        )
+                    )
+                    continue
+
+                # tag is a special keyword that is managed by Apprise object.
+                # The below ensures our tags are set correctly.
+                #
+                # Only a tags key written in the YAML is an alias of tag.  A
+                # ?tags= found on the URL belongs to the plugin that read it.
+                yaml_tags = "tags" in yaml_tokens_
+                if "tag" in results_:
+                    # Tidy our list up
+                    results_["tag"] = (
+                        set(parse_list(results_["tag"], cast=str))
+                        | global_tags
+                    )
+                    if yaml_tags:
+                        ConfigBase.logger.warning(
+                            (
+                                "URL #{}: {} contains both 'tag' and 'tags' "
+                                "keyword"
+                            ).format(no + 1, url)
+                        )
+                        del results_["tags"]
+
+                elif yaml_tags:
+                    # Tidy our list up
+                    results_["tag"] = (
+                        set(parse_list(results_["tags"], cast=str))
+                        | global_tags
+                    )
+                    # Should not carry forward
+                    del results_["tags"]
+
+                else:
+                    # Just use the global settings
+                    results_["tag"] = global_tags
+
+                if templated_tag(results_, placeholders):
+                    # Template values must not choose notification recipients.
+                    ConfigBase.logger.error(
+                        "Template variables are not permitted in tag/tags"
+                        " (YAML entry #{}, item #{})".format(no + 1, entry)
+                    )
+                    continue
+
+                # A retry count on a service tag is not valid here: per-service
+                # retry belongs on the URL (retry: key) and call-time retry
+                # overrides belong on the notify() filter.
+                _retry_tags = [
+                    t
+                    for t in results_["tag"]
+                    if AppriseTag.parse(t).retry is not None
+                ]
+                if _retry_tags:
+                    ConfigBase.logger.warning(
+                        "You can not specify a retry count as part of a"
+                        " service tag (YAML entry #{}, item #{}); use the"
+                        " 'retry:' key instead.".format(no + 1, entry)
+                    )
+                    continue
+
+                for key in list(results_.keys()):
+                    # Strip out any tokens we know that we can't accept and
+                    # warn the user
+                    match = (
+                        VALID_TOKEN.match(key)
+                        if isinstance(key, str)
+                        else None
+                    )
+                    if not match:
+                        ConfigBase.logger.warning(
+                            f"Ignoring invalid token ({key}) found in YAML "
+                            f"configuration entry #{no + 1}, item #{entry}"
+                        )
+                        del results_[key]
+                        yaml_tokens_.pop(key, None)
+                        written_tokens_.pop(key, None)
+
+                if ConfigBase.logger.isEnabledFor(logging.TRACE):
+                    ConfigBase.logger.trace(
+                        "URL #%d: %s unpacked as:%s%s",
+                        no + 1,
+                        url,
+                        os.linesep,
+                        os.linesep.join(
+                            [f'{k}="{a}"' for k, a in results_.items()]
+                        ),
+                    )
+
+                # Prepare our Asset Object
+                results_["asset"] = asset
+
+                # Full URL parsers have already applied the query string. Hide
+                # qsd during their second normalization pass so those lower-
+                # priority values cannot overwrite YAML settings. Minimal
+                # @notify results keep qsd because they still need that pass.
+                orig_qsd = results_.get("qsd")
+                if all(
+                    k in results_ for k in QSD_FULL_MODE_KEYS
+                ) and isinstance(orig_qsd, dict):
+                    # These extra fields reliably identify a full parse result.
+                    del results_["qsd"]
+
+                # Handle post processing of result set
+                results_ = URLBase.post_process_parse_url_results(results_)
+
+                # Restore YAML's priority after either normalization path.
+                # Special keys were already assembled and stay untouched.
+                if yaml_tokens_:
+                    results_.update(
+                        {
+                            k: v
+                            for k, v in yaml_tokens_.items()
+                            if k not in YAML_REAPPLY_SKIP
+                        }
+                    )
+
+                # Keep the original query mapping available downstream.
+                if orig_qsd is not None:
+                    results_["qsd"] = orig_qsd
+
+                # Store our preloaded entries
+                preloaded.append(
+                    {
+                        "results": results_,
+                        "settings": written_tokens_,
+                        "entry": no + 1,
+                        "item": entry,
+                    }
+                )
+
+        #
+        # Tag Groups
+        # - Find which groups (and groups of groups) each service is in
+        #
+        groups_for = ConfigBase.__tag_group_lookup(group_tags)
+
+        #
+        # URL Processing
+        #
+        for entry in preloaded:
+            # Point to our results entry for easier reference below
+            results = entry["results"]
+
+            #
+            # Apply our tag groups if they're defined
+            #
+            found = groups_for(results["tag"])
+            if found is None:
+                # Too many group memberships; refuse the configuration
+                return ([], [])
+            results["tag"] |= found
+
+            if placeholders:
+                needed = placeholders.used(results)
+                if not needed:
+                    # Restore any escaped but undeclared ${NAME} text.
+                    results = placeholders.substitute(results, {})
+
+                else:
+                    # Keep the entry pending until its values are available.
+                    services.append(
+                        NotifyTemplate(
+                            results=results,
+                            placeholders=placeholders,
+                            schema=template_schema,
+                            names=needed,
+                            settings=entry["settings"],
+                            asset=results.get("asset"),
+                            entry=entry["entry"],
+                            item=entry["item"],
+                        )
+                    )
+                    continue
+
+            # Now we generate our plugin
+            try:
+                # Attempt to create an instance of our plugin using the
+                # parsed URL information
+                plugin = N_MGR[results["schema"]](**results)
+
+                # Create log entry of loaded URL
+                ConfigBase.logger.debug(
+                    "Loaded URL: %s",
+                    plugin.url(privacy=results["asset"].secure_logging),
+                )
+
+            except Exception as e:
+                # the arguments are invalid or can not be used.
+                ConfigBase.logger.error(
+                    "Could not load Apprise YAML configuration "
+                    "entry #{}, item #{}".format(entry["entry"], entry["item"])
+                )
+                ConfigBase.logger.debug(f"Loading Exception: {e!s}")
+                continue
+
+            # if we reach here, we successfully loaded our data
+            services.append(plugin)
+
+        preloaded.clear()
+        return (services, configs)
+
+    def pop(self, index: int = -1) -> object:
+        """Removes an indexed Notification Service from the stack and returns
+        it.
+
+        By default, the last element of the list is removed.
+        """
+
+        if not isinstance(self._cached_services, list):
+            # Generate ourselves a list of content we can pull from
+            self.services()
+
+        # Pop the element off of the stack
+        return self._cached_services.pop(index)
+
+    def clear_cache(self) -> None:
+        """Cleans cache"""
+        self._cached_services = None
+        self._cached_time = None
+
+    @staticmethod
+    def _special_token_handler(
+        schema: str,
+        tokens: dict[str, object],
+    ) -> dict[str, object]:
+        """Normalize YAML keys before constructing a notification plugin.
+
+        Applies common aliases, collects prefixed template values, and maps
+        plugin argument or URL-token names to constructor arguments.
+        """
+        # Create a copy of our dictionary
+        tokens = tokens.copy()
+
+        # Normalize common aliases such as `pass` before plugin-specific keys.
+        # YAML input does not pass through the equivalent URL parsing step.
+        for alias, canonical in URL_TOKEN_ALIASES.items():
+            if alias in tokens and (
+                canonical not in tokens or tokens[canonical] is None
+            ):
+                # Use the alias when the standard key is absent or null.
+                tokens[canonical] = tokens.pop(alias)
+
+            elif alias in tokens:
+                # Keep the explicitly set standard key instead of its alias.
+                del tokens[alias]
+
+        for kw, meta in N_MGR[schema].template_kwargs.items():
+            # Determine our prefix:
+            prefix = meta.get("prefix", "+")
+
+            # Detect any matches
+            matches = {
+                k[1:]: str(v)
+                for k, v in tokens.items()
+                if isinstance(k, str) and k.startswith(prefix)
+            }
+
+            if not matches:
+                # we're done with this entry
+                continue
+
+            if not isinstance(tokens.get(kw), dict):
+                # Invalid; correct it
+                tokens[kw] = {}
+
+            # strip out processed tokens
+            tokens = {
+                k: v
+                for k, v in tokens.items()
+                if not isinstance(k, str) or not k.startswith(prefix)
+            }
+
+            # Update our entries
+            tokens[kw].update(matches)
+
+        # Map YAML keys through the templates defined by each service. For
+        # example, an email recipient can be supplied as a YAML sub-key:
+        #
+        # urls:
+        #   - mailto://user:pass@domain:
+        #       - to: user1@hotmail.com
+        #       - to: user2@hotmail.com
+        #
+        # The email template maps `to` to the constructor's `targets` value.
+        class_templates = plugins.details(N_MGR[schema])
+
+        for key in list(tokens.keys()):
+            # Keys may match query arguments or named URL parts. Arguments
+            # take priority when both templates define the same name.
+            if key in class_templates["args"]:
+                entry = class_templates["args"][key]
+
+            elif key in class_templates["tokens"]:
+                entry = class_templates["tokens"][key]
+
+            else:
+                # No need to handle non-arg entries
+                continue
+
+            # Prefer an alias, then fall back to a constructor mapping.
+            map_to = entry.get("alias_of", entry.get("map_to", ""))
+
+            if map_to == key:
+                # We're already good as we are now
+                continue
+
+            if not isinstance(map_to, str):
+                # Some URL shortcuts represent several values. Only the
+                # plugin's URL parser can split them safely.
+                ConfigBase.logger.warning(
+                    f"The {schema}:// {key} keyword can only be defined"
+                    " from within a URL; ignoring it."
+                )
+                del tokens[key]
+                continue
+
+            # Use the destination's type details when available.
+            meta = class_templates["tokens"].get(
+                map_to, class_templates["args"].get(map_to)
+            )
+            if not isinstance(meta, dict) or "type" not in meta:
+                meta = entry
+
+            # Untyped aliases pass their value through as a string.
+            arg_type = meta.get("type", "string")
+
+            # Remove the original key before adding its mapped value.
+            value = tokens[key]
+            del tokens[key]
+
+            # Follow one additional mapping to the constructor argument.
+            abs_map = meta.get("map_to", map_to)
+
+            # List destinations collect repeated YAML values.
+            is_list = re.search(r"^list:.*", arg_type, re.IGNORECASE)
+
+            if abs_map not in tokens:
+                tokens[abs_map] = [] if is_list else meta.get("default")
+
+            elif is_list and not isinstance(tokens.get(abs_map), list):
+                # Preserve an existing scalar before appending another value.
+                tokens[abs_map] = [tokens[abs_map]]
+
+            # Convert string fields supplied with another YAML scalar type.
+            if re.search(
+                r"^(choice:)?string", arg_type, re.IGNORECASE
+            ) and not isinstance(value, str):
+                value = str(value)
+
+            # Store the value under its constructor argument name.
+            if isinstance(tokens.get(abs_map), list):
+                tokens[abs_map].append(value)
+
+            else:
+                tokens[abs_map] = value
+
+        # Return our tokens
+        return tokens
+
+    def __getitem__(self, index: int) -> object:
+        """Return the cached service at ``index``, loading it if necessary."""
+        if not isinstance(self._cached_services, list):
+            # Generate ourselves a list of content we can pull from
+            self.services()
+
+        return self._cached_services[index]
+
+    def __iter__(self) -> object:
+        """Iterate over cached services, loading the source if necessary."""
+        if not isinstance(self._cached_services, list):
+            # Generate ourselves a list of content we can pull from
+            self.services()
+
+        return iter(self._cached_services)
+
+    def __len__(self) -> int:
+        """Return the number of parsed services, loading when necessary.
+
+        The configuration source itself is not counted. Services obtained from
+        permitted nested includes are included in the total.
+        """
+        if not isinstance(self._cached_services, list):
+            # Generate ourselves a list of content we can pull from
+            self.services()
+
+        return len(self._cached_services)
+
+    def __bool__(self) -> bool:
+        """Allows the Apprise object to be wrapped in an 'if statement'.
+
+        True is returned if our content was downloaded correctly.
+        """
+        if not isinstance(self._cached_services, list):
+            # Generate ourselves a list of content we can pull from
+            self.services()
+
+        return bool(self._cached_services)

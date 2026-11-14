@@ -4,12 +4,13 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 
 from service.control_tower.discord_client import DiscordError, MEMBER_PAGE_MAXIMUM_LIMIT
 from service.control_tower.discord_invites import MEMBER_ROLE_KIND
 from service.control_tower.invite_store import ProjectInvite
 from service.control_tower.meta_keys import META_KEY_INVITE_LAST_CHECKED_AT
+from service.control_tower.utc_text import to_utc_text
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +54,7 @@ class InviteAttributionStep:
                            ",".join(sorted(joined_counts)))
 
         self._record_uses(invites, current_uses)
-        self._store.set_meta(META_KEY_INVITE_LAST_CHECKED_AT, _to_utc_text(now))
+        self._store.set_meta(META_KEY_INVITE_LAST_CHECKED_AT, to_utc_text(now))
 
     def _last_checked_at(self, invites: dict[str, ProjectInvite]) -> datetime:
         """meta 확인 시각 (없으면 가장 오래된 초대 생성 시각)"""
@@ -115,7 +116,3 @@ def _joined_at(member: dict) -> datetime | None:
         return datetime.fromisoformat(str(member.get("joined_at")))
     except ValueError:
         return None
-
-
-def _to_utc_text(moment: datetime) -> str:
-    return moment.astimezone(timezone.utc).isoformat(timespec="microseconds")

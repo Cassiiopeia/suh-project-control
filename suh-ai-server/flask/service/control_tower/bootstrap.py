@@ -1,4 +1,4 @@
-"""관제소 기동 조립: 저장소 > 디스코드 클라이언트 > 발송기 > 심박 클라이언트 > 폴러 시작 > 런타임 등록 > 기본 썸네일 1회 > 디스코드 동기화 1회
+"""관제소 기동 조립: 저장소 > 디스코드 클라이언트 > 발송기(+ 받을 곳) > 심박 클라이언트 > 폴러 시작 > 런타임 등록 > 기본 썸네일 1회 > 디스코드 동기화 1회
 env 없는 구성 요소는 None으로 두고 나머지만 동작 (토큰 없음 > 발송 생략, Worker 설정 없음 > 외부 결과·심박 없음)
 """
 from __future__ import annotations
@@ -12,6 +12,7 @@ from config.control_tower_config import (
     DATABASE_PATH, DISCORD_BOT_TOKEN_ENV, DISCORD_GUILD_ID_ENV, HMAC_SECRET_ENV, REGISTRY_PATH, WORKER_URL_ENV,
 )
 from service.control_tower.app_attention_ingest import AppAttentionIngest
+from service.control_tower.destination_delivery import DestinationDeliverer
 from service.control_tower.discord_client import DiscordClient
 from service.control_tower.discord_invite_attribution import InviteAttributionStep
 from service.control_tower.discord_sync import DISCORD_SYNC_LOCK, sync_discord
@@ -23,6 +24,7 @@ from service.control_tower.project_icon_seed import seed_default_project_icons
 from service.control_tower.registry_overrides import load_effective_registry
 from service.control_tower.runtime import ControlTowerRuntime, set_runtime
 from service.control_tower.store import ControlTowerStore
+from util.background_runner import run_in_background
 
 logger = logging.getLogger(__name__)
 
@@ -38,15 +40,15 @@ def start_control_tower(environ: Mapping[str, str] = os.environ, database_path: 
     store.initialize()
 
     discord_client = _build_discord_client(environ)
-    # 발송기 <-> 폴러 상호 참조: 람다는 호출 시점에 poller를 찾음 (아래에서 생성)
     dispatcher = EventDispatcher(
-        registry_provider=lambda: poller.current_registry(),
         store=store,
         discord_client_provider=lambda: discord_client,
         status_page_url=environ.get(STATUS_PAGE_URL_ENV) or DEFAULT_STATUS_PAGE_URL,
+        destination_deliverer=DestinationDeliverer(store, run_in_background, environ),
     )
     invite_attribution = InviteAttributionStep(discord_client, store) if discord_client is not None else None
     # 앱 확인할 일: 프로젝트 서비스 중 하나라도 down이면 앱 연동 끊김 알림 생략 (서비스 장애에 묻음)
+    # 수집기 <-> 폴러 상호 참조: 람다는 호출 시점에 poller를 찾음 (아래에서 생성)
     app_attention_ingest = AppAttentionIngest(
         store, dispatcher, lambda: poller.current_registry(),
         lambda project_id: is_any_project_service_down(

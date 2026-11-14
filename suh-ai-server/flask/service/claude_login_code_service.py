@@ -18,7 +18,8 @@ from service.audit_service import AuditAction, AuditCategory
 from service.claude_login_browser_client import (
     BrowserClientError, LoginCodeNotFoundError, read_login_code)
 from service.claude_login_mail_client import MailClientError, find_new_magic_link_mail
-from service.claude_login_secret_cipher import SecretCipherError
+from service.secret_cipher import SecretCipherError
+from service.claude_login_event_notifier import notify_claude_code_event
 
 logger = logging.getLogger(__name__)
 
@@ -224,6 +225,11 @@ def _finish(account, job_id: str, client: dict, *, code=None, failure_reason=Non
          'elapsed_seconds': round((finished_at - started_at).total_seconds(), 1)},
         client_ip=client.get('client_ip'), proxy_chain=client.get('proxy_chain'),
         user_agent=client.get('user_agent'), success=is_success)
+    # 발급 알림 (성공만, 코드·Gmail 주소 제외)
+    if is_success:
+        notify_claude_code_event(
+            'Claude 코드 발급', f'claude-code:issued:{job_id}', account.display_name,
+            client.get('client_ip'), client.get('user_agent'))
 
 
 def _snapshot(account, now: datetime) -> dict:

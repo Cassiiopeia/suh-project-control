@@ -1,0 +1,52 @@
+{
+  "project": "suh-ai",
+  "kind": "info",
+  "severity": "info",
+  "title": "필드 과다",
+  "fields": [
+    {
+      "name": "n0",
+      "value": "v"
+    },
+    {
+      "name": "n1",
+      "value": "v"
+    },
+    {
+      "name": "n2",
+      "value": "v"
+    },
+    {
+      "name": "n3",
+      "value": "v"
+    },
+    {
+      "name": "n4",
+      "value": "v"
+    },
+    {
+      "name": "n5",
+      "value": "v"
+    },
+    {
+      "name": "n6",
+      "value": "v"
+    },
+    {
+      "name": "n7",
+      "value": "v"
+    },
+    {
+      "name": "n8",
+      "value": "v"
+    },
+    {
+      "name": "n9",
+      "value": "v"
+    },
+    {
+      "name": "n10",
+      "value": "v"
+    }
+  ]
+}

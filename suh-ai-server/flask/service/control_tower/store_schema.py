@@ -99,6 +99,48 @@ SCHEMA_STATEMENTS = (
         sort_order INTEGER,
         created_at TEXT NOT NULL
     )""",
+    # 프로젝트별 사용자 정의 알림 종류 (visible_to = 쉼표 구분, 빈 문자열 = 관리자만)
+    """CREATE TABLE IF NOT EXISTS project_event_kind (
+        project_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        channel_name TEXT NOT NULL,
+        visible_to TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (project_id, kind)
+    )""",
+    # 프로젝트 이벤트 토큰 해시 (slot: current 1개 | previous 여러 개, expires_at = 이전 토큰 만료 시각, 현재는 NULL)
+    """CREATE TABLE IF NOT EXISTS project_event_token (
+        token_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id TEXT NOT NULL,
+        slot TEXT NOT NULL,
+        token_hash TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        expires_at TEXT
+    )""",
+    """CREATE UNIQUE INDEX IF NOT EXISTS idx_project_event_token_one_current
+        ON project_event_token (project_id) WHERE slot = 'current'""",
+    # 행 있음 = DB 토큰만 인정하는 프로젝트 (폐기 후에도 유지)
+    """CREATE TABLE IF NOT EXISTS project_event_token_policy (
+        project_id TEXT PRIMARY KEY,
+        managed_since TEXT NOT NULL
+    )""",
+    # 프로젝트 알림 받을 곳 (kind = dispatch 채널 종류, url_encrypted = Apprise URL 암호문, url_hint = 수단 + 끝 4자리,
+    # is_enabled 1 사용 0 중지, last_result = 마지막 발송 결과 코드)
+    """CREATE TABLE IF NOT EXISTS project_event_destination (
+        destination_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        label TEXT NOT NULL,
+        url_encrypted BLOB NOT NULL,
+        encryption_scheme TEXT NOT NULL,
+        url_hint TEXT NOT NULL,
+        is_enabled INTEGER NOT NULL,
+        last_result TEXT,
+        last_sent_at TEXT,
+        created_at TEXT NOT NULL
+    )""",
+    """CREATE INDEX IF NOT EXISTS idx_project_event_destination_project_kind
+        ON project_event_destination (project_id, kind)""",
     # 프로젝트 썸네일 (128px WebP 바이트, content_hash = 상태 페이지 캐시 버전)
     """CREATE TABLE IF NOT EXISTS project_icon (
         project_id TEXT PRIMARY KEY,

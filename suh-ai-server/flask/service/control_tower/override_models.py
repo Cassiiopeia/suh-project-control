@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from service.control_tower.registry import StatusPage
+from service.control_tower.registry_models import EventKindSpec
 
 # 서비스 덮어쓰기 칸 5개 (PATCH 허용 키와 같음)
 SERVICE_OVERRIDE_FIELDS = ("name", "status", "is_public", "sort_order", "external_url")
@@ -69,6 +70,7 @@ class RegistryOverrides:
     custom_projects: tuple[CustomProject, ...] = ()
     page: StatusPage = field(default_factory=StatusPage)
     project_icon_versions: dict[str, str] = field(default_factory=dict)  # project_id > 썸네일 내용 해시 12자
+    project_event_kinds: dict[str, tuple[EventKindSpec, ...]] = field(default_factory=dict)  # project_id > 알림 종류(생성 순)
 
 
 EMPTY_OVERRIDES = RegistryOverrides()

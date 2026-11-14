@@ -10,6 +10,7 @@ from flask import Flask
 from service.control_tower import runtime as runtime_module
 from service.control_tower.alert_planner import Notification
 from service.control_tower.event_dispatcher import EventDispatcher
+from service.control_tower.project_token_store import ProjectTokenState
 from service.control_tower.runtime import ControlTowerRuntime
 from control_tower_discord_fakes import ELUM, SAMPLE, make_registry
 
@@ -30,9 +31,17 @@ class FakeStore:
     def __init__(self, bindings: dict[tuple[str, str], str] | None = None):
         self.bindings = bindings or {}
         self.recorded: list[tuple] = []
+        self.event_kind_names: dict[str, set[str]] = {}  # 프로젝트 id > 사용자 정의 종류 이름
+
+    def list_event_kind_names_of_project(self, project_id: str) -> frozenset[str]:
+        return frozenset(self.event_kind_names.get(project_id, ()))
 
     def get_binding(self, scope: str, kind: str) -> str | None:
         return self.bindings.get((scope, kind))
+
+    def load_project_token_state(self, project_id: str) -> ProjectTokenState:
+        # DB 발급 토큰 없음 = 환경변수 토큰 경로
+        return ProjectTokenState.not_managed()
 
     def record_event(self, project_id: str, kind: str, dedupe_key: str | None, created_at: datetime) -> bool:
         if dedupe_key and any(entry[0] == project_id and entry[2] == dedupe_key for entry in self.recorded):
@@ -55,8 +64,7 @@ DEFAULT_BINDINGS = {("elum", "report"): "c-report", ("elum", "status"): "c-statu
 
 
 def _make_dispatcher(store: FakeStore, client: FakeDiscordClient | None) -> EventDispatcher:
-    registry = make_registry(ELUM, SAMPLE)
-    return EventDispatcher(lambda: registry, store, lambda: client, STATUS_PAGE_URL)
+    return EventDispatcher(store, lambda: client, STATUS_PAGE_URL)
 
 
 def _notification(scope="elum", kind="report", **overrides) -> Notification:
@@ -143,7 +151,7 @@ def test_hyphenated_project_id_uses_underscore_env_name(monkeypatch, store, disc
     registry = make_registry(make_project("my-app", "마이앱"))
     monkeypatch.setenv("CONTROL_EVENT_TOKEN_MY_APP", TOKEN)
     runtime_module.set_runtime(ControlTowerRuntime(
-        lambda: registry, store, EventDispatcher(lambda: registry, store, lambda: discord_client, STATUS_PAGE_URL)))
+        lambda: registry, store, EventDispatcher(store, lambda: discord_client, STATUS_PAGE_URL)))
     try:
         app = Flask(__name__)
         app.register_blueprint(control_tower_bp)
@@ -162,7 +170,7 @@ def test_body_without_string_project_returns_400(client, payload):
 
 
 @pytest.mark.parametrize("overrides,expected_fields", [
-    ({"kind": "bogus"}, ["kind"]),
+    ({"kind": 5}, ["kind"]),  # 문자열이 아닌 kind (문자열 미등록은 unknown_kind)
     ({"severity": "recovered"}, ["severity"]),
     ({"title": ""}, ["title"]),
     ({"title": "가" * 201}, ["title"]),
@@ -170,7 +178,7 @@ def test_body_without_string_project_returns_400(client, payload):
     ({"url": "http://insecure.example.com"}, ["url"]),
     ({"url": "https://e.example.com/" + "a" * 2027}, ["url"]),  # 2049자
     ({"dedupe_key": 5}, ["dedupe_key"]),
-    ({"kind": "x", "severity": "y", "title": ""}, ["kind", "severity", "title"]),
+    ({"kind": 5, "severity": "y", "title": ""}, ["kind", "severity", "title"]),
 ])
 def test_invalid_fields_are_all_reported(client, overrides, expected_fields):
     response = _post(client, {**VALID_PAYLOAD, **overrides})
@@ -185,7 +193,7 @@ def test_boundary_lengths_are_valid(client):
 
 
 def test_validation_failure_is_not_recorded(client, store):
-    _post(client, {**VALID_PAYLOAD, "kind": "bogus"})
+    _post(client, {**VALID_PAYLOAD, "title": ""})
     assert store.recorded == []
 
 
@@ -261,3 +269,60 @@ def test_link_url_overrides_status_page_url_in_embed():
     from service.control_tower.discord_messages import to_embed
     embed = to_embed(_notification(link_url="https://elum.example.com/x"), STATUS_PAGE_URL)
     assert embed["url"] == "https://elum.example.com/x"
+
+
+# ---- 사용자 정의 종류·fields ----
+
+def _custom_kind_client(monkeypatch, store, discord_client):
+    """저장소에만 elum claude-code 종류 등록 (등록 정보 캐시는 종류 없음 = 폴러 갱신 전) > 라우터 구성"""
+    from router.control_tower_router import control_tower_bp
+    store.event_kind_names["elum"] = {"claude-code"}
+    registry = make_registry(ELUM, SAMPLE)
+    monkeypatch.setenv(TOKEN_ENV_NAME, TOKEN)
+    runtime_module.set_runtime(ControlTowerRuntime(
+        lambda: registry, store, _make_dispatcher(store, discord_client)))
+    app = Flask(__name__)
+    app.register_blueprint(control_tower_bp)
+    return app.test_client()
+
+
+def test_event_with_custom_kind_is_delivered_to_its_channel(monkeypatch, store, discord_client):
+    store.bindings[("elum", "claude-code")] = "c-1"
+    try:
+        response = _post(_custom_kind_client(monkeypatch, store, discord_client),
+                         {**VALID_PAYLOAD, "kind": "claude-code"})
+    finally:
+        runtime_module.set_runtime(None)
+    assert response.status_code == 202
+    assert discord_client.sent[0][0] == "c-1"
+
+
+def test_event_with_unregistered_kind_returns_unknown_kind(client, store, discord_client, caplog):
+    with caplog.at_level(logging.WARNING):
+        response = _post(client, {**VALID_PAYLOAD, "kind": "feedback"})
+    assert response.status_code == 400
+    assert response.get_json() == {"error": "unknown_kind", "kind": "feedback"}
+    assert caplog.text.count("[control-tower event] unknown kind") == 1
+    assert store.recorded == [] and discord_client.sent == []
+
+
+@pytest.mark.parametrize("fields", [
+    [["n", "v"]] * 11,
+    [{"name": "가" * 41, "value": "v"}],
+    [{"name": "n", "value": "값" * 201}],
+    "not-a-list",
+    [{"name": "n"}],
+    [{"name": "   ", "value": "v"}],
+    [{"name": "n", "value": " \t "}],
+])
+def test_event_fields_validation(client, fields):
+    response = _post(client, {**VALID_PAYLOAD, "fields": fields})
+    assert response.status_code == 400
+    assert response.get_json() == {"error": "invalid", "fields": ["fields"]}
+
+
+def test_event_fields_reach_embed(client, discord_client):
+    fields = [{"name": "환경", "value": "prod"}, {"name": "건수", "value": "3"}]
+    assert _post(client, {**VALID_PAYLOAD, "fields": fields}).status_code == 202
+    assert discord_client.sent[0][1]["fields"] == [
+        {"name": "환경", "value": "prod", "inline": True}, {"name": "건수", "value": "3", "inline": True}]

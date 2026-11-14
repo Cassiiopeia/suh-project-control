@@ -57,6 +57,24 @@ def test_sync는_리포트를_json으로_돌려준다(client, monkeypatch):
     assert calls == [(REGISTRY, "9000")]
 
 
+def test_sync_버튼은_저장소를_다시_병합한_등록_정보로_동기화한다(client, store, monkeypatch):
+    from service.control_tower.discord_sync_models import SyncReport
+    from service.control_tower.registry_models import EventKindSpec
+    calls = []
+
+    def fake_sync(registry, discord_client, sync_store, guild_id):
+        calls.append(registry)
+        return SyncReport()
+
+    # 폴러 캐시(REGISTRY)는 아직 모르는 종류
+    store.insert_project_event_kind("elum", EventKindSpec("claude-code", "claude-code", ("dev",)), NOW)
+    monkeypatch.setattr("router.control_tower_admin_api.sync_discord", fake_sync)
+
+    assert client.post("/control/discord/sync").status_code == 200
+    elum = next(project for project in calls[0].projects if project.id == "elum")
+    assert [spec.kind for spec in elum.event_kinds] == ["claude-code"]
+
+
 def test_sync_중_예외는_500_sync_failed이다(client, monkeypatch):
     def broken_sync(*arguments):
         raise RuntimeError("boom token=secret")

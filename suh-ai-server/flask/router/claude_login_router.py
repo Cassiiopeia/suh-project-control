@@ -3,6 +3,7 @@ Claude 로그인 API: Gmail 계정 관리(목록·추가·수정·삭제·접속
 감사: 계정 변경 4종 / 코드 요청(새 작업만) / 발급(서비스가 기록) / 열람(작업·IP별 1회)
 """
 import os
+from functools import partial
 
 from flask import Blueprint, jsonify, request, send_file
 
@@ -11,12 +12,16 @@ from service import audit_service
 from service import claude_login_account_service as account_service
 from service import claude_login_code_service as code_service
 from service.audit_service import AuditAction, AuditCategory
+from service.claude_login_event_notifier import notify_claude_code_event
 from service.claude_login_account_repository import AccountStoreUnavailableError, DuplicateAccountError
 from util.audit_helper import audited, client_info, set_audit_action, set_audit_detail
+from util.background_runner import run_in_background
 
 claude_login_bp = Blueprint('claude_login', __name__)
 
 # trigger: auto 화면 진입 자동, manual "다시 기다리기" 버튼
+# 열람 알림 발송 스레드 이름 (스레드 덤프 구분용)
+VIEW_ALERT_THREAD_NAME = 'claude-code-view-alert'
 ALLOWED_TRIGGERS = ('auto', 'manual')
 # 서비스 예외 > (HTTP 상태, error 코드) — 화면 문구는 claude-login.js ERROR_LABELS
 ERROR_RESPONSES = {
@@ -134,6 +139,11 @@ def code_status():
                  'mail_received_at': state.get('mail_received_at')},
                 client_ip=info['client_ip'], proxy_chain=info['proxy_chain'],
                 user_agent=info['user_agent'])
+            # 열람 알림 (코드·Gmail 주소 제외, 디스코드 지연이 코드 표시를 막지 않게 백그라운드)
+            run_in_background(partial(
+                notify_claude_code_event,
+                'Claude 코드 열람', f"claude-code:view:{state['job_id']}:{info['client_ip']}",
+                state.get('display_name'), info['client_ip'], info['user_agent']), VIEW_ALERT_THREAD_NAME)
     return jsonify({'accounts': states, 'is_secret_configured': config.is_secret_configured()}), 200
 
 

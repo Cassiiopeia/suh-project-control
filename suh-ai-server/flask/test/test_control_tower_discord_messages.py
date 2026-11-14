@@ -1,6 +1,8 @@
 """관제소 디스코드 임베드: 색 매핑, 제목·본문 길이 자르기, 복구 다운 시간 필드, 상태 페이지 링크"""
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from service.control_tower.alert_planner import Notification
@@ -68,3 +70,11 @@ def test_footer_is_control_tower():
 def test_notification_link_url_overrides_status_page_url():
     notification = Notification("elum", "report", "info", "신고", "", (), "", link_url="https://elum.example.com/r/1")
     assert to_embed(notification, STATUS_PAGE_URL)["url"] == "https://elum.example.com/r/1"
+
+
+def test_to_embed_appends_downtime_after_fields():
+    body = "원인: 연결 실패\n다운 시간: 5분"
+    notification = replace(_notification("recovered", body=body), fields=(("환경", "prod"),))
+    embed = to_embed(notification, STATUS_PAGE_URL)
+    assert embed["fields"] == [{"name": "환경", "value": "prod", "inline": True},
+                               {"name": "다운 시간", "value": "5분", "inline": True}]

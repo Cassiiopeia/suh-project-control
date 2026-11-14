@@ -1,0 +1,9 @@
+{
+  "project": "suh-ai",
+  "kind": "error",
+  "severity": "warning",
+  "title": "결제 웹훅 3회 연속 실패",
+  "body": "PG사 응답 502, 재시도 대기 중",
+  "url": "https://example.com/admin/webhooks/42",
+  "dedupe_key": "payment-webhook-failed"
+}

@@ -156,7 +156,7 @@ class _FakeDiscordSender:
 def _dispatch_attention(bindings: dict[tuple[str, str], str]) -> list[str]:
     sender = _FakeDiscordSender()
     registry = make_registry(ELUM)
-    dispatcher = EventDispatcher(lambda: registry, _FakeBindingStore(bindings), lambda: sender, "https://status.example.com")
+    dispatcher = EventDispatcher(_FakeBindingStore(bindings), lambda: sender, "https://status.example.com")
     dispatcher.dispatch(Notification(scope="elum", kind="attention", severity="warning", title="elum 확인할 일",
                                      body="새 의견 +2", service_ids=(), dedupe_key=""))
     return sender.sent

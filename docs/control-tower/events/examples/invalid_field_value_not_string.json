@@ -1,0 +1,12 @@
+{
+  "project": "suh-ai",
+  "kind": "info",
+  "severity": "info",
+  "title": "필드 값 숫자",
+  "fields": [
+    {
+      "name": "건수",
+      "value": 3
+    }
+  ]
+}

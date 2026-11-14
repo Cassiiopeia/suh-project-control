@@ -140,6 +140,7 @@ def test_control_page_renders(client):
     assert 'control-service-table' in body
     assert 'control-maintenance-form' in body
     assert 'control-registry-error' in body
+    assert 'control-manage-event-kinds.js' in body
     assert not EMOJI_RE.search(body)
 
 
