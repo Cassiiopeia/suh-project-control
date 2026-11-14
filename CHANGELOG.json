@@ -1,14 +1,50 @@
 {
   "metadata": {
-    "lastUpdated": "2026-11-13T11:27:58Z",
-    "currentVersion": "2.0.92",
+    "lastUpdated": "2026-11-14T04:21:10Z",
+    "currentVersion": "2.0.93",
     "projectType": "python",
-    "totalReleases": 88,
+    "totalReleases": 89,
     "projectTypes": [
       "python"
     ]
   },
   "releases": [
+    {
+      "version": "2.0.93",
+      "project_type": "python",
+      "project_types": [
+        "python"
+      ],
+      "date": "2026-11-14",
+      "pr_number": 194,
+      "raw_summary": "## Summary by CodeRabbit\n\n## 릴리스 노트\n\n* **새 기능**\n  * 관리 화면에서 프로젝트마다 알림 종류를 추가하면 그 프로젝트에만 Discord 채널이 생겨요\n  * 관리 화면에서 프로젝트 이벤트 토큰을 발급·교체·폐기할 수 있어요\n  * 프로젝트 알림을 팀 Discord 웹훅·슬랙 등 추가로 받을 곳에도 함께 보낼 수 있어요\n  * Claude 로그인 코드를 발급하거나 열람하면 알림을 보내요\n  * 다른 서버에서 한 줄로 알림을 보내는 Python·Java 라이브러리를 추가했어요\n\n* **개선**\n  * 알림에 이름·값 항목을 붙일 수 있고, 등록되지 않은 알림 종류는 거부해요\n  * 알림 입구가 받는 요청 크기 상한을 늘렸어요\n\n* **문서**\n  * 다른 프로젝트에서 관제소 알림을 붙이는 연동 안내와 규격을 추가했어요",
+      "parsed_changes": {
+        "새_기능": {
+          "title": "새 기능",
+          "items": [
+            "관리 화면에서 프로젝트마다 알림 종류를 추가하면 그 프로젝트에만 Discord 채널이 생겨요",
+            "관리 화면에서 프로젝트 이벤트 토큰을 발급·교체·폐기할 수 있어요",
+            "프로젝트 알림을 팀 Discord 웹훅·슬랙 등 추가로 받을 곳에도 함께 보낼 수 있어요",
+            "Claude 로그인 코드를 발급하거나 열람하면 알림을 보내요",
+            "다른 서버에서 한 줄로 알림을 보내는 Python·Java 라이브러리를 추가했어요"
+          ]
+        },
+        "개선": {
+          "title": "개선",
+          "items": [
+            "알림에 이름·값 항목을 붙일 수 있고, 등록되지 않은 알림 종류는 거부해요",
+            "알림 입구가 받는 요청 크기 상한을 늘렸어요"
+          ]
+        },
+        "문서": {
+          "title": "문서",
+          "items": [
+            "다른 프로젝트에서 관제소 알림을 붙이는 연동 안내와 규격을 추가했어요"
+          ]
+        }
+      },
+      "parse_method": "markdown"
+    },
     {
       "version": "2.0.92",
       "project_type": "python",
