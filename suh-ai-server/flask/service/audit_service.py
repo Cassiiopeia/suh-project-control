@@ -25,6 +25,7 @@ class AuditCategory(str, Enum):
     SUNSHINE = "SUNSHINE"
     CLAUDE_LOGIN = "CLAUDE_LOGIN"
     CONTROL_TOWER = "CONTROL_TOWER"
+    AI_DB = "AI_DB"
 
 
 class AuditAction(str, Enum):
@@ -91,6 +92,14 @@ class AuditAction(str, Enum):
     CONTROL_DESTINATION_UPDATE = "CONTROL_DESTINATION_UPDATE"
     CONTROL_DESTINATION_DELETE = "CONTROL_DESTINATION_DELETE"
     CONTROL_DESTINATION_TEST = "CONTROL_DESTINATION_TEST"
+    # AI 서버 공용 PG: DB 생성·삭제 / 계정 생성·비번 재발급·삭제 / 접속 권한 주기·빼기 (상세는 이름만, 비번 없음)
+    AI_DB_DATABASE_CREATE = "AI_DB_DATABASE_CREATE"
+    AI_DB_DATABASE_DELETE = "AI_DB_DATABASE_DELETE"
+    AI_DB_ROLE_CREATE = "AI_DB_ROLE_CREATE"
+    AI_DB_ROLE_PASSWORD_RESET = "AI_DB_ROLE_PASSWORD_RESET"
+    AI_DB_ROLE_DELETE = "AI_DB_ROLE_DELETE"
+    AI_DB_GRANT = "AI_DB_GRANT"
+    AI_DB_REVOKE = "AI_DB_REVOKE"
 
 
 def record(category: AuditCategory, action: AuditAction, actor_ip: str, detail: dict = None, *,

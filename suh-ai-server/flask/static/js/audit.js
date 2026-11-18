@@ -11,6 +11,7 @@
     SUNSHINE: { label: 'Sunshine', badge: 'badge-info' },
     CLAUDE_LOGIN: { label: 'Claude 로그인', badge: 'badge-warning' },
     CONTROL_TOWER: { label: '관제소', badge: 'badge-success' },
+    AI_DB: { label: 'AI 서버 DB', badge: 'badge-error' },
   };
 
   var ACTION_LABELS = {
@@ -69,6 +70,13 @@
     CONTROL_DESTINATION_UPDATE: '관제소 프로젝트 받을 곳 사용 전환',
     CONTROL_DESTINATION_DELETE: '관제소 프로젝트 받을 곳 삭제',
     CONTROL_DESTINATION_TEST: '관제소 프로젝트 받을 곳 테스트 발송',
+    AI_DB_DATABASE_CREATE: 'AI 서버 DB 만들기',
+    AI_DB_DATABASE_DELETE: 'AI 서버 DB 삭제',
+    AI_DB_ROLE_CREATE: 'AI 서버 DB 계정 만들기',
+    AI_DB_ROLE_PASSWORD_RESET: 'AI 서버 DB 계정 비번 재발급',
+    AI_DB_ROLE_DELETE: 'AI 서버 DB 계정 삭제',
+    AI_DB_GRANT: 'AI 서버 DB 접속 권한 주기',
+    AI_DB_REVOKE: 'AI 서버 DB 접속 권한 빼기',
   };
 
   // 카테고리 선택 시 행위 셀렉트를 해당 카테고리 것만으로 좁힌다
@@ -92,6 +100,8 @@
                     'CONTROL_EVENT_TOKEN_ISSUE', 'CONTROL_EVENT_TOKEN_REVOKE',
                     'CONTROL_DESTINATION_CREATE', 'CONTROL_DESTINATION_UPDATE',
                     'CONTROL_DESTINATION_DELETE', 'CONTROL_DESTINATION_TEST'],
+    AI_DB: ['AI_DB_DATABASE_CREATE', 'AI_DB_DATABASE_DELETE', 'AI_DB_ROLE_CREATE',
+            'AI_DB_ROLE_PASSWORD_RESET', 'AI_DB_ROLE_DELETE', 'AI_DB_GRANT', 'AI_DB_REVOKE'],
   };
 
   var KST_FMT = new Intl.DateTimeFormat('ko-KR', {

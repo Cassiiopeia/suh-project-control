@@ -148,3 +148,13 @@ def test_menu_has_control_link_with_radar_icon(client):
     body = client.get('/admin').get_data(as_text=True)
     assert 'admin/control' in body
     assert 'data-lucide="radar"' in body
+
+
+def test_ai_db_page_renders(client):
+    resp = client.get('/admin/ai-db')
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert 'AI 서버 DB' in body
+    assert 'ai-db.js' in body
+    assert 'secret-modal' in body
+    assert 'delete-confirm-name' in body
