@@ -79,6 +79,12 @@ def control():
     return render_template('admin/control.html', root='..', active='control')
 
 
+@admin_bp.route('/admin/ai-db', methods=['GET'])
+def ai_db():
+    """AI 서버 공용 PG 관리 페이지 (DB·계정·접속 권한)"""
+    return render_template('admin/ai_db.html', root='..', active='ai-db')
+
+
 @admin_bp.route('/admin/models', methods=['GET'])
 def models():
     """모델 관리 페이지 (HF 검색·다운로드·벤치마크)"""
