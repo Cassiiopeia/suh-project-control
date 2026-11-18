@@ -1,14 +1,34 @@
 {
   "metadata": {
-    "lastUpdated": "2026-11-14T04:21:10Z",
-    "currentVersion": "2.0.93",
+    "lastUpdated": "2026-11-18T18:10:49Z",
+    "currentVersion": "2.0.94",
     "projectType": "python",
-    "totalReleases": 89,
+    "totalReleases": 90,
     "projectTypes": [
       "python"
     ]
   },
   "releases": [
+    {
+      "version": "2.0.94",
+      "project_type": "python",
+      "project_types": [
+        "python"
+      ],
+      "date": "2026-11-18",
+      "pr_number": 197,
+      "raw_summary": "## Summary by CodeRabbit\n\n## 릴리스 노트\n\n* **새 기능**\n  * 관리 화면에 AI 서버 DB 메뉴 추가 (프로젝트별 DB·계정 관리)\n  * DB 계정 비번은 만들 때 한 번만 보여 주고 연결 주소 복사 지원",
+      "parsed_changes": {
+        "새_기능": {
+          "title": "새 기능",
+          "items": [
+            "관리 화면에 AI 서버 DB 메뉴 추가 (프로젝트별 DB·계정 관리)",
+            "DB 계정 비번은 만들 때 한 번만 보여 주고 연결 주소 복사 지원"
+          ]
+        }
+      },
+      "parse_method": "markdown"
+    },
     {
       "version": "2.0.93",
       "project_type": "python",
