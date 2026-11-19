@@ -41,6 +41,11 @@ class PermissionDenied(AiDbError):
     code = "permission_denied"
 
 
+class GbrainOpsMissing(AiDbError):
+    """대상 DB 에 ai_db_ops 함수 없음 (슈퍼유저로 sql/ai_db_ops_gbrain.sql 실행 필요)"""
+    code = "gbrain_ops_missing"
+
+
 # ---- 요청 검증 ----
 
 class BadRequest(AiDbError):
@@ -49,6 +54,11 @@ class BadRequest(AiDbError):
 
 class InvalidName(AiDbError):
     code = "invalid_name"
+
+
+class SameReaderWriter(AiDbError):
+    """읽기 계정 = 쓰기 계정 (쓰기 계정 BYPASSRLS 회수 방지)"""
+    code = "same_reader_writer"
 
 
 class ProtectedObject(AiDbError):

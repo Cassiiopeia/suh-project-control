@@ -1,4 +1,4 @@
-"""관제소 nginx 설정: 키 검사 제외 경로는 이벤트·앱 확인할 일 push 입구 2개, 본문 상한·전용 속도 제한, 공개 경로 map은 정규화 $uri 기준"""
+"""관제소 nginx 설정: 키 검사 제외 경로는 이벤트·앱 확인할 일 push 입구 2개, 본문 상한·전용 속도 제한, 공개 경로 map은 정규화 $uri 기준, 키는 X-API-Key 또는 Bearer"""
 from __future__ import annotations
 
 import os
@@ -20,6 +20,14 @@ def _location_blocks(conf_text: str) -> dict[str, str]:
     """location 머리 > 본문 (다음 location 전까지)"""
     blocks = re.split(r"\n\s*location\s+", conf_text)[1:]
     return {block.split("{", 1)[0].strip(): block.split("{", 1)[1] for block in blocks}
+
+
+def _map_body(conf_text: str, source_variable: str, result_variable: str) -> str:
+    """map <원본> <결과> { 본문 } > 본문 (닫는 괄호는 줄 단독: 키 목록 자리 {{...}} 와 구분)"""
+    pattern = r"map\s+" + re.escape(source_variable) + r"\s+" + re.escape(result_variable) + r"\s*\{(.*?)\n\s*\}"
+    match = re.search(pattern, conf_text, re.DOTALL)
+    assert match is not None, f"map {source_variable} {result_variable} missing"
+    return match.group(1)
 
 
 def _public_endpoint_map(conf_text: str) -> tuple[str, str]:
@@ -67,3 +75,17 @@ def test_public_endpoint_map_uses_normalized_uri_and_has_no_control_pattern():
     assert key_variable == "$uri"
     assert "default" in patterns and len(patterns) > 1
     assert not any("control" in pattern for pattern in patterns)
+
+
+def test_api_키는_X_API_Key_우선_없으면_Bearer_토큰을_같은_키_목록으로_검사한다():
+    conf_text = _read_conf()
+    bearer_map = _map_body(conf_text, "$http_authorization", "$api_key_bearer")
+    candidate_map = _map_body(conf_text, "$http_x_api_key", "$api_key_candidate")
+    valid_map = _map_body(conf_text, "$api_key_candidate", "$api_key_valid")
+
+    assert '"~*^Bearer\\s+(?<bearer_token>\\S+)$" $bearer_token;' in bearer_map
+    assert re.search(r"default\s+\$http_x_api_key;", candidate_map)
+    assert re.search(r'""\s+\$api_key_bearer;', candidate_map)
+    # 배포가 치환하는 키 목록 자리는 검사 map 한 곳에만 (기본 거부)
+    assert re.search(r"default\s+0;", valid_map) and "{{OLLAMA_API_KEY_LIST}}" in valid_map
+    assert conf_text.count("{{OLLAMA_API_KEY_LIST}}") == 1

@@ -1,7 +1,7 @@
-"""AI 서버 DB 테스트 공통: 가짜 PG 관리 클라이언트 (메모리 DB·계정·권한), 가짜를 심은 서비스"""
+"""AI 서버 DB 테스트 공통: 가짜 PG 관리 클라이언트 (메모리 DB·계정·권한·gbrain), 가짜를 심은 서비스"""
 from __future__ import annotations
 
-from service.ai_db.ai_db_errors import AlreadyExists, DatabaseInUse, NotFound
+from service.ai_db.ai_db_errors import AlreadyExists, DatabaseInUse, GbrainOpsMissing, NotFound
 from service.ai_db.ai_db_service import AiDbService
 
 PUBLIC_HOST = "ai.postgres.example.com"
@@ -9,12 +9,13 @@ PUBLIC_PORT = 5432
 
 
 class FakePgAdminClient:
-    """호출 기록 + 존재 여부만 흉내 (busy_databases: 접속 중인 DB)"""
+    """호출 기록 + 존재 여부만 흉내 (busy_databases: 접속 중인 DB, ops_missing_databases: ai_db_ops 미설치 DB)"""
 
     def __init__(self):
         self.databases: dict[str, set] = {"gbrain": {"gbrain"}, "gbrain_elum": {"elum_member"}}
         self.roles: dict[str, str] = {"gbrain": "-", "elum_member": "-", "ai_db_admin": "-"}
         self.busy_databases: set = set()
+        self.ops_missing_databases: set = set()
         self.calls: list[tuple] = []
 
     def server_info(self) -> dict:
@@ -70,6 +71,29 @@ class FakePgAdminClient:
         if database_name not in self.databases or role_name not in self.roles:
             raise NotFound()
         self.databases[database_name].discard(role_name)
+
+    def get_gbrain_status(self, database_name):
+        self._require_gbrain_database(database_name)
+        return {"is_ready": False, "has_ops_functions": True, "has_pages_table": False,
+                "writer_role": None, "readers": []}
+
+    def prepare_gbrain_database(self, database_name, writer_role):
+        self.calls.append(("prepare_gbrain", database_name, writer_role))
+        self._require_gbrain_database(database_name)
+
+    def grant_gbrain_reader(self, database_name, reader_role, writer_role):
+        self.calls.append(("grant_gbrain_reader", database_name, reader_role, writer_role))
+        self._require_gbrain_database(database_name)
+
+    def revoke_gbrain_reader(self, database_name, reader_role, writer_role):
+        self.calls.append(("revoke_gbrain_reader", database_name, reader_role, writer_role))
+        self._require_gbrain_database(database_name)
+
+    def _require_gbrain_database(self, database_name):
+        if database_name not in self.databases:
+            raise NotFound()
+        if database_name in self.ops_missing_databases:
+            raise GbrainOpsMissing()
 
 
 def make_service(client=None) -> AiDbService:

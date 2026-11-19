@@ -75,7 +75,7 @@ jobs:
 
           # 검증 (민감 정보 마스킹)
           echo "[INFO] Configuration preview:"
-          grep -A 5 "map \$http_x_api_key" suh-ai-server/config/nginx.conf | sed 's/"[^"]*"/"****"/g' || echo "[WARN] Preview failed (may be normal)"
+          grep -A 5 "map \$api_key_candidate \$api_key_valid" suh-ai-server/config/nginx.conf | sed 's/"[^"]*"/"****"/g' || echo "[WARN] Preview failed (may be normal)"
 
       - name: Flask .env 생성 (GitHub Secret)
         run: |

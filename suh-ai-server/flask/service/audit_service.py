@@ -100,6 +100,10 @@ class AuditAction(str, Enum):
     AI_DB_ROLE_DELETE = "AI_DB_ROLE_DELETE"
     AI_DB_GRANT = "AI_DB_GRANT"
     AI_DB_REVOKE = "AI_DB_REVOKE"
+    # AI 서버 공용 PG gbrain 팀 브레인: 준비 / 읽기 전용 팀원 주기·빼기 (상세는 DB·계정 이름만)
+    AI_DB_GBRAIN_PREPARE = "AI_DB_GBRAIN_PREPARE"
+    AI_DB_GBRAIN_READER_GRANT = "AI_DB_GBRAIN_READER_GRANT"
+    AI_DB_GBRAIN_READER_REVOKE = "AI_DB_GBRAIN_READER_REVOKE"
 
 
 def record(category: AuditCategory, action: AuditAction, actor_ip: str, detail: dict = None, *,
