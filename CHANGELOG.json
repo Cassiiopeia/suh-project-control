@@ -1,14 +1,40 @@
 {
   "metadata": {
-    "lastUpdated": "2026-11-18T18:10:49Z",
-    "currentVersion": "2.0.94",
+    "lastUpdated": "2026-11-19T02:00:50Z",
+    "currentVersion": "2.0.95",
     "projectType": "python",
-    "totalReleases": 90,
+    "totalReleases": 91,
     "projectTypes": [
       "python"
     ]
   },
   "releases": [
+    {
+      "version": "2.0.95",
+      "project_type": "python",
+      "project_types": [
+        "python"
+      ],
+      "date": "2026-11-19",
+      "pr_number": 200,
+      "raw_summary": "## Summary by CodeRabbit\n\n## 릴리스 노트\n\n* **새 기능**\n  * AI 서버 DB 화면에서 gbrain 팀 브레인 준비와 팀원 읽기 권한 관리\n  * 외부에서 Bearer 키로 AI 서버 임베딩 사용 가능\n\n* **문서**\n  * gbrain 팀 브레인 설계와 팀원 연결 안내 추가",
+      "parsed_changes": {
+        "새_기능": {
+          "title": "새 기능",
+          "items": [
+            "AI 서버 DB 화면에서 gbrain 팀 브레인 준비와 팀원 읽기 권한 관리",
+            "외부에서 Bearer 키로 AI 서버 임베딩 사용 가능"
+          ]
+        },
+        "문서": {
+          "title": "문서",
+          "items": [
+            "gbrain 팀 브레인 설계와 팀원 연결 안내 추가"
+          ]
+        }
+      },
+      "parse_method": "markdown"
+    },
     {
       "version": "2.0.94",
       "project_type": "python",
