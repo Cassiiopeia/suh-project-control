@@ -1,5 +1,5 @@
 """
-AI 서버 DB 관리 규칙: 이름 검증, 보호 대상 차단, 삭제 확인, 비번 생성, 연결 문자열 조립
+AI 서버 DB 관리 규칙: 이름 검증, 보호 대상 차단, 삭제 확인, 비번 생성, 연결 문자열 조립, gbrain 팀 브레인
 흐름: 검증 > 보호 대상 차단 > 클라이언트 실행 > 결과 (비번은 응답 1회만, 저장·로그 없음)
 """
 import logging
@@ -7,7 +7,9 @@ import re
 import secrets
 from urllib.parse import quote
 
-from service.ai_db.ai_db_errors import AiDbError, AiDbUnavailable, ConfirmMismatch, InvalidName, ProtectedObject
+from service.ai_db.ai_db_errors import (
+    AiDbError, AiDbUnavailable, ConfirmMismatch, InvalidName, ProtectedObject, SameReaderWriter,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +129,34 @@ class AiDbService:
         client.revoke(database_name, role_name)
         logger.info(f"[ai-db] access revoked : {role_name} -> {database_name}")
 
+    # ---- gbrain 팀 브레인 ----
+
+    def get_gbrain_status(self, database_name) -> dict:
+        client = self._require_client()
+        self._validate_database_name(database_name)
+        return client.get_gbrain_status(database_name)
+
+    def prepare_gbrain(self, database_name, writer_role) -> None:
+        """검증 (DB, 쓰기 계정) > 확장·RLS 이벤트 트리거·쓰기 계정 BYPASSRLS"""
+        client = self._require_client()
+        self._validate_database_name(database_name)
+        self._validate_role_name(writer_role)
+        client.prepare_gbrain_database(database_name, writer_role)
+        logger.info(f"[ai-db] gbrain prepared : {database_name} writer={writer_role}")
+
+    def grant_gbrain_reader(self, database_name, reader_role, writer_role) -> None:
+        """검증 (DB, 읽기·쓰기 계정, 서로 다름) > 읽기 전용 권한 (일반 grant 의 CREATE 는 주지 않음)"""
+        client = self._require_client()
+        self._validate_gbrain_reader(database_name, reader_role, writer_role)
+        client.grant_gbrain_reader(database_name, reader_role, writer_role)
+        logger.info(f"[ai-db] gbrain reader granted : {reader_role} -> {database_name} writer={writer_role}")
+
+    def revoke_gbrain_reader(self, database_name, reader_role, writer_role) -> None:
+        client = self._require_client()
+        self._validate_gbrain_reader(database_name, reader_role, writer_role)
+        client.revoke_gbrain_reader(database_name, reader_role, writer_role)
+        logger.info(f"[ai-db] gbrain reader revoked : {reader_role} -> {database_name} writer={writer_role}")
+
     # ---- 연결 문자열 ----
 
     def build_connection_url(self, role_name: str, password: str, database_name: str = None) -> str:
@@ -176,6 +206,15 @@ class AiDbService:
             raise ProtectedObject()
         if not is_valid_name(name):
             raise InvalidName()
+
+    @classmethod
+    def _validate_gbrain_reader(cls, database_name, reader_role, writer_role) -> None:
+        """읽기 = 쓰기 계정이면 거부 (빼기 시 쓰기 계정 BYPASSRLS 까지 회수됨)"""
+        cls._validate_database_name(database_name)
+        cls._validate_role_name(reader_role)
+        cls._validate_role_name(writer_role)
+        if reader_role == writer_role:
+            raise SameReaderWriter()
 
     @staticmethod
     def _validate_confirm(name: str, confirm_name) -> None:

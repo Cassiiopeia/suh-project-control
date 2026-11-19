@@ -77,6 +77,9 @@
     AI_DB_ROLE_DELETE: 'AI 서버 DB 계정 삭제',
     AI_DB_GRANT: 'AI 서버 DB 접속 권한 주기',
     AI_DB_REVOKE: 'AI 서버 DB 접속 권한 빼기',
+    AI_DB_GBRAIN_PREPARE: 'AI 서버 DB 브레인 준비',
+    AI_DB_GBRAIN_READER_GRANT: 'AI 서버 DB 팀원 읽기 권한 주기',
+    AI_DB_GBRAIN_READER_REVOKE: 'AI 서버 DB 팀원 읽기 권한 빼기',
   };
 
   // 카테고리 선택 시 행위 셀렉트를 해당 카테고리 것만으로 좁힌다
@@ -101,7 +104,8 @@
                     'CONTROL_DESTINATION_CREATE', 'CONTROL_DESTINATION_UPDATE',
                     'CONTROL_DESTINATION_DELETE', 'CONTROL_DESTINATION_TEST'],
     AI_DB: ['AI_DB_DATABASE_CREATE', 'AI_DB_DATABASE_DELETE', 'AI_DB_ROLE_CREATE',
-            'AI_DB_ROLE_PASSWORD_RESET', 'AI_DB_ROLE_DELETE', 'AI_DB_GRANT', 'AI_DB_REVOKE'],
+            'AI_DB_ROLE_PASSWORD_RESET', 'AI_DB_ROLE_DELETE', 'AI_DB_GRANT', 'AI_DB_REVOKE',
+            'AI_DB_GBRAIN_PREPARE', 'AI_DB_GBRAIN_READER_GRANT', 'AI_DB_GBRAIN_READER_REVOKE'],
   };
 
   var KST_FMT = new Intl.DateTimeFormat('ko-KR', {

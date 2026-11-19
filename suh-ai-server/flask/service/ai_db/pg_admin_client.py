@@ -1,5 +1,5 @@
 """
-AI 서버 PG 관리 클라이언트: DB·계정 생성/삭제, 비번 설정, 접속 권한 주기/빼기
+AI 서버 PG 관리 클라이언트: DB·계정 생성/삭제, 비번 설정, 접속 권한 주기/빼기, gbrain 준비·읽기 팀원
 이름은 sql.Identifier, 비번은 클라이언트에서 SCRAM 해시 후 sql.Literal 로만 조립 (문자열 포맷 금지)
 """
 import logging
@@ -10,7 +10,8 @@ from psycopg2 import sql
 from psycopg2.extensions import encrypt_password
 
 from service.ai_db.ai_db_errors import (
-    AiDbError, AiDbUnavailable, AlreadyExists, DatabaseInUse, NotFound, PermissionDenied, RoleInUse,
+    AiDbError, AiDbUnavailable, AlreadyExists, DatabaseInUse, GbrainOpsMissing, InvalidName, NotFound,
+    PermissionDenied, RoleInUse,
 )
 
 logger = logging.getLogger(__name__)
@@ -18,11 +19,13 @@ logger = logging.getLogger(__name__)
 CONNECT_TIMEOUT_SECONDS = 3
 PASSWORD_ALGORITHM = "scram-sha-256"
 # pgcode > 오류 (42P04 duplicate_database, 42710 duplicate_object, 3D000 invalid_catalog_name,
-# 42704 undefined_object, 55006 object_in_use, 2BP01 dependent_objects_still_exist, 42501 insufficient_privilege)
+# 42704 undefined_object, 55006 object_in_use, 2BP01 dependent_objects_still_exist, 42501 insufficient_privilege,
+# 42602 invalid_name, 42883 undefined_function = 그 DB 에 ai_db_ops 함수 미설치)
 PGCODE_ERRORS = {
     "42P04": AlreadyExists, "42710": AlreadyExists,
     "3D000": NotFound, "42704": NotFound,
     "55006": DatabaseInUse, "2BP01": RoleInUse, "42501": PermissionDenied,
+    "42602": InvalidName, "42883": GbrainOpsMissing,
 }
 DATABASE_IN_USE_MESSAGE = "is being accessed by other users"
 
@@ -41,6 +44,26 @@ WHERE NOT d.datistemplate
 ORDER BY d.datname
 """
 LIST_ROLES_SQL = "SELECT rolname::text FROM pg_roles WHERE rolcanlogin AND rolname !~ '^pg_' ORDER BY rolname"
+DATABASE_EXISTS_SQL = "SELECT 1 FROM pg_database WHERE datname = {}"
+# gbrain 상태 (대상 DB 안): ops 스키마, RLS 이벤트 트리거, auto_enable_rls() 소유자(= 쓰기 계정), pages 표
+GBRAIN_STATUS_SQL = """
+SELECT to_regnamespace('ai_db_ops') IS NOT NULL,
+       EXISTS (SELECT 1 FROM pg_event_trigger WHERE evtname = 'auto_rls_on_create_table'),
+       (SELECT pg_get_userbyid(p.proowner)::text FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public' AND p.proname = 'auto_enable_rls' LIMIT 1),
+       to_regclass('public.pages') IS NOT NULL
+"""
+# 읽기 팀원: public.pages SELECT 받은 계정 (표 소유자 제외, 표 없으면 빈 목록)
+GBRAIN_READERS_SQL = """
+SELECT DISTINCT r.rolname::text
+FROM pg_class c CROSS JOIN LATERAL aclexplode(c.relacl) a JOIN pg_roles r ON r.oid = a.grantee
+WHERE c.oid = to_regclass('public.pages') AND a.privilege_type = 'SELECT' AND a.grantee <> c.relowner
+ORDER BY 1
+"""
+# ai_db_ops 함수 호출 (sql/ai_db_ops_gbrain.sql, 대상 DB 안에서 실행)
+GBRAIN_PREPARE_SQL = "SELECT ai_db_ops.prepare_gbrain_database({})"
+GBRAIN_GRANT_READER_SQL = "SELECT ai_db_ops.grant_gbrain_reader({}, {})"
+GBRAIN_REVOKE_READER_SQL = "SELECT ai_db_ops.revoke_gbrain_reader({}, {})"
 
 
 class PgAdminClient:
@@ -111,7 +134,41 @@ class PgAdminClient:
         self._execute([sql.SQL("REVOKE USAGE, CREATE ON SCHEMA public FROM {}").format(role)],
                       database_name=database_name)
 
+    # ---- gbrain 팀 브레인 (슈퍼유저 작업은 ai_db_ops SECURITY DEFINER 함수로 위임) ----
+
+    def get_gbrain_status(self, database_name: str) -> dict:
+        """ops 스키마·이벤트 트리거 둘 다 있어야 준비됨, 쓰기 계정 = auto_enable_rls() 소유자"""
+        self._require_database(database_name)
+        has_ops_schema, has_event_trigger, writer_role, has_pages_table = \
+            self._fetch(sql.SQL(GBRAIN_STATUS_SQL), database_name=database_name)[0]
+        readers = [row[0] for row in self._fetch(sql.SQL(GBRAIN_READERS_SQL), database_name=database_name)]
+        return {"is_ready": bool(has_ops_schema and has_event_trigger), "has_ops_functions": bool(has_ops_schema),
+                "has_pages_table": bool(has_pages_table), "writer_role": writer_role,
+                "readers": [reader for reader in readers if reader != writer_role]}
+
+    def prepare_gbrain_database(self, database_name: str, writer_role: str) -> None:
+        self._call_gbrain_ops(database_name, GBRAIN_PREPARE_SQL, writer_role)
+
+    def grant_gbrain_reader(self, database_name: str, reader_role: str, writer_role: str) -> None:
+        """CONNECT·USAGE·SELECT·기본 권한·BYPASSRLS 만 (public 스키마 CREATE 없음 = 일반 grant 미사용)"""
+        self._call_gbrain_ops(database_name, GBRAIN_GRANT_READER_SQL, reader_role, writer_role)
+
+    def revoke_gbrain_reader(self, database_name: str, reader_role: str, writer_role: str) -> None:
+        self._call_gbrain_ops(database_name, GBRAIN_REVOKE_READER_SQL, reader_role, writer_role)
+
     # ---- 내부 ----
+
+    def _call_gbrain_ops(self, database_name: str, function_sql: str, *role_names: str) -> None:
+        """DB 존재 확인 > 그 DB 접속 > ai_db_ops 함수 (계정 이름은 Literal 인자)"""
+        self._require_database(database_name)
+        statement = sql.SQL(function_sql).format(*[sql.Literal(name) for name in role_names])
+        self._execute([statement], database_name=database_name)
+
+    def _require_database(self, database_name: str) -> None:
+        """없는 DB 접속은 pgcode 없는 OperationalError(= unavailable) > 먼저 관리 DB 에서 확인해 NotFound"""
+        if not self._fetch(sql.SQL(DATABASE_EXISTS_SQL).format(sql.Literal(database_name))):
+            raise NotFound()
+
 
     def _execute_with_password(self, statement: sql.SQL, name: str, password: str) -> None:
         """비번은 SCRAM 해시로 바꿔 전송 (서버 문장 로그에 원문 남지 않음)"""
@@ -128,8 +185,8 @@ class PgAdminClient:
             for statement in statements:
                 cursor.execute(statement)
 
-    def _fetch(self, statement) -> list:
-        with self._connection() as connection, connection.cursor() as cursor:
+    def _fetch(self, statement, database_name: str = None) -> list:
+        with self._connection(database_name) as connection, connection.cursor() as cursor:
             cursor.execute(statement)
             return cursor.fetchall()
 
