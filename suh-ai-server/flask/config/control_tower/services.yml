@@ -119,6 +119,12 @@ projects:
         public: true
         checks:
           external: {url: "https://ai.suhsaechan.kr/"}
+      - id: gbrain-mcp
+        name: gbrain 공용 메모리 서버
+        public: false  # 내부 MCP 서버 (맥은 SSH 터널로 접속, 외부 주소 없음)
+        depends_on: windows
+        checks:
+          internal: {url: "http://127.0.0.1:3131/health", expect: [200]}   # NSSM gbrain-http
   - id: elum
     name: elum
     icon_source_url: "https://lab.suhsaechan.kr/images/elumLogo.png"

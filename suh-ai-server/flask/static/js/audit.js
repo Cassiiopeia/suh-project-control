@@ -12,6 +12,7 @@
     CLAUDE_LOGIN: { label: 'Claude 로그인', badge: 'badge-warning' },
     CONTROL_TOWER: { label: '관제소', badge: 'badge-success' },
     AI_DB: { label: 'AI 서버 DB', badge: 'badge-error' },
+    GBRAIN: { label: 'gbrain 서버', badge: 'badge-primary' },
   };
 
   var ACTION_LABELS = {
@@ -80,6 +81,10 @@
     AI_DB_GBRAIN_PREPARE: 'AI 서버 DB 브레인 준비',
     AI_DB_GBRAIN_READER_GRANT: 'AI 서버 DB 팀원 읽기 권한 주기',
     AI_DB_GBRAIN_READER_REVOKE: 'AI 서버 DB 팀원 읽기 권한 빼기',
+    GBRAIN_START: 'gbrain 서버 시작',
+    GBRAIN_STOP: 'gbrain 서버 중지',
+    GBRAIN_RESTART: 'gbrain 서버 재시작',
+    GBRAIN_ADMIN_LOGIN: 'gbrain 관리자 화면 로그인',
   };
 
   // 카테고리 선택 시 행위 셀렉트를 해당 카테고리 것만으로 좁힌다
@@ -106,6 +111,7 @@
     AI_DB: ['AI_DB_DATABASE_CREATE', 'AI_DB_DATABASE_DELETE', 'AI_DB_ROLE_CREATE',
             'AI_DB_ROLE_PASSWORD_RESET', 'AI_DB_ROLE_DELETE', 'AI_DB_GRANT', 'AI_DB_REVOKE',
             'AI_DB_GBRAIN_PREPARE', 'AI_DB_GBRAIN_READER_GRANT', 'AI_DB_GBRAIN_READER_REVOKE'],
+    GBRAIN: ['GBRAIN_START', 'GBRAIN_STOP', 'GBRAIN_RESTART', 'GBRAIN_ADMIN_LOGIN'],
   };
 
   var KST_FMT = new Intl.DateTimeFormat('ko-KR', {

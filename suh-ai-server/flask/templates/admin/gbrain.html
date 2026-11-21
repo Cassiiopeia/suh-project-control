@@ -1,0 +1,113 @@
+{% extends "admin/base.html" %}
+{% block title %}gbrain 서버 관리 | SUH AI Server{% endblock %}
+{% block page_title %}gbrain 서버 (공용 MCP 메모리){% endblock %}
+{% block content %}
+<div class="space-y-6 max-w-6xl mx-auto">
+
+  <!-- 관리자 토큰 파일 없음: 상태·제어는 되지만 관리자 화면 로그인은 막힘 -->
+  <div id="admin-token-warning" class="alert alert-warning text-sm" hidden>
+    <i data-lucide="alert-triangle" class="size-5"></i>
+    <span>gbrain 관리자 토큰 파일이 없어 관리자 화면에 로그인할 수 없습니다.
+      서버에서 <span class="font-mono">scripts/setup-gbrain-http.ps1</span> 을 관리자 권한으로 실행하세요.</span>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- 카드 1: 서비스 상태·제어·관리자 화면 -->
+    <div class="card bg-base-100 shadow border border-base-300">
+      <div class="card-body">
+        <h2 class="card-title text-base flex justify-between items-center">
+          <span class="flex items-center gap-2">
+            <i data-lucide="brain" class="size-5 text-primary"></i>gbrain 서버 상태
+          </span>
+          <span id="service-status-badge" class="badge badge-ghost gap-1 text-xs py-2 px-2.5">확인 중</span>
+        </h2>
+        <p class="text-xs opacity-60 mt-1">
+          맥의 Claude 세션들이 SSH 터널로 함께 쓰는 MCP 메모리 서버입니다. 멈추면 모든 세션의 gbrain 도구가 끊기므로
+          여기서 바로 재기동합니다.
+        </p>
+
+        <div class="grid grid-cols-2 gap-x-4 gap-y-2 mt-4 text-sm">
+          <div class="opacity-60">헬스</div>
+          <div><span id="health-badge" class="badge badge-ghost badge-sm">-</span></div>
+          <div class="opacity-60">실행 버전</div>
+          <div id="running-version" class="font-mono text-xs">-</div>
+          <div class="opacity-60">설치 버전</div>
+          <div id="installed-version" class="font-mono text-xs">-</div>
+          <div class="opacity-60">서비스 이름</div>
+          <div id="service-name" class="font-mono text-xs">-</div>
+        </div>
+
+        <div class="flex flex-wrap gap-2.5 mt-4">
+          <button id="service-start" class="btn btn-primary btn-sm flex-1 min-w-24">
+            <i data-lucide="play" class="size-4"></i>서비스 시작
+          </button>
+          <button id="service-stop" class="btn btn-error btn-sm flex-1 min-w-24">
+            <i data-lucide="square" class="size-4"></i>서비스 중지
+          </button>
+          <button id="service-restart" class="btn btn-warning btn-sm flex-1 min-w-24">
+            <i data-lucide="rotate-ccw" class="size-4"></i>재시작
+          </button>
+        </div>
+        <!-- 1회용 로그인 링크 발급 > 같은 탭에서 gbrain 관리자 화면으로 이동 -->
+        <button id="admin-login" class="btn btn-outline btn-sm mt-2 w-full">
+          <i data-lucide="log-in" class="size-4"></i>gbrain 관리자 화면 열기
+        </button>
+      </div>
+    </div>
+
+    <!-- 카드 2: 구성 (DB·임베딩·주소) -->
+    <div class="card bg-base-100 shadow border border-base-300">
+      <div class="card-body">
+        <h2 class="card-title text-base flex items-center gap-2">
+          <i data-lucide="settings-2" class="size-5 text-primary"></i>구성
+        </h2>
+        <p class="text-xs opacity-60 mt-1">
+          서버의 gbrain 설정 파일에서 읽은 값입니다. DB 비밀번호는 표시하지 않습니다.
+        </p>
+        <div class="grid grid-cols-2 gap-x-4 gap-y-2 mt-4 text-sm">
+          <div class="opacity-60">엔진</div>
+          <div id="engine" class="font-mono text-xs">-</div>
+          <div class="opacity-60">브레인 DB</div>
+          <div id="database" class="font-mono text-xs break-all">-</div>
+          <div class="opacity-60">DB 계정</div>
+          <div id="database-user" class="font-mono text-xs">-</div>
+          <div class="opacity-60">임베딩 모델</div>
+          <div id="embedding-model" class="font-mono text-xs break-all">-</div>
+          <div class="opacity-60">내부 주소</div>
+          <div id="server-url" class="font-mono text-xs break-all">-</div>
+          <div class="opacity-60">관리자 토큰</div>
+          <div><span id="admin-token-badge" class="badge badge-ghost badge-sm">-</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 카드 3: 서비스 로그 -->
+  <div class="card bg-base-100 shadow border border-base-300">
+    <div class="card-body space-y-3">
+      <div class="flex items-center justify-between border-b border-base-300 pb-2">
+        <h2 class="card-title text-base">
+          <i data-lucide="scroll-text" class="size-5 text-primary"></i>gbrain 서버 로그
+        </h2>
+        <div class="flex items-center gap-2.5">
+          <label class="label cursor-pointer gap-2 py-0">
+            <input type="checkbox" id="log-auto" class="checkbox checkbox-xs" checked>
+            <span class="text-xs opacity-70">자동 새로고침 (5초)</span>
+          </label>
+          <button id="log-refresh" class="btn btn-ghost btn-sm" title="로그 새로고침">
+            <i data-lucide="refresh-cw" class="size-4"></i>
+          </button>
+        </div>
+      </div>
+      <div class="relative bg-base-300 rounded-xl p-3 border border-base-200 font-mono">
+        <div id="log-container" class="overflow-y-auto text-xs space-y-1 h-[420px] scrollbar-thin text-base-content whitespace-pre-wrap select-text selection:bg-primary/20">
+          <div class="opacity-50 text-center py-10">gbrain 서버 로그를 불러오는 중...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script src="{{ root }}/static/js/gbrain.js?v={{ asset('js/gbrain.js') }}"></script>
+{% endblock %}

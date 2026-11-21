@@ -85,6 +85,12 @@ def ai_db():
     return render_template('admin/ai_db.html', root='..', active='ai-db')
 
 
+@admin_bp.route('/admin/gbrain', methods=['GET'])
+def gbrain():
+    """gbrain HTTP 서버(MCP) 관리 페이지 (상태·제어·로그·관리자 화면 로그인)"""
+    return render_template('admin/gbrain.html', root='..', active='gbrain')
+
+
 @admin_bp.route('/admin/models', methods=['GET'])
 def models():
     """모델 관리 페이지 (HF 검색·다운로드·벤치마크)"""

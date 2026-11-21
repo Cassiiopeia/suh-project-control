@@ -26,6 +26,7 @@ class AuditCategory(str, Enum):
     CLAUDE_LOGIN = "CLAUDE_LOGIN"
     CONTROL_TOWER = "CONTROL_TOWER"
     AI_DB = "AI_DB"
+    GBRAIN = "GBRAIN"
 
 
 class AuditAction(str, Enum):
@@ -104,6 +105,11 @@ class AuditAction(str, Enum):
     AI_DB_GBRAIN_PREPARE = "AI_DB_GBRAIN_PREPARE"
     AI_DB_GBRAIN_READER_GRANT = "AI_DB_GBRAIN_READER_GRANT"
     AI_DB_GBRAIN_READER_REVOKE = "AI_DB_GBRAIN_READER_REVOKE"
+    # gbrain HTTP 서버(MCP): 서비스 제어 / 관리자 화면 로그인 (1회용 링크·쿠키는 기록하지 않음)
+    GBRAIN_START = "GBRAIN_START"
+    GBRAIN_STOP = "GBRAIN_STOP"
+    GBRAIN_RESTART = "GBRAIN_RESTART"
+    GBRAIN_ADMIN_LOGIN = "GBRAIN_ADMIN_LOGIN"
 
 
 def record(category: AuditCategory, action: AuditAction, actor_ip: str, detail: dict = None, *,

@@ -6,6 +6,7 @@ import requests
 
 from service import sunshine_service as mod
 from service.sunshine_service import SunshineApiError, SunshineService
+from util import windows_service_client as windows_service_module
 
 SERVERINFO_BUSY = (
     '<?xml version="1.0" encoding="utf-8"?>'
@@ -146,7 +147,7 @@ def test_is_service_running_parses_powershell(svc, monkeypatch):
     def fake_run(cmd, **kw):
         calls.append(cmd)
         return subprocess.CompletedProcess(cmd, 0, stdout='Running\n', stderr='')
-    monkeypatch.setattr(mod.subprocess, 'run', fake_run)
+    monkeypatch.setattr(windows_service_module.subprocess, 'run', fake_run)
 
     assert svc.is_service_running() is True
     assert "Get-Service -Name 'SunshineService'" in calls[0][-1]
@@ -155,7 +156,7 @@ def test_is_service_running_parses_powershell(svc, monkeypatch):
 def test_is_service_running_false_when_powershell_missing(svc, monkeypatch):
     def boom(*a, **k):
         raise FileNotFoundError('powershell')
-    monkeypatch.setattr(mod.subprocess, 'run', boom)
+    monkeypatch.setattr(windows_service_module.subprocess, 'run', boom)
     assert svc.is_service_running() is False
 
 
@@ -165,14 +166,14 @@ def test_restart_service_uses_restart_verb(svc, monkeypatch):
     def fake_run(cmd, **kw):
         calls.append(cmd)
         return subprocess.CompletedProcess(cmd, 0, stdout='', stderr='')
-    monkeypatch.setattr(mod.subprocess, 'run', fake_run)
+    monkeypatch.setattr(windows_service_module.subprocess, 'run', fake_run)
 
     assert svc.restart_service() is True
     assert "Restart-Service -Name 'SunshineService'" in calls[0][-1]
 
 
 def test_stop_service_false_on_nonzero_exit(svc, monkeypatch):
-    monkeypatch.setattr(mod.subprocess, 'run',
+    monkeypatch.setattr(windows_service_module.subprocess, 'run',
                         lambda cmd, **kw: subprocess.CompletedProcess(cmd, 1, stdout='', stderr='denied'))
     assert svc.stop_service() is False
 
