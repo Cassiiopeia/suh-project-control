@@ -1,4 +1,4 @@
-"""관제소 nginx 설정: 키 검사 제외 경로는 이벤트·앱 확인할 일 push 입구 2개, 본문 상한·전용 속도 제한, 공개 경로 map은 정규화 $uri 기준, 키는 X-API-Key 또는 Bearer, gbrain /admin 은 게이트 쿠키"""
+"""관제소 nginx 설정: 키 검사 제외 경로는 이벤트·앱 확인할 일 push 입구 2개, 본문 상한·전용 속도 제한, 공개 경로 map은 정규화 $uri 기준, 키는 X-API-Key 또는 Bearer, gbrain /admin 은 게이트 쿠키, /mcp 는 gbrain 토큰 + Bearer 필수·속도 제한"""
 from __future__ import annotations
 
 import os
@@ -12,6 +12,8 @@ ALLOWED_EXEMPT_LOCATIONS = {EVENT_LOCATION, ATTENTION_LOCATION}
 # gbrain 관리자 화면: 키 대신 관제소 게이트 쿠키 (auth_request) 로 막는 location 머리
 GBRAIN_ADMIN_LOCATIONS = {"^~ /admin/auth/", "^~ /admin"}
 GBRAIN_GATE_LOCATION = "= /_gbrain_admin_gate"
+# gbrain 공개 MCP: 정확 경로 하나만 (토큰 검사는 gbrain, nginx 는 Bearer 형식·속도·크기만)
+GBRAIN_MCP_LOCATION = "= /mcp"
 
 
 def _read_conf() -> str:
@@ -96,7 +98,7 @@ def test_api_키는_X_API_Key_우선_없으면_Bearer_토큰을_같은_키_목�
     assert conf_text.count("{{OLLAMA_API_KEY_LIST}}") == 1
 
 
-def test_gbrain_admin_은_게이트_쿠키_검사를_거치고_mcp_는_프록시하지_않는다():
+def test_gbrain_admin_은_게이트_쿠키_검사를_거친다():
     conf_text = _read_conf()
     blocks = _location_blocks(conf_text)
     gated_locations = {location for location, body in blocks.items() if "auth_request" in body}
@@ -107,10 +109,60 @@ def test_gbrain_admin_은_게이트_쿠키_검사를_거치고_mcp_는_프록시
         assert re.search(r"auth_request\s+/_gbrain_admin_gate;", body)
         assert re.search(r"proxy_pass\s+http://gbrain_backend;", body)
         assert re.search(r"proxy_cookie_flags\s+gbrain_admin\s+secure;", body)
-    # gbrain 으로 가는 경로는 /admin 뿐 (/mcp·OAuth 미노출)
-    assert conf_text.count("proxy_pass http://gbrain_backend;") == len(GBRAIN_ADMIN_LOCATIONS)
-    assert not any("/mcp" in location for location in blocks)
     assert re.search(r"upstream\s+gbrain_backend\s*\{\s*server\s+127\.0\.0\.1:3131;", conf_text)
+
+
+def test_gbrain_으로_가는_경로는_admin_과_정확한_mcp_뿐이다():
+    blocks = _location_blocks(_read_conf())
+    gbrain_locations = {location for location, body in blocks.items() if "proxy_pass http://gbrain_backend;" in body}
+
+    # OAuth(/authorize·/token·/register)·/.well-known·/mcp/ 하위 경로는 미노출
+    assert gbrain_locations == GBRAIN_ADMIN_LOCATIONS | {GBRAIN_MCP_LOCATION}
+    assert not any(keyword in location for location in blocks
+                   for keyword in ("well-known", "oauth", "authorize", "token", "register"))
+
+
+def test_mcp_는_POST_와_Bearer_헤더가_없으면_gbrain_전에_거부한다():
+    mcp_block = _location_blocks(_read_conf())[GBRAIN_MCP_LOCATION]
+
+    assert re.search(r"if \(\$request_method != POST\)\s*\{\s*return 405", mcp_block)
+    assert 'if ($http_authorization !~* "^Bearer\\s+\\S+$")' in mcp_block
+    assert re.search(r"return 401 ", mcp_block)
+    # 거부가 프록시보다 먼저
+    assert mcp_block.index("return 401") < mcp_block.index("proxy_pass")
+    # Ollama 키 검사(관제소 키) 와 섞지 않음
+    assert "$api_key_valid" not in mcp_block and "$is_public_endpoint" not in mcp_block
+
+
+def test_mcp_는_실제_접속_IP_와_전체_상한_두_속도_제한과_본문_상한을_쓴다():
+    conf_text = _read_conf()
+    mcp_block = _location_blocks(conf_text)[GBRAIN_MCP_LOCATION]
+    client_key_map = _map_body(conf_text, "$http_cf_connecting_ip", "$mcp_client_key")
+
+    assert re.search(r"default\s+\$http_cf_connecting_ip;", client_key_map)
+    assert re.search(r'""\s+\$binary_remote_addr;', client_key_map)
+    assert re.search(r"limit_req_zone\s+\$mcp_client_key\s+zone=mcp_client:10m\s+rate=10r/s;", conf_text)
+    assert re.search(r"limit_req_zone\s+\$binary_remote_addr\s+zone=mcp_total:1m\s+rate=30r/s;", conf_text)
+    assert re.search(r"limit_req\s+zone=mcp_client\s+burst=\d+\s+nodelay;", mcp_block)
+    assert re.search(r"limit_req\s+zone=mcp_total\s+burst=\d+\s+nodelay;", mcp_block)
+    assert re.search(r"limit_req_status\s+429;", mcp_block)
+    assert re.search(r"client_max_body_size\s+4m;", mcp_block)
+
+
+def test_mcp_접근_로그는_쿼리와_Authorization_을_남기지_않고_CORS_별표를_물려받지_않는다():
+    conf_text = _read_conf()
+    mcp_block = _location_blocks(conf_text)[GBRAIN_MCP_LOCATION]
+    log_format_match = re.search(r"log_format\s+mcp\s+(.*?);", conf_text, re.DOTALL)
+
+    assert log_format_match is not None
+    log_format_text = log_format_match.group(1)
+    assert "$uri" in log_format_text
+    assert "$request " not in log_format_text and "$request_uri" not in log_format_text and "$args" not in log_format_text
+    assert "authorization" not in log_format_text.lower()
+    assert "authorization" not in re.search(r"log_format\s+main\s+(.*?);", conf_text, re.DOTALL).group(1).lower()
+    assert re.search(r"access_log\s+logs/access\.log\s+mcp;", mcp_block)
+    # location 안 add_header 가 server 의 Access-Control-Allow-Origin '*' 상속을 끊음
+    assert "add_header" in mcp_block and "Access-Control-Allow-Origin" not in mcp_block
 
 
 def test_gbrain_게이트는_내부_전용이고_1회용_로그인_경로는_로그를_남기지_않는다():
