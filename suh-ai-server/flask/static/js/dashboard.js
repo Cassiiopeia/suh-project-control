@@ -152,6 +152,8 @@ const DESTRUCTIVE_WARN = {
               restart: 'Ollama를 재시작하면 진행 중인 추론·벤치마크가 중단됩니다.' },
   sunshine: { stop: 'Sunshine을 중지하면 원격 스트리밍 접속이 끊기고 새 연결도 받지 못합니다.',
               restart: 'Sunshine을 재시작하면 스트리밍 중인 접속이 끊깁니다.' },
+  gbrain:   { stop: 'gbrain 서버를 중지하면 모든 Claude 세션의 gbrain 메모리 도구가 끊깁니다.',
+              restart: 'gbrain 서버를 재시작하면 약 15초 동안 gbrain 메모리 도구가 끊깁니다.' },
 };
 
 // 서비스마다 제어 엔드포인트 모양이 달라 한 곳에 모아 둔다.
@@ -159,6 +161,7 @@ const CONTROL_PATH = {
   palworld: function (action) { return './palworld/' + action; },
   ollama: function (action) { return './ollama/control/' + action; },
   sunshine: function (action) { return './sunshine/control/' + action; },
+  gbrain: function (action) { return './gbrain/control/' + action; },
 };
 
 async function controlService(kind, action, btn) {
@@ -208,7 +211,7 @@ async function refreshServiceControl() {
   const box = document.getElementById('service-control');
   if (!box) return;
 
-  let palHtml = '', ollamaHtml = '', sunshineHtml = '';
+  let palHtml = '', ollamaHtml = '', sunshineHtml = '', gbrainHtml = '';
 
   try {
     const r = await apiFetch('./palworld/status');
@@ -243,7 +246,17 @@ async function refreshServiceControl() {
                                d.service_running ? '구동 중' : '정지됨', extra);
   } catch (e) { /* 401 modal은 apiFetch가 처리 */ }
 
-  box.innerHTML = palHtml + ollamaHtml + sunshineHtml;
+  try {
+    const r = await apiFetch('./gbrain/status');
+    const d = await r.json();
+    const extra = d.service_running
+      ? (d.is_healthy ? 'v' + (d.version || '-') : '응답 대기 중')
+      : '맥 Claude 세션 메모리 끊김';
+    gbrainHtml = serviceCard('gbrain', 'gbrain 서버', 'brain', !!d.service_running,
+                             d.service_running ? '구동 중' : '정지됨', esc(extra));
+  } catch (e) { /* 401 modal은 apiFetch가 처리 */ }
+
+  box.innerHTML = palHtml + ollamaHtml + sunshineHtml + gbrainHtml;
   if (window.lucide) window.lucide.createIcons();
 }
 

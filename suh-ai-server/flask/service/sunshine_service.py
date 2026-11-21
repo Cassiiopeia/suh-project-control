@@ -2,10 +2,9 @@
 Sunshine(Moonlight 호스트) 제어 서비스
 - 웹 API(47990, Basic 인증): 페어링 PIN 승인, 클라이언트 목록/해제, 세션 종료, 로그
 - serverinfo(47989, 무인증): 스트림 상태(FREE/BUSY)와 실행 중 앱 ID
-- Windows 서비스(SunshineService): PowerShell Start/Stop/Restart-Service
+- Windows 서비스(SunshineService): 공통 WindowsServiceClient
 """
 import logging
-import subprocess
 import xml.etree.ElementTree as ET
 
 import requests
@@ -17,6 +16,7 @@ from config.sunshine_config import (
     SUNSHINE_PUBLIC_HOST, SUNSHINE_SERVERINFO_URL, SUNSHINE_SERVICE_NAME,
     SUNSHINE_SERVICE_TIMEOUT_SECONDS, get_web_credentials,
 )
+from util.windows_service_client import WindowsServiceClient
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +40,7 @@ class SunshineService:
         self.serverinfo_url = serverinfo_url
         self.service_name = service_name
         self.timeout = timeout
+        self.windows_service = WindowsServiceClient(service_name, SUNSHINE_SERVICE_TIMEOUT_SECONDS)
 
     # ---------- 웹 API ----------
     def _auth(self):
@@ -130,39 +131,17 @@ class SunshineService:
         return SUNSHINE_KNOWN_APP_IDS.get(str(app_id))
 
     # ---------- Windows 서비스 ----------
-    def _powershell(self, command: str, timeout: int):
-        return subprocess.run(['powershell', '-NoProfile', '-Command', command],
-                              capture_output=True, text=True, timeout=timeout)
-
     def is_service_running(self) -> bool:
-        try:
-            res = self._powershell(f"(Get-Service -Name '{self.service_name}').Status", timeout=10)
-            return res.returncode == 0 and res.stdout.strip().lower() == 'running'
-        except (OSError, subprocess.SubprocessError) as e:
-            logger.debug(f'Sunshine service status check failed: {e}')
-            return False
-
-    def _service_command(self, verb: str) -> bool:
-        try:
-            res = self._powershell(f"{verb}-Service -Name '{self.service_name}'",
-                                   timeout=SUNSHINE_SERVICE_TIMEOUT_SECONDS)
-            if res.returncode != 0:
-                logger.error(f'{verb}-Service {self.service_name} failed: {res.stderr.strip()}')
-                return False
-            return True
-        except (OSError, subprocess.SubprocessError) as e:
-            logger.error(f'{verb}-Service {self.service_name} error: {e}')
-            return False
+        return self.windows_service.is_running()
 
     def start_service(self) -> bool:
-        return self._service_command('Start')
+        return self.windows_service.start()
 
     def stop_service(self) -> bool:
-        return self._service_command('Stop')
+        return self.windows_service.stop()
 
     def restart_service(self) -> bool:
-        # Restart-Service 는 의존 서비스까지 한 번에 처리하므로 stop→start 수동 조합보다 안전하다
-        return self._service_command('Restart')
+        return self.windows_service.restart()
 
     # ---------- 종합 상태 ----------
     def get_status(self) -> dict:

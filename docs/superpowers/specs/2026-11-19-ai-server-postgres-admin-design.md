@@ -3,6 +3,9 @@
 - 작성: 2026-11-19
 - 출발점: Twin-Fang/elum#1485 (개인 gbrain 을 윈도우 AI 서버 PG 로 이전)
 
+> **2026-11-22 현황 (#201)**: 아래 "gbrain 원격 MCP 서버 운영" 제외 결정은 바뀜.
+> 소유자 맥 전용 MCP 서버를 AI 서버에 둠 ([gbrain HTTP 서버 관제소 관리](2026-11-22-gbrain-http-server-control-tower-design.md)). 팀원 원격 MCP·팀원별 토큰은 여전히 범위 밖
+
 ## 1. 왜
 
 윈도우 AI 서버의 PG(pgvector 포함)를 시놀로지 PG 처럼 **외부에서 아이디·비번으로 쓰는 공용 DB** 로 연다.

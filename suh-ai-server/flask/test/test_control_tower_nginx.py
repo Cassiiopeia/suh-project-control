@@ -1,4 +1,4 @@
-"""관제소 nginx 설정: 키 검사 제외 경로는 이벤트·앱 확인할 일 push 입구 2개, 본문 상한·전용 속도 제한, 공개 경로 map은 정규화 $uri 기준, 키는 X-API-Key 또는 Bearer"""
+"""관제소 nginx 설정: 키 검사 제외 경로는 이벤트·앱 확인할 일 push 입구 2개, 본문 상한·전용 속도 제한, 공개 경로 map은 정규화 $uri 기준, 키는 X-API-Key 또는 Bearer, gbrain /admin 은 게이트 쿠키"""
 from __future__ import annotations
 
 import os
@@ -9,6 +9,9 @@ EVENT_LOCATION = "= /api/flask/control/events"
 ATTENTION_LOCATION = "^~ /api/flask/control/attention/"
 # 키 검사 제외를 허용하는 location 머리 (이 목록과 정확히 일치해야 함)
 ALLOWED_EXEMPT_LOCATIONS = {EVENT_LOCATION, ATTENTION_LOCATION}
+# gbrain 관리자 화면: 키 대신 관제소 게이트 쿠키 (auth_request) 로 막는 location 머리
+GBRAIN_ADMIN_LOCATIONS = {"^~ /admin/auth/", "^~ /admin"}
+GBRAIN_GATE_LOCATION = "= /_gbrain_admin_gate"
 
 
 def _read_conf() -> str:
@@ -38,8 +41,10 @@ def _public_endpoint_map(conf_text: str) -> tuple[str, str]:
 
 
 def test_nginx_키_검사_제외_경로는_허용_목록과_정확히_일치한다():
+    # 내부 전용(internal)·게이트 검사(auth_request) location 은 별도 테스트로 검사
     exempt_locations = [location for location, body in _location_blocks(_read_conf()).items()
-                        if "return 401" not in body]
+                        if "return 401" not in body and "auth_request" not in body
+                        and not re.search(r"^\s*internal;", body, re.MULTILINE)]
     assert len(exempt_locations) == len(ALLOWED_EXEMPT_LOCATIONS)
     assert set(exempt_locations) == ALLOWED_EXEMPT_LOCATIONS
 
@@ -89,3 +94,30 @@ def test_api_키는_X_API_Key_우선_없으면_Bearer_토큰을_같은_키_목�
     # 배포가 치환하는 키 목록 자리는 검사 map 한 곳에만 (기본 거부)
     assert re.search(r"default\s+0;", valid_map) and "{{OLLAMA_API_KEY_LIST}}" in valid_map
     assert conf_text.count("{{OLLAMA_API_KEY_LIST}}") == 1
+
+
+def test_gbrain_admin_은_게이트_쿠키_검사를_거치고_mcp_는_프록시하지_않는다():
+    conf_text = _read_conf()
+    blocks = _location_blocks(conf_text)
+    gated_locations = {location for location, body in blocks.items() if "auth_request" in body}
+
+    assert gated_locations == GBRAIN_ADMIN_LOCATIONS
+    for location in GBRAIN_ADMIN_LOCATIONS:
+        body = blocks[location]
+        assert re.search(r"auth_request\s+/_gbrain_admin_gate;", body)
+        assert re.search(r"proxy_pass\s+http://gbrain_backend;", body)
+        assert re.search(r"proxy_cookie_flags\s+gbrain_admin\s+secure;", body)
+    # gbrain 으로 가는 경로는 /admin 뿐 (/mcp·OAuth 미노출)
+    assert conf_text.count("proxy_pass http://gbrain_backend;") == len(GBRAIN_ADMIN_LOCATIONS)
+    assert not any("/mcp" in location for location in blocks)
+    assert re.search(r"upstream\s+gbrain_backend\s*\{\s*server\s+127\.0\.0\.1:3131;", conf_text)
+
+
+def test_gbrain_게이트는_내부_전용이고_1회용_로그인_경로는_로그를_남기지_않는다():
+    blocks = _location_blocks(_read_conf())
+    gate_body = blocks[GBRAIN_GATE_LOCATION]
+
+    assert re.search(r"^\s*internal;", gate_body, re.MULTILINE)
+    assert re.search(r"proxy_pass\s+http://python_backend/gbrain/admin-gate;", gate_body)
+    assert re.search(r"access_log\s+off;", blocks["^~ /admin/auth/"])
+    assert "access_log off;" not in blocks["^~ /admin"]
