@@ -1,14 +1,40 @@
 {
   "metadata": {
-    "lastUpdated": "2026-11-21T17:11:18Z",
-    "currentVersion": "2.0.97",
+    "lastUpdated": "2026-11-21T18:26:00Z",
+    "currentVersion": "2.0.98",
     "projectType": "python",
-    "totalReleases": 93,
+    "totalReleases": 94,
     "projectTypes": [
       "python"
     ]
   },
   "releases": [
+    {
+      "version": "2.0.98",
+      "project_type": "python",
+      "project_types": [
+        "python"
+      ],
+      "date": "2026-11-21",
+      "pr_number": 209,
+      "raw_summary": "## Summary by CodeRabbit\n\n## 릴리스 노트\n\n* **새 기능**\n  * gbrain 관리 화면에서 기기별 MCP 토큰을 보고, 만들고, 폐기할 수 있어요\n  * 새 토큰은 한 번만 보여 주고 기기 연결 방법을 함께 안내해요\n\n* **문서**\n  * gbrain 토큰 관리 설계와 운영 문서를 최신으로 맞췄어요",
+      "parsed_changes": {
+        "새_기능": {
+          "title": "새 기능",
+          "items": [
+            "gbrain 관리 화면에서 기기별 MCP 토큰을 보고, 만들고, 폐기할 수 있어요",
+            "새 토큰은 한 번만 보여 주고 기기 연결 방법을 함께 안내해요"
+          ]
+        },
+        "문서": {
+          "title": "문서",
+          "items": [
+            "gbrain 토큰 관리 설계와 운영 문서를 최신으로 맞췄어요"
+          ]
+        }
+      },
+      "parse_method": "markdown"
+    },
     {
       "version": "2.0.97",
       "project_type": "python",
