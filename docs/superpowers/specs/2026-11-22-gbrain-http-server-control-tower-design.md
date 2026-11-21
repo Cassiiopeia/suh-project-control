@@ -4,6 +4,7 @@
 - 이슈: Cassiiopeia/suh-project-control#201
 - 앞 문서: [gbrain 팀 브레인](2026-11-19-gbrain-team-brain-design.md) (#198)
 - 뒷 문서: [gbrain 공개 MCP](2026-11-22-gbrain-public-mcp-design.md) (#204): `/mcp` 를 기기별 토큰으로 공개, 맥은 터널 대신 공개 주소 사용
+- 뒷 문서: [gbrain MCP 토큰 관리 화면](2026-11-22-gbrain-token-management-design.md) (#207): 토큰 목록·발급·폐기를 이 관리 화면에서
 
 ## 1. 왜
 
@@ -21,7 +22,7 @@ MCP 서버를 AI 서버의 상시 서비스 하나로 옮겼고, 맥은 기존 S
   - #198 문서를 실제 운영과 맞춤
 - 하지 않는 것
   - `/mcp` 외부 공개 (맥은 SSH 터널 127.0.0.1:3131 로만 접속) > #204 에서 인증 필수로 공개함
-  - gbrain MCP 토큰 발급 화면 (`gbrain auth create` 를 서버·맥 CLI 로)
+  - gbrain MCP 토큰 발급 화면 (`gbrain auth create` 를 서버·맥 CLI 로) > #207 에서 관리 화면에 추가함
   - 팀원 외부 접속 경로 복구 (공유기 포워딩 문제, 6장)
 
 ## 3. 구조

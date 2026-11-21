@@ -30,6 +30,11 @@ GBRAIN_LOG_TAIL_BYTES = 1024 * 1024
 GBRAIN_ADMIN_GATE_COOKIE_NAME = 'ct_gbrain_admin_gate'
 GBRAIN_ADMIN_GATE_VALID_SECONDS = 12 * 60 * 60
 
+# MCP 기기 토큰 관리 (#207): 기기에 넣을 공개 주소 (nginx location = /mcp, #204)
+GBRAIN_PUBLIC_MCP_URL = os.environ.get('GBRAIN_PUBLIC_MCP_URL', 'https://ai.suhsaechan.kr/mcp')
+# gbrain 소유자 세션 재사용 시간: gbrain 세션 24시간보다 짧게 (만료 직전 요청 실패 방지)
+GBRAIN_OWNER_SESSION_REUSE_SECONDS = 23 * 60 * 60
+
 
 def get_gbrain_config_path() -> str:
     return os.path.join(GBRAIN_HOME, '.gbrain', 'config.json')

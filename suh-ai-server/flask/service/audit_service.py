@@ -110,6 +110,9 @@ class AuditAction(str, Enum):
     GBRAIN_STOP = "GBRAIN_STOP"
     GBRAIN_RESTART = "GBRAIN_RESTART"
     GBRAIN_ADMIN_LOGIN = "GBRAIN_ADMIN_LOGIN"
+    # gbrain MCP 기기 토큰: 발급 / 폐기 (상세는 이름·id·권한만, 토큰 원문 없음)
+    GBRAIN_TOKEN_CREATE = "GBRAIN_TOKEN_CREATE"
+    GBRAIN_TOKEN_REVOKE = "GBRAIN_TOKEN_REVOKE"
 
 
 def record(category: AuditCategory, action: AuditAction, actor_ip: str, detail: dict = None, *,

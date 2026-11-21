@@ -3,6 +3,7 @@
 - 작성: 2026-11-22
 - 이슈: Cassiiopeia/suh-project-control#204
 - 앞 문서: [gbrain HTTP 서버 관제소 관리](2026-11-22-gbrain-http-server-control-tower-design.md) (#201)
+- 뒷 문서: [gbrain MCP 토큰 관리 화면](2026-11-22-gbrain-token-management-design.md) (#207): 토큰 목록·발급·폐기를 관제소 화면에서
 
 ## 1. 왜
 
@@ -45,10 +46,11 @@
 | 이름 | 기기 | scopes | 저장 위치 |
 |---|---|---|---|
 | `claude-code-mac-public` | 소유자 맥 (`~/.claude-b`, `~/.claude-d`) | read,write | Claude 설정 파일(600) 의 `mcpServers.gbrain.headers`, 서버 DB(해시) |
-| `claude-code-mac` | 소유자 맥 터널용 (#201) | read,write | 실행 중 세션이 끝나면 폐기 (`gbrain auth revoke claude-code-mac`) |
+| `claude-code-mac` | 소유자 맥 터널용 (#201) | read,write | 실행 중 세션이 끝나면 관제소 화면에서 폐기 (소유자 판단) |
 
-- 발급: `gbrain auth create <기기 이름> --scopes read,write` (맥 CLI 도 같은 DB 에 씀), 출력은 화면·파일에 남기지 않고 바로 설정에 넣음
-- 새 기기 = 새 토큰. 기기 분실·교체 시 그 토큰만 `gbrain auth revoke <이름>`
+- 발급·폐기: 관제소 `/admin/gbrain` "MCP 토큰" 카드 (#207). 원문은 발급 직후 1번만 보이고, 결과 창의 `claude mcp add` 한 줄로 기기에 넣음
+  - CLI 도 그대로 됨: `gbrain auth create <기기 이름> --scopes read,write` (맥 CLI 도 같은 DB 에 씀), 출력은 화면·파일에 남기지 않고 바로 설정에 넣음
+- 새 기기 = 새 토큰. 기기 분실·교체 시 그 토큰만 폐기 (화면에서 id 기준, CLI 는 `gbrain auth revoke --id <uuid>`)
 
 ## 5. 시험
 

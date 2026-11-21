@@ -8,7 +8,7 @@ IP는 적지 않음: NAS 내부 IP는 `NAS_LAN_HOST`, AI 서버 내부 IP는 NAS
 
 - 공유기 DMZ > NAS. NAS 역방향 프록시(443)가 도메인별로 NAS 컨테이너 포트 또는 AI 서버로 넘김.
 - DNS·기본 게이트웨이는 NAS를 거치지 않음 (NAS도 공유기 게이트웨이·통신사 DNS 사용).
-- `ai.suhsaechan.kr` > NAS 프록시 > AI 서버 nginx `:11435` > Flask `:5000` / Ollama `:11434` / gbrain `/admin` `:3131` (관제소 게이트 쿠키 필요, #201) / gbrain `= /mcp` `:3131` (기기별 gbrain 토큰 필수, 속도 제한, #204).
+- `ai.suhsaechan.kr` > NAS 프록시 > AI 서버 nginx `:11435` > Flask `:5000` / Ollama `:11434` / gbrain `/admin` `:3131` (관제소 게이트 쿠키 필요, #201) / gbrain `= /mcp` `:3131` (기기별 gbrain 토큰 필수, 속도 제한, #204; 토큰 목록·발급·폐기는 관제소 `/admin/gbrain` MCP 토큰 카드, #207).
   NAS가 죽으면 AI 서버 공개 주소도 함께 끊김. 관제소 심박(AI 서버 > Worker)은 NAS와 무관.
 
 ## 도메인 > 백엔드 (NAS 프록시 규칙)
