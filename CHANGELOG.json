@@ -1,14 +1,48 @@
 {
   "metadata": {
-    "lastUpdated": "2026-11-19T02:00:50Z",
-    "currentVersion": "2.0.95",
+    "lastUpdated": "2026-11-21T15:54:48Z",
+    "currentVersion": "2.0.96",
     "projectType": "python",
-    "totalReleases": 91,
+    "totalReleases": 92,
     "projectTypes": [
       "python"
     ]
   },
   "releases": [
+    {
+      "version": "2.0.96",
+      "project_type": "python",
+      "project_types": [
+        "python"
+      ],
+      "date": "2026-11-21",
+      "pr_number": 203,
+      "raw_summary": "## Summary by CodeRabbit\n\n## 릴리스 노트\n\n* **새 기능**\n  * 관리 화면에 gbrain 서버 페이지 추가 (상태, 버전, 재시작, 로그)\n  * 버튼 한 번으로 gbrain 관리자 화면 로그인\n  * gbrain 서버를 서비스 감시·대시보드에 추가\n\n* **개선**\n  * 서비스 정지가 멈추면 자동으로 강제 종료 후 재시작\n  * Windows 서비스 제어 방식을 한곳으로 통일\n\n* **문서**\n  * gbrain 운영 현황에 맞춰 설계 문서 갱신",
+      "parsed_changes": {
+        "새_기능": {
+          "title": "새 기능",
+          "items": [
+            "관리 화면에 gbrain 서버 페이지 추가 (상태, 버전, 재시작, 로그)",
+            "버튼 한 번으로 gbrain 관리자 화면 로그인",
+            "gbrain 서버를 서비스 감시·대시보드에 추가"
+          ]
+        },
+        "개선": {
+          "title": "개선",
+          "items": [
+            "서비스 정지가 멈추면 자동으로 강제 종료 후 재시작",
+            "Windows 서비스 제어 방식을 한곳으로 통일"
+          ]
+        },
+        "문서": {
+          "title": "문서",
+          "items": [
+            "gbrain 운영 현황에 맞춰 설계 문서 갱신"
+          ]
+        }
+      },
+      "parse_method": "markdown"
+    },
     {
       "version": "2.0.95",
       "project_type": "python",
