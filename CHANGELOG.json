@@ -1,14 +1,45 @@
 {
   "metadata": {
-    "lastUpdated": "2026-11-21T15:54:48Z",
-    "currentVersion": "2.0.96",
+    "lastUpdated": "2026-11-21T17:11:18Z",
+    "currentVersion": "2.0.97",
     "projectType": "python",
-    "totalReleases": 92,
+    "totalReleases": 93,
     "projectTypes": [
       "python"
     ]
   },
   "releases": [
+    {
+      "version": "2.0.97",
+      "project_type": "python",
+      "project_types": [
+        "python"
+      ],
+      "date": "2026-11-21",
+      "pr_number": 206,
+      "raw_summary": "## Summary by CodeRabbit\n\n## 릴리스 노트\n\n* **새 기능**\n  * gbrain 메모리 서버를 기기별 토큰으로 외부에서 바로 쓸 수 있어요\n\n* **개선**\n  * 외부 메모리 서버 접속에 요청 속도 제한과 요청 크기 제한을 걸었어요\n\n* **문서**\n  * gbrain 외부 접속 구조와 토큰 관리 방법을 정리했어요",
+      "parsed_changes": {
+        "새_기능": {
+          "title": "새 기능",
+          "items": [
+            "gbrain 메모리 서버를 기기별 토큰으로 외부에서 바로 쓸 수 있어요"
+          ]
+        },
+        "개선": {
+          "title": "개선",
+          "items": [
+            "외부 메모리 서버 접속에 요청 속도 제한과 요청 크기 제한을 걸었어요"
+          ]
+        },
+        "문서": {
+          "title": "문서",
+          "items": [
+            "gbrain 외부 접속 구조와 토큰 관리 방법을 정리했어요"
+          ]
+        }
+      },
+      "parse_method": "markdown"
+    },
     {
       "version": "2.0.96",
       "project_type": "python",
