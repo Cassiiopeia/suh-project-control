@@ -6,7 +6,7 @@
 - 다음 문서: [gbrain HTTP 서버 관제소 관리](2026-11-22-gbrain-http-server-control-tower-design.md) (#201)
 
 > **2026-11-22 현황 (#201)**
-> - "gbrain 원격 MCP 서버 운영 안 함" 결정은 바뀜: AI 서버 NSSM 서비스 `gbrain-http`(127.0.0.1:3131)가 소유자 맥의 Claude 세션용 MCP 를 맡음 (`/mcp` 외부 공개 없음, 맥은 SSH 터널)
+> - "gbrain 원격 MCP 서버 운영 안 함" 결정은 바뀜: AI 서버 NSSM 서비스 `gbrain-http`(127.0.0.1:3131)가 소유자 맥의 Claude 세션용 MCP 를 맡음 (#204 부터 `https://ai.suhsaechan.kr/mcp` 를 기기별 토큰으로 공개, 맥은 공개 주소 사용)
 > - 쓰기 계정 동기화 맥은 외부 `5432` 가 아니라 SSH 터널 `127.0.0.1:15433` 으로 접속 (passQL `~/gbrains/passql`)
 > - 팀원 외부 접속 `ai.postgres.suhsaechan.kr:5432` 는 2026-11-22 실측에서 닫혀 있음 (#198 배포 직후엔 성공). 공유기 포워딩·DSM 확인 전까지 5장 팀원 절차는 동작하지 않음
 

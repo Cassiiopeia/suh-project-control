@@ -3,6 +3,7 @@
 - 작성: 2026-11-22
 - 이슈: Cassiiopeia/suh-project-control#201
 - 앞 문서: [gbrain 팀 브레인](2026-11-19-gbrain-team-brain-design.md) (#198)
+- 뒷 문서: [gbrain 공개 MCP](2026-11-22-gbrain-public-mcp-design.md) (#204): `/mcp` 를 기기별 토큰으로 공개, 맥은 터널 대신 공개 주소 사용
 
 ## 1. 왜
 
@@ -19,7 +20,7 @@ MCP 서버를 AI 서버의 상시 서비스 하나로 옮겼고, 맥은 기존 S
   - 서비스 설치 스크립트 (`scripts/setup-gbrain-http.ps1`): 다시 설치해도 같은 결과
   - #198 문서를 실제 운영과 맞춤
 - 하지 않는 것
-  - `/mcp` 외부 공개 (맥은 SSH 터널 127.0.0.1:3131 로만 접속)
+  - `/mcp` 외부 공개 (맥은 SSH 터널 127.0.0.1:3131 로만 접속) > #204 에서 인증 필수로 공개함
   - gbrain MCP 토큰 발급 화면 (`gbrain auth create` 를 서버·맥 CLI 로)
   - 팀원 외부 접속 경로 복구 (공유기 포워딩 문제, 6장)
 
@@ -27,12 +28,14 @@ MCP 서버를 AI 서버의 상시 서비스 하나로 옮겼고, 맥은 기존 S
 
 ```
 맥 Claude ── SSH 터널 127.0.0.1:3131 ──> gbrain-http (NSSM, LocalSystem, 127.0.0.1:3131)
+   (#204 이후: 맥 Claude ── https://ai.suhsaechan.kr/mcp + 기기 토큰 ── nginx = /mcp ──> gbrain-http)
                                              ├─ Postgres gbrain-postgres 127.0.0.1:5433 / gbrain
                                              └─ Ollama 127.0.0.1:11434 (qwen3-embedding:0.6b, 1024차원)
 
 브라우저 ── https://ai.suhsaechan.kr ── nginx 11435
    /api/flask/gbrain/*  (X-API-Key) ──> Flask GbrainServerService ── 서비스 제어·헬스·로그·설정 요약
-   /admin/*  (게이트 쿠키, auth_request) ──> gbrain-http   (/mcp·/.well-known 은 프록시 안 함)
+   /admin/*  (게이트 쿠키, auth_request) ──> gbrain-http   (/.well-known·OAuth 은 프록시 안 함)
+   = /mcp    (Bearer 필수, 속도 제한, #204) ──> gbrain-http
 ```
 
 ### 서비스 설치 (`scripts/setup-gbrain-http.ps1`, 관리자 1회)
@@ -80,7 +83,7 @@ MCP 서버를 AI 서버의 상시 서비스 하나로 옮겼고, 맥은 기존 S
 ## 5. 시험
 
 - 단위: 상태 조립(비번 미노출), 헬스 실패 시에도 상태 응답, 로그 줄 수 상한, 제어 감사 기록, 로그인 경로 검증(형식 밖 URL 거부·토큰 없음 503·gbrain 오류 502), 게이트 쿠키 서명·만료·변조
-- nginx 규칙: `/admin` 은 `auth_request` 필수, `/mcp` 프록시 없음, `/admin/auth/` 로그 끔
+- nginx 규칙: `/admin` 은 `auth_request` 필수, `/mcp` 프록시 없음(#204 에서 `= /mcp` 만 인증 필수로 공개), `/admin/auth/` 로그 끔
 - 배포 후 실측: 상태·로그·재시작, 감시 항목 up, 로그인 버튼 > gbrain 대시보드 진입, 게이트 없이 `/admin/` 401
 
 - 관리자 화면의 "연결 안내"(SPA 의 `/.well-known/gbrain` 조회, `credentials: omit`)는 게이트 쿠키가 실리지 않아 동작하지 않음
