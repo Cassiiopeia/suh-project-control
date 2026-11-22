@@ -1,0 +1,63 @@
+"""
+gbrain HTTP 서버 1개의 위치 정보: 개인 브레인(gbrain-http) 1개 + 팀 브레인(gbrain-team-<project>) N개
+상태·로그·제어(GbrainServerService)와 토큰(GbrainTokenService)이 이 값으로 대상 서버를 고름
+"""
+import os
+from dataclasses import dataclass
+
+from config import gbrain_server_config as config
+
+# 개인 브레인 id (토큰 API ?brain= 기본값)
+PERSONAL_BRAIN_ID = 'personal'
+
+
+@dataclass(frozen=True)
+class GbrainInstance:
+    brain_id: str                 # personal 또는 팀 프로젝트 키 (예: passql)
+    label: str                    # 화면 표시 이름
+    service_name: str             # NSSM 서비스 이름
+    port: int                     # 127.0.0.1 내부 포트
+    gbrain_home: str | None       # None: 개인 GBRAIN_HOME (테스트 monkeypatch 반영 위해 호출 시 읽음)
+    admin_token_file: str | None  # None: 개인 GBRAIN_ADMIN_TOKEN_FILE (위와 같음)
+    log_path: str
+    mcp_url: str                  # 기기·팀원에게 줄 공개 MCP 주소
+    mcp_server_name: str          # claude mcp add 이름 (gbrain / gbrain-<project>)
+    database_name: str | None = None
+    writer_role: str | None = None
+    is_team: bool = False
+
+    @property
+    def server_url(self) -> str:
+        return f'http://127.0.0.1:{self.port}'
+
+    @property
+    def health_url(self) -> str:
+        return self.server_url + '/health'
+
+    @property
+    def default_scope_preset(self) -> str:
+        # 팀원 토큰은 읽기 전용이 기본, 개인 기기는 읽기+쓰기 (#207)
+        return 'read_only' if self.is_team else 'read_write'
+
+
+def build_personal_instance() -> GbrainInstance:
+    port = int(config.GBRAIN_SERVER_URL.rsplit(':', 1)[-1].rstrip('/'))
+    return GbrainInstance(
+        brain_id=PERSONAL_BRAIN_ID, label='개인 브레인', service_name=config.GBRAIN_SERVICE_NAME, port=port,
+        gbrain_home=None, admin_token_file=None, log_path=config.GBRAIN_LOG_PATH,
+        mcp_url=config.GBRAIN_PUBLIC_MCP_URL, mcp_server_name=config.GBRAIN_PERSONAL_MCP_SERVER_NAME,
+        database_name='gbrain')
+
+
+def build_team_instance(project: str, port: int, database_name: str, writer_role: str) -> GbrainInstance:
+    """팀 프로젝트 키 > 서비스·폴더·토큰·로그·공개 주소 (모두 이름 규칙으로 정해짐)"""
+    team_home = os.path.join(config.GBRAIN_TEAM_ROOT, project)
+    return GbrainInstance(
+        brain_id=project, label=f'{project} 팀 브레인',
+        service_name=config.GBRAIN_TEAM_SERVICE_PREFIX + project, port=port,
+        gbrain_home=team_home,
+        admin_token_file=os.path.join(config.GBRAIN_SECRETS_DIR, f'gbrain-team-{project}-admin-token'),
+        log_path=os.path.join(team_home, 'logs', 'gbrain-http.log'),
+        mcp_url=f'{config.GBRAIN_PUBLIC_BASE_URL}/team/{project}/mcp',
+        mcp_server_name=config.GBRAIN_TEAM_MCP_SERVER_PREFIX + project,
+        database_name=database_name, writer_role=writer_role, is_team=True)

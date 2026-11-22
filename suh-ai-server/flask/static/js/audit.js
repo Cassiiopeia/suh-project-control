@@ -87,6 +87,7 @@
     GBRAIN_ADMIN_LOGIN: 'gbrain 관리자 화면 로그인',
     GBRAIN_TOKEN_CREATE: 'gbrain MCP 토큰 발급',
     GBRAIN_TOKEN_REVOKE: 'gbrain MCP 토큰 폐기',
+    GBRAIN_TEAM_CREATE: 'gbrain 팀 브레인 만들기',
   };
 
   // 카테고리 선택 시 행위 셀렉트를 해당 카테고리 것만으로 좁힌다
@@ -114,7 +115,7 @@
             'AI_DB_ROLE_PASSWORD_RESET', 'AI_DB_ROLE_DELETE', 'AI_DB_GRANT', 'AI_DB_REVOKE',
             'AI_DB_GBRAIN_PREPARE', 'AI_DB_GBRAIN_READER_GRANT', 'AI_DB_GBRAIN_READER_REVOKE'],
     GBRAIN: ['GBRAIN_START', 'GBRAIN_STOP', 'GBRAIN_RESTART', 'GBRAIN_ADMIN_LOGIN',
-             'GBRAIN_TOKEN_CREATE', 'GBRAIN_TOKEN_REVOKE'],
+             'GBRAIN_TOKEN_CREATE', 'GBRAIN_TOKEN_REVOKE', 'GBRAIN_TEAM_CREATE'],
   };
 
   var KST_FMT = new Intl.DateTimeFormat('ko-KR', {

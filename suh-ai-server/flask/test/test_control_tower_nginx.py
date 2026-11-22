@@ -173,3 +173,50 @@ def test_gbrain_게이트는_내부_전용이고_1회용_로그인_경로는_로
     assert re.search(r"proxy_pass\s+http://python_backend/gbrain/admin-gate;", gate_body)
     assert re.search(r"access_log\s+off;", blocks["^~ /admin/auth/"])
     assert "access_log off;" not in blocks["^~ /admin"]
+
+
+# ---------- gbrain 팀 브레인 (#210) ----------
+GBRAIN_TEAM_LOCATION = "~ ^/team/(?<team_brain_project>[a-z][a-z0-9]+)/mcp$"
+
+
+def test_팀_브레인_경로는_정확한_모양_하나뿐이고_map_파일로만_포트를_찾는다():
+    conf_text = _read_conf()
+    blocks = _location_blocks(conf_text)
+    team_locations = {location for location, body in blocks.items() if "$team_brain_upstream" in body}
+
+    assert team_locations == {GBRAIN_TEAM_LOCATION}
+    team_map = _map_body(conf_text, "$team_brain_project", "$team_brain_upstream")
+    assert re.search(r'default\s+"";', team_map)
+    # 관제소가 쓰는 파일만 포함 (배포 폴더 밖, 0개여도 nginx -t 통과)
+    assert re.search(r"include\s+C:/AI/gbrain/teams/nginx/\*\.map;", team_map)
+    assert re.search(r"proxy_pass\s+http://\$team_brain_upstream/mcp;", blocks[GBRAIN_TEAM_LOCATION])
+
+
+def test_팀_브레인_경로는_POST_Bearer_검사와_모르는_프로젝트_404_가_프록시보다_먼저다():
+    team_block = _location_blocks(_read_conf())[GBRAIN_TEAM_LOCATION]
+
+    assert re.search(r"if \(\$request_method != POST\)\s*\{\s*return 405", team_block)
+    assert 'if ($http_authorization !~* "^Bearer\\s+\\S+$")' in team_block
+    assert re.search(r'if \(\$team_brain_upstream = ""\)\s*\{\s*return 404', team_block)
+    proxy_position = team_block.index("proxy_pass")
+    assert max(team_block.index("return 405"), team_block.index("return 401"), team_block.index("return 404")) < proxy_position
+    assert "$api_key_valid" not in team_block and "$is_public_endpoint" not in team_block
+
+
+def test_팀_브레인_경로는_mcp_와_같은_속도_제한_본문_상한_로그_형식을_쓴다():
+    team_block = _location_blocks(_read_conf())[GBRAIN_TEAM_LOCATION]
+
+    assert re.search(r"limit_req\s+zone=mcp_client\s+burst=\d+\s+nodelay;", team_block)
+    assert re.search(r"limit_req\s+zone=mcp_total\s+burst=\d+\s+nodelay;", team_block)
+    assert re.search(r"limit_req_status\s+429;", team_block)
+    assert re.search(r"client_max_body_size\s+4m;", team_block)
+    assert re.search(r"access_log\s+logs/access\.log\s+mcp;", team_block)
+    assert "add_header" in team_block and "Access-Control-Allow-Origin" not in team_block
+
+
+def test_팀_브레인은_admin_OAuth_discovery_를_공개하지_않는다():
+    blocks = _location_blocks(_read_conf())
+    team_headers = [location for location in blocks if "/team" in location]
+
+    assert team_headers == [GBRAIN_TEAM_LOCATION]
+    assert not any(keyword in GBRAIN_TEAM_LOCATION for keyword in ("admin", "well-known", "oauth", "token"))

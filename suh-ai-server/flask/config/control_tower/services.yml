@@ -125,6 +125,12 @@ projects:
         depends_on: windows
         checks:
           internal: {url: "http://127.0.0.1:3131/health", expect: [200]}   # NSSM gbrain-http
+      - id: gbrain-team-brains
+        name: gbrain 팀 브레인 전체
+        public: false  # 등록된 팀 브레인(gbrain-team-*) 전부 /health 정상이면 200, 새 팀 브레인은 자동 포함 (#210)
+        depends_on: windows
+        checks:
+          internal: {url: "http://127.0.0.1:5000/gbrain/teams/health", expect: [200]}   # Flask 직접 (nginx 키 검사 밖)
   - id: elum
     name: elum
     icon_source_url: "https://lab.suhsaechan.kr/images/elumLogo.png"
@@ -173,6 +179,12 @@ projects:
         depends_on: nas
         checks:
           external: {url: "https://ai.passql.suhsaechan.kr/"}
+      - id: gbrain-team-passql
+        name: passql 팀 브레인
+        public: false  # NSSM gbrain-team-passql, 공개 MCP https://ai.suhsaechan.kr/team/passql/mcp (#210)
+        depends_on: windows
+        checks:
+          internal: {url: "http://127.0.0.1:3141/health", expect: [200]}   # 포트 = 팀 브레인 등록부 team-brains.json
   - id: pickerpicker
     name: pickerpicker
     icon_source_url: "https://lab.suhsaechan.kr/images/pickerPickerLogo.png"
