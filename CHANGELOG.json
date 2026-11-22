@@ -1,14 +1,50 @@
 {
   "metadata": {
-    "lastUpdated": "2026-11-21T18:26:00Z",
-    "currentVersion": "2.0.98",
+    "lastUpdated": "2026-11-22T22:49:38Z",
+    "currentVersion": "2.0.99",
     "projectType": "python",
-    "totalReleases": 94,
+    "totalReleases": 95,
     "projectTypes": [
       "python"
     ]
   },
   "releases": [
+    {
+      "version": "2.0.99",
+      "project_type": "python",
+      "project_types": [
+        "python"
+      ],
+      "date": "2026-11-22",
+      "pr_number": 212,
+      "raw_summary": "## Summary by CodeRabbit\n\n## 릴리스 노트\n\n* **새 기능**\n  * 프로젝트마다 팀 브레인(공용 기억) 서버를 따로 띄워요\n  * 팀 브레인을 /team//mcp 주소로 안전하게 공개해요\n  * 관제소에서 팀 브레인 만들기, 상태 보기, 재시작, 로그 보기를 해요\n  * 토큰 카드에서 브레인을 골라 팀원 읽기 전용 토큰을 만들어요\n  * 토큰 결과 창에 팀원에게 보낼 연결 안내를 함께 보여 줘요\n\n* **개선**\n  * gbrain 설치 스크립트를 브레인마다 다시 쓸 수 있게 했어요\n  * 팀 브레인 전체 상태를 관제소 감시에 넣었어요\n\n* **문서**\n  * 팀 브레인 설계, 팀원 연결 안내, 새 프로젝트 런북을 추가했어요",
+      "parsed_changes": {
+        "새_기능": {
+          "title": "새 기능",
+          "items": [
+            "프로젝트마다 팀 브레인(공용 기억) 서버를 따로 띄워요",
+            "팀 브레인을 /team/<프로젝트>/mcp 주소로 안전하게 공개해요",
+            "관제소에서 팀 브레인 만들기, 상태 보기, 재시작, 로그 보기를 해요",
+            "토큰 카드에서 브레인을 골라 팀원 읽기 전용 토큰을 만들어요",
+            "토큰 결과 창에 팀원에게 보낼 연결 안내를 함께 보여 줘요"
+          ]
+        },
+        "개선": {
+          "title": "개선",
+          "items": [
+            "gbrain 설치 스크립트를 브레인마다 다시 쓸 수 있게 했어요",
+            "팀 브레인 전체 상태를 관제소 감시에 넣었어요"
+          ]
+        },
+        "문서": {
+          "title": "문서",
+          "items": [
+            "팀 브레인 설계, 팀원 연결 안내, 새 프로젝트 런북을 추가했어요"
+          ]
+        }
+      },
+      "parse_method": "markdown"
+    },
     {
       "version": "2.0.98",
       "project_type": "python",
