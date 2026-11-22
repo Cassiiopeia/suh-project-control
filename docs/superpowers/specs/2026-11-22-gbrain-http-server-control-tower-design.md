@@ -5,6 +5,7 @@
 - 앞 문서: [gbrain 팀 브레인](2026-11-19-gbrain-team-brain-design.md) (#198)
 - 뒷 문서: [gbrain 공개 MCP](2026-11-22-gbrain-public-mcp-design.md) (#204): `/mcp` 를 기기별 토큰으로 공개, 맥은 터널 대신 공개 주소 사용
 - 뒷 문서: [gbrain MCP 토큰 관리 화면](2026-11-22-gbrain-token-management-design.md) (#207): 토큰 목록·발급·폐기를 이 관리 화면에서
+- 뒷 문서: [gbrain 팀 브레인 MCP](2026-11-23-gbrain-team-brain-mcp-design.md) (#210): 같은 설치 스크립트·서비스 관리로 팀 브레인마다 gbrain 서버 1개 (`gbrain-team-<project>`, 3141~)
 
 ## 1. 왜
 

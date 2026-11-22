@@ -4,6 +4,11 @@
 - 이슈: Cassiiopeia/suh-project-control#198
 - 앞 문서: [AI 서버 공용 PG 관리](2026-11-19-ai-server-postgres-admin-design.md)
 - 다음 문서: [gbrain HTTP 서버 관제소 관리](2026-11-22-gbrain-http-server-control-tower-design.md) (#201)
+- 다음 문서: [gbrain 팀 브레인 MCP](2026-11-23-gbrain-team-brain-mcp-design.md) (#210): 팀원은 DB 마운트 대신 팀 브레인 MCP 서버(`/team/<project>/mcp`, 읽기 전용 토큰)로 붙음
+
+> **2026-11-23 현황 (#210)**
+> - 5장 팀원 절차(외부 DB 직접 마운트)는 쓰지 않음: 팀 브레인마다 gbrain HTTP 서버를 두고 `https://ai.suhsaechan.kr/team/<project>/mcp` 에 읽기 전용 토큰으로 붙음
+> - 새 팀 브레인은 관제소 "팀 브레인 만들기" 한 번으로 DB·쓰기 계정·브레인 준비·서비스·공개 경로까지 만듦 (passQL 도 이 흐름으로 옮김, DB 그대로)
 
 > **2026-11-22 현황 (#201)**
 > - "gbrain 원격 MCP 서버 운영 안 함" 결정은 바뀜: AI 서버 NSSM 서비스 `gbrain-http`(127.0.0.1:3131)가 소유자 맥의 Claude 세션용 MCP 를 맡음 (#204 부터 `https://ai.suhsaechan.kr/mcp` 를 기기별 토큰으로 공개, 맥은 공개 주소 사용)

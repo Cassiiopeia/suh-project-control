@@ -82,7 +82,7 @@ def test_발급은_원문을_응답에만_싣고_감사에는_남기지_않는�
     assert fake_service.calls == [('create', 'work-macbook', 'read_write')]
     assert audit_calls[0]['category'] == AuditCategory.GBRAIN
     assert audit_calls[0]['action'] == AuditAction.GBRAIN_TOKEN_CREATE and audit_calls[0]['success'] is True
-    assert audit_calls[0]['detail'] == {'name': 'work-macbook', 'scope_preset': 'read_write',
+    assert audit_calls[0]['detail'] == {'name': 'work-macbook', 'brain': 'personal', 'scope_preset': 'read_write',
                                         'token_id': TOKEN_ID, 'scopes': ['read', 'write']}
     assert SECRET not in str(audit_calls)
 
@@ -105,7 +105,8 @@ def test_폐기는_id_로_하고_감사에_이름을_남긴다(client, fake_serv
     assert response.status_code == 200 and response.get_json()['token']['name'] == 'work-macbook'
     assert fake_service.calls == [('revoke', TOKEN_ID)]
     assert audit_calls[0]['action'] == AuditAction.GBRAIN_TOKEN_REVOKE
-    assert audit_calls[0]['detail'] == {'token_id': TOKEN_ID, 'name': 'work-macbook', 'scopes': ['read', 'write']}
+    assert audit_calls[0]['detail'] == {'token_id': TOKEN_ID, 'brain': 'personal', 'name': 'work-macbook',
+                                        'scopes': ['read', 'write']}
 
 
 def test_없는_토큰_폐기는_404와_실패_감사(client, fake_service, audit_calls):

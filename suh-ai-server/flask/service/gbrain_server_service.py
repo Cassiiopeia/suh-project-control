@@ -1,6 +1,7 @@
 """
 gbrain HTTP 서버(MCP) 관리: 상태 종합, 로그, 서비스 제어, 관리자 로그인 경로 발급
-- 상태 출처 3개: Windows 서비스(gbrain-http), /health(버전), config.json(DB·임베딩, 비번 제외)
+- 상태 출처 3개: Windows 서비스(gbrain-http / gbrain-team-<project>), /health(버전), config.json(DB·임베딩, 비번 제외)
+- 관리자 로그인(/admin 게이트)은 개인 브레인만 (팀 브레인 /admin 은 공개하지 않음, #210)
 - 로그인: 관리자 토큰 > POST /admin/api/issue-magic-link > 경로만 추출 (링크를 열거나 기록하지 않음)
 """
 import json
@@ -33,16 +34,29 @@ class GbrainServerError(Exception):
         super().__init__(message)
         self.code = code
         self.status_code = status_code
+        # 오류 응답에 함께 실을 값 (예: 팀 브레인 만들기 중간 실패 시 단계 결과·새 쓰기 계정 비번)
+        self.details = {}
 
 
 class GbrainServerService:
     def __init__(self, server_url=GBRAIN_SERVER_URL, log_path=GBRAIN_LOG_PATH,
-                 timeout_seconds=GBRAIN_HTTP_TIMEOUT_SECONDS):
+                 timeout_seconds=GBRAIN_HTTP_TIMEOUT_SECONDS, service_name=GBRAIN_SERVICE_NAME,
+                 gbrain_home=None, admin_token_file=None):
         self.server_url = server_url.rstrip('/')
         self.log_path = log_path
         self.timeout_seconds = timeout_seconds
-        self.windows_service = WindowsServiceClient(GBRAIN_SERVICE_NAME, GBRAIN_SERVICE_TIMEOUT_SECONDS,
+        self.service_name = service_name
+        # None: 개인 브레인 설정값을 호출 시점에 읽음 (팀 브레인은 자기 폴더·토큰 파일)
+        self.gbrain_home = gbrain_home
+        self.admin_token_file = admin_token_file
+        self.windows_service = WindowsServiceClient(service_name, GBRAIN_SERVICE_TIMEOUT_SECONDS,
                                                     forced_stop_after_seconds=GBRAIN_FORCED_STOP_AFTER_SECONDS)
+
+    @classmethod
+    def for_instance(cls, instance):
+        """GbrainInstance(개인·팀) > 그 서버 전용 서비스"""
+        return cls(server_url=instance.server_url, log_path=instance.log_path, service_name=instance.service_name,
+                   gbrain_home=instance.gbrain_home, admin_token_file=instance.admin_token_file)
 
     # ---------- 상태 ----------
     def fetch_health(self):
@@ -70,7 +84,7 @@ class GbrainServerService:
 
     def read_config_summary(self) -> dict:
         """config.json > 엔진·DB·임베딩 (못 읽으면 config_error 만)"""
-        config_path = get_gbrain_config_path()
+        config_path = get_gbrain_config_path(self.gbrain_home)
         try:
             with open(config_path, encoding='utf-8') as config_file:
                 gbrain_config = json.load(config_file)
@@ -88,7 +102,7 @@ class GbrainServerService:
         health = self.fetch_health() or {}
         build = health.get('build') or {}
         return {
-            'service_name': GBRAIN_SERVICE_NAME,
+            'service_name': self.service_name,
             'service_state': service_state,
             'service_running': service_state == 'running',
             'is_healthy': health.get('status') == 'ok',
@@ -97,7 +111,7 @@ class GbrainServerService:
             # 새 버전 설치 후 재시작 전이면 True
             'is_restart_pending': bool(build.get('restart_pending')),
             'server_url': self.server_url,
-            'has_admin_token': read_admin_token() is not None,
+            'has_admin_token': read_admin_token(self.admin_token_file) is not None,
             **self.read_config_summary(),
         }
 

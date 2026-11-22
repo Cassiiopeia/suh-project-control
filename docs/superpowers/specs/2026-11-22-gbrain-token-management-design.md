@@ -3,6 +3,7 @@
 - 작성: 2026-11-22
 - 이슈: Cassiiopeia/suh-project-control#207
 - 앞 문서: [gbrain HTTP 서버 관제소 관리](2026-11-22-gbrain-http-server-control-tower-design.md) (#201), [gbrain 공개 MCP](2026-11-22-gbrain-public-mcp-design.md) (#204)
+- 뒷 문서: [gbrain 팀 브레인 MCP](2026-11-23-gbrain-team-brain-mcp-design.md) (#210): 토큰 카드에 브레인 선택 (팀 브레인 기본 읽기 전용, 연결 이름 `gbrain-<project>`, 팀원 안내)
 
 ## 1. 왜
 

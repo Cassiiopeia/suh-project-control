@@ -4,6 +4,7 @@
 - 이슈: Cassiiopeia/suh-project-control#204
 - 앞 문서: [gbrain HTTP 서버 관제소 관리](2026-11-22-gbrain-http-server-control-tower-design.md) (#201)
 - 뒷 문서: [gbrain MCP 토큰 관리 화면](2026-11-22-gbrain-token-management-design.md) (#207): 토큰 목록·발급·폐기를 관제소 화면에서
+- 뒷 문서: [gbrain 팀 브레인 MCP](2026-11-23-gbrain-team-brain-mcp-design.md) (#210): `/team/<project>/mcp` 를 같은 바깥 필터로 팀 브레인 서버에 연결
 
 ## 1. 왜
 

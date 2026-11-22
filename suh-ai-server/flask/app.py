@@ -21,6 +21,7 @@ from router.control_tower_router import control_tower_bp
 from router.ai_db_router import ai_db_bp
 from router.gbrain_router import gbrain_bp
 from router.gbrain_token_router import gbrain_token_bp
+from router.gbrain_team_router import gbrain_team_bp
 from config.app_config import SWAGGER_URL, API_URL
 from config.logging_config import setup_logging
 
@@ -58,6 +59,7 @@ app.register_blueprint(control_tower_bp)
 app.register_blueprint(ai_db_bp)
 app.register_blueprint(gbrain_bp)
 app.register_blueprint(gbrain_token_bp)
+app.register_blueprint(gbrain_team_bp)
 
 
 @app.route('/health', methods=['GET'])

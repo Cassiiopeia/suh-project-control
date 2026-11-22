@@ -1,5 +1,5 @@
 """
-gbrain MCP 기기 토큰 관리: 목록, 발급, 폐기 (#207)
+gbrain MCP 기기 토큰 관리: 목록, 발급, 폐기 (#207), 브레인(개인·팀)마다 서비스 1개 (#210)
 gbrain 소유자 API 경유: 관리자 토큰 > POST /admin/login > 세션 쿠키 > /admin/api/api-keys (CLI 실행 없음)
 토큰 원문은 발급 응답에만 담아 돌려주고 기록·저장하지 않음
 """
@@ -40,9 +40,12 @@ GBRAIN_MESSAGE_MAX_LENGTH = 200
 
 
 class GbrainTokenService:
-    def __init__(self, server_url=GBRAIN_SERVER_URL, timeout_seconds=GBRAIN_HTTP_TIMEOUT_SECONDS):
+    def __init__(self, server_url=GBRAIN_SERVER_URL, timeout_seconds=GBRAIN_HTTP_TIMEOUT_SECONDS,
+                 admin_token_file=None):
         self.server_url = server_url.rstrip('/')
         self.timeout_seconds = timeout_seconds
+        # None: 개인 브레인 관리자 토큰 (팀 브레인은 자기 토큰 파일, #210)
+        self.admin_token_file = admin_token_file
         # 소유자 세션 캐시 (메모리만): 요청마다 로그인하면 gbrain 세션이 계속 쌓임
         self._owner_session_id = None
         self._owner_session_expires_at = 0.0
@@ -176,7 +179,7 @@ class GbrainTokenService:
 
     def _login_owner(self) -> str:
         """관리자 토큰 > gbrain 소유자 세션 id (토큰·세션 값은 기록하지 않음)"""
-        admin_token = read_admin_token()
+        admin_token = read_admin_token(self.admin_token_file)
         if admin_token is None:
             raise GbrainServerError('gbrain 관리자 토큰 파일이 없어요 (scripts/setup-gbrain-http.ps1 실행 필요)',
                                     'admin_token_missing', 503)
@@ -222,3 +225,19 @@ class GbrainTokenService:
 
 
 gbrain_token_service = GbrainTokenService()
+
+# 팀 브레인 토큰 서비스 캐시: 브레인마다 소유자 세션을 따로 재사용
+_team_token_services = {}
+_team_token_services_lock = threading.Lock()
+
+
+def get_token_service_for(instance) -> GbrainTokenService:
+    """GbrainInstance > 그 브레인 토큰 서비스 (개인은 모듈 단일 객체, 팀은 브레인별 캐시)"""
+    if not instance.is_team:
+        return gbrain_token_service
+    cache_key = (instance.brain_id, instance.port, instance.admin_token_file)
+    with _team_token_services_lock:
+        if cache_key not in _team_token_services:
+            _team_token_services[cache_key] = GbrainTokenService(server_url=instance.server_url,
+                                                                 admin_token_file=instance.admin_token_file)
+        return _team_token_services[cache_key]
