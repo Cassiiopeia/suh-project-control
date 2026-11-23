@@ -170,9 +170,13 @@ class GbrainTeamBrainService:
     # ---------- 내부 ----------
     @staticmethod
     def _validate_project(project) -> None:
-        if not isinstance(project, str) or not PROJECT_PATTERN.match(project) or project in RESERVED_PROJECT_KEYS:
+        if not isinstance(project, str) or not PROJECT_PATTERN.match(project):
             raise GbrainServerError('프로젝트 키는 영어 소문자로 시작하는 소문자·숫자 2~20자로 써 주세요 (예: passql)',
                                     'invalid_project', 400)
+        # 형식은 맞지만 예약어 > 이유를 따로 알림
+        if project in RESERVED_PROJECT_KEYS:
+            raise GbrainServerError(f'{project} 는 개인 브레인 이름이라 팀 브레인 키로 쓸 수 없어요. 다른 키를 써 주세요',
+                                    'reserved_project', 400)
 
     def _list_instances(self) -> list:
         return self._run_registry(self.registry.list_instances)

@@ -21,34 +21,41 @@
     try {
       const response = await apiFetch(API + '/status?t=' + Date.now());
       const status = await readJson(response);
-      if (!response.ok) throw new Error(status.error || '상태 조회 실패');
+      if (!response.ok) throw new Error(describeFailure(status, '상태를 확인하지 못했어요'));
       renderStatus(status);
     } catch (error) {
       console.warn('gbrain status failed:', error);
-      renderStatus(null);
+      renderStatus(null, error.message);
     }
+  }
+
+  // 실패 문구 + 에러 코드 (화면 문구 규칙: 오류에는 코드 함께)
+  function describeFailure(result, fallbackMessage) {
+    return (result.error || fallbackMessage) + (result.code ? ' [' + result.code + ']' : '');
   }
 
   function setBadge(id, badgeClass, text) {
     const badge = el(id);
-    badge.className = 'badge ' + badgeClass + ' badge-sm';
+    badge.className = 'badge ' + badgeClass + ' badge-sm whitespace-nowrap';
     badge.textContent = text;
   }
 
-  function renderStatus(status) {
+  // failureMessage: 상태 조회 실패 문구(에러 코드 포함) > 배지 툴팁
+  function renderStatus(status, failureMessage) {
     const serviceBadge = el('service-status-badge');
+    serviceBadge.title = failureMessage || '';
     if (!status) {
-      serviceBadge.className = 'badge badge-ghost gap-1 text-xs py-2 px-2.5';
-      serviceBadge.textContent = '조회 실패';
+      serviceBadge.className = 'badge badge-ghost gap-1 text-xs py-2 px-2.5 whitespace-nowrap';
+      serviceBadge.textContent = '확인하지 못했어요';
       return;
     }
 
     const stateLabel = SERVICE_STATE_LABELS[status.service_state] || status.service_state;
     if (status.service_running) {
-      serviceBadge.className = 'badge badge-success gap-1 text-xs py-2 px-2.5';
+      serviceBadge.className = 'badge badge-success gap-1 text-xs py-2 px-2.5 whitespace-nowrap';
       serviceBadge.innerHTML = '<span class="size-1.5 rounded-full bg-current animate-pulse"></span>' + escapeHtml(stateLabel);
     } else {
-      serviceBadge.className = 'badge badge-error gap-1 text-xs py-2 px-2.5';
+      serviceBadge.className = 'badge badge-error gap-1 text-xs py-2 px-2.5 whitespace-nowrap';
       serviceBadge.textContent = stateLabel;
     }
 
@@ -70,7 +77,7 @@
 
   function renderConfig(status) {
     if (status.config_error) {
-      el('engine').textContent = '설정 파일을 읽을 수 없음';
+      el('engine').textContent = '설정 파일을 읽지 못했어요';
       return;
     }
     const database = status.database || {};
@@ -83,17 +90,24 @@
   }
 
   /* ---------- 2. 서비스 제어 ---------- */
+  // 중지·재시작은 연결된 모든 세션을 끊음 > 확인 후 실행 (팀 브레인 재시작과 같은 기준)
+  const CONTROL_CONFIRM_MESSAGES = {
+    stop: 'gbrain 서버를 중지할까요?\n\n중지하면 이 서버에 붙은 모든 Claude Code 세션의 gbrain 도구가 끊겨요. 다시 쓰려면 "서비스 시작"을 눌러요.',
+    restart: 'gbrain 서버를 재시작할까요?\n\n재시작하는 몇 초 동안 이 서버에 붙은 모든 Claude Code 세션의 gbrain 연결이 잠깐 끊겨요.',
+  };
+
   async function controlService(action) {
-    const pendingMessages = { start: '서비스 시작 신호 전송 중...', stop: '서비스 중지 신호 전송 중...', restart: '서비스 재시작 중...' };
-    showToast(pendingMessages[action] || '처리 중...', 'info');
+    if (CONTROL_CONFIRM_MESSAGES[action] && !window.confirm(CONTROL_CONFIRM_MESSAGES[action])) return;
+    const pendingMessages = { start: '서비스를 시작하고 있어요...', stop: '서비스를 중지하고 있어요...', restart: '서비스를 재시작하고 있어요...' };
+    showToast(pendingMessages[action] || '처리하고 있어요...', 'info');
     setControlDisabled(true);
     try {
       const response = await apiFetch(API + '/control/' + action, { method: 'POST', body: JSON.stringify({}) });
       const result = await readJson(response);
-      if (!response.ok) throw new Error(result.error || '제어 실패');
-      showToast(result.summary || '처리했습니다.', 'success');
+      if (!response.ok) throw new Error(describeFailure(result, '서버를 제어하지 못했어요'));
+      showToast(result.summary || '처리했어요', 'success');
     } catch (error) {
-      showToast('gbrain 서버 제어 실패: ' + escapeHtml(error.message), 'error');
+      showToast('gbrain 서버를 제어하지 못했어요: ' + escapeHtml(error.message), 'error');
     } finally {
       setControlDisabled(false);
       // DB 연결·헬스가 뜨기까지 수 초 걸림
@@ -112,11 +126,11 @@
     try {
       const response = await apiFetch(API + '/admin-login', { method: 'POST', body: JSON.stringify({}) });
       const result = await readJson(response);
-      if (!response.ok) throw new Error((result.error || '로그인 링크 발급 실패') + (result.code ? ' [' + result.code + ']' : ''));
+      if (!response.ok) throw new Error(describeFailure(result, '로그인 링크를 만들지 못했어요'));
       // 경로는 서버가 /admin/auth/<64자 hex> 로 검증 > 출처 루트 기준 이동
       window.location.assign(result.login_path);
     } catch (error) {
-      showToast('gbrain 관리자 화면 열기 실패: ' + escapeHtml(error.message), 'error');
+      showToast('gbrain 관리자 화면을 열지 못했어요: ' + escapeHtml(error.message), 'error');
       el('admin-login').disabled = false;
     }
   }
@@ -127,9 +141,9 @@
     try {
       const response = await apiFetch(API + '/logs?lines=200&t=' + Date.now());
       const result = await readJson(response);
-      if (!response.ok) throw new Error(result.error || '로그 조회 실패');
+      if (!response.ok) throw new Error(describeFailure(result, '로그를 불러오지 못했어요'));
       if (!result.logs || !result.logs.length) {
-        box.innerHTML = '<div class="opacity-50 text-center py-10">출력할 로그가 없습니다.</div>';
+        box.innerHTML = '<div class="opacity-50 text-center py-10">아직 쌓인 로그가 없어요.</div>';
         return;
       }
       const isScrolledToBottom = (box.scrollHeight - box.scrollTop - box.clientHeight) < 35;
@@ -142,7 +156,7 @@
       }).join('');
       if (isScrolledToBottom) box.scrollTop = box.scrollHeight;
     } catch (error) {
-      box.innerHTML = '<div class="text-error text-center py-10">gbrain 서버 로그 조회 실패: ' + escapeHtml(error.message) + '</div>';
+      box.innerHTML = '<div class="text-error text-center py-10">gbrain 서버 로그를 불러오지 못했어요: ' + escapeHtml(error.message) + '</div>';
     }
   }
 

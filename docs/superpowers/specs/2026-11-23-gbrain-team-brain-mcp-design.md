@@ -113,6 +113,9 @@ DB 를 다시 여는 대신, #201~#207 에서 개인 브레인에 쓴 방식(gbr
 
 ## 7. 팀원 연결 안내 (토큰 결과 창 "팀원에게 보낼 안내" 와 같은 내용)
 
+결과 창 구성 (#213): 팀 토큰이면 "팀원에게 보낼 안내" + **안내 전체 복사** 버튼 + 1:1 전달 경고를 맨 위에, 토큰·한 줄·설정 조각은 "직접 넣는 값 보기"로 접어 둠.
+발급 창에는 "만들 곳: <project> 팀 브레인 (gbrain-<project>)" 과 실제 기본 권한(읽기 전용)이 보이고, 브레인을 바꾸면 목록 응답이 올 때까지 발급 버튼을 잠금.
+
 ### 방법 1 (권장): MCP 서버 하나 더하기
 
 ```bash
@@ -161,7 +164,7 @@ gbrain mounts add team-passql --path ~/gbrains/team-passql --engine pglite \
    GBRAIN_HOME=~/gbrains/romrom gbrain sources add romrom-knowledge --path ~/gbrains/romrom/repo
    ```
    그리고 `~/gbrains/passql/sync.sh` 를 복사해 프로젝트 이름만 바꾸고 1시간 주기로 등록 (passQL 과 같은 방식)
-3. 토큰 카드 > 브레인 `romrom 팀 (gbrain-romrom)` 선택 > **새 기기 연결** > 팀원 이름 (예: `kim-macbook`), 권한 읽기 전용 > 결과 창 "팀원에게 보낼 안내"를 그 팀원에게 1:1 로 전달
+3. 토큰 카드 > 브레인 `romrom 팀 (gbrain-romrom)` 선택 > **팀원 토큰 만들기** > 팀원 이름 (예: `kim-macbook`), 권한 읽기 전용 > 결과 창 **안내 전체 복사** > 그 팀원에게 1:1 로 전달
 4. 관제소 상태: "gbrain 팀 브레인 전체" 감시가 up 인지 확인 (프로젝트별 감시가 필요하면 `services.yml` 에 `internal: http://127.0.0.1:<포트>/health` 추가)
 5. 팀원이 빠지면 그 토큰만 폐기
 

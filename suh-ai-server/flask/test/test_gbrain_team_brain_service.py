@@ -223,12 +223,20 @@ def test_새_계정을_만든_뒤_서비스_설치가_실패해도_새_비번은
     assert error_info.value.details['steps']['config'] == 'initialized'
 
 
-@pytest.mark.parametrize('project', ['', 'Passql', 'pass-ql', 'p', 'personal', '1abc', 'a' * 21, None])
+@pytest.mark.parametrize('project', ['', 'Passql', 'pass-ql', 'p', '1abc', 'a' * 21, None])
 def test_프로젝트_키_규칙_밖이면_400(team_root, project):
     with pytest.raises(GbrainServerError) as error_info:
         build_service(FakeAiDbService(), FakeProvisioner(), team_root).create_team_brain(project)
 
     assert (error_info.value.code, error_info.value.status_code) == ('invalid_project', 400)
+
+
+def test_예약어_personal_은_형식이_맞아도_이유를_따로_알린다(team_root):
+    with pytest.raises(GbrainServerError) as error_info:
+        build_service(FakeAiDbService(), FakeProvisioner(), team_root).create_team_brain('personal')
+
+    assert (error_info.value.code, error_info.value.status_code) == ('reserved_project', 400)
+    assert '개인 브레인' in str(error_info.value)
 
 
 def test_AI_DB_오류는_같은_코드로_전달한다(team_root):
