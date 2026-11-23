@@ -7,9 +7,9 @@ import pytest
 FLASK_ROOT = Path(__file__).resolve().parent.parent
 TEMPLATE_PATH = FLASK_ROOT / 'templates' / 'admin' / 'gbrain.html'
 SCRIPT_DIRECTORY = FLASK_ROOT / 'static' / 'js'
-# 화면 규칙 검사 대상 스크립트 6개: 개인 서버, 토큰 카드, 토큰 결과 창, 팀 브레인 카드, 팀원 카드, 팀원 키 (#221)
+# 화면 규칙 검사 대상 스크립트 7개: 개인 서버, 토큰 카드, 토큰 결과 창, 팀 브레인 카드, 팀원 카드, 팀원 키, 팀원 키 결과 창 (#221)
 GBRAIN_SCRIPT_NAMES = ['gbrain.js', 'gbrain-tokens.js', 'gbrain-token-result.js', 'gbrain-teams.js',
-                       'gbrain-members.js', 'gbrain-member-keys.js']
+                       'gbrain-members.js', 'gbrain-member-keys.js', 'gbrain-member-key-reveal.js']
 
 
 # 화면 본문 + 부분 템플릿 2개 (토큰 대화창, 팀 브레인 대화창)
@@ -62,8 +62,9 @@ def test_결과_창_스크립트가_토큰_카드보다_먼저_로드된다():
     assert template.index('gbrain-token-result.js') < template.index('gbrain-tokens.js?')
 
 
-# 배지를 만드는 스크립트 5개 (결과 창은 배지 없음)
-BADGE_SCRIPT_NAMES = ['gbrain.js', 'gbrain-tokens.js', 'gbrain-teams.js', 'gbrain-members.js', 'gbrain-member-keys.js']
+# 배지를 만드는 스크립트 6개 (토큰 결과 창은 배지 없음, 팀원 키 결과 창은 남은 초 배지)
+BADGE_SCRIPT_NAMES = ['gbrain.js', 'gbrain-tokens.js', 'gbrain-teams.js', 'gbrain-members.js', 'gbrain-member-keys.js',
+                      'gbrain-member-key-reveal.js']
 
 
 @pytest.mark.parametrize('script_name', BADGE_SCRIPT_NAMES)
@@ -146,3 +147,51 @@ def test_서버가_화면으로_보내는_gbrain_문구도_해요체로_쓴다(s
             continue  # 주석·영어 로그 제외
         for literal in re.findall(r"""['"]([^'"]*)['"]""", line):
             assert not re.search(r'(습니다|합니다|입니다)', literal), f'{source_path.name}: {literal}'
+
+
+# 팀원 카드 화면 규칙 (#221 UI 점검): 확인 창, 다시 보기 카운트다운, 좁은 화면, 버튼 순서
+MEMBER_SCRIPT_NAMES = ['gbrain-members.js', 'gbrain-member-keys.js', 'gbrain-member-key-reveal.js']
+
+
+@pytest.mark.parametrize('script_name', MEMBER_SCRIPT_NAMES)
+def test_팀원_카드의_종료와_폐기는_브라우저_confirm_대신_공통_확인_창을_쓴다(script_name):
+    assert 'confirm(' not in read_script(script_name).replace('confirmDanger(', '')
+
+
+def test_공통_확인_창은_취소가_기본_포커스다():
+    template = read_template()
+    common_script = read_script('gbrain-page-common.js')
+
+    assert 'id="gbrain-confirm-modal"' in template
+    assert "getElement('gbrain-confirm-cancel').focus()" in common_script
+    assert "modal.returnValue === 'accept'" in common_script
+
+
+def test_다시_보기_결과_창은_남은_초를_보여_주고_닫으면_멈춘다():
+    template = read_template()
+    reveal_script = read_script('gbrain-member-key-reveal.js')
+
+    assert 'id="token-secret-countdown"' in template
+    assert "remainingSeconds + '초 뒤 닫혀요'" in reveal_script
+    assert "getElement('token-secret-modal').addEventListener('close', stopCountdown)" in reveal_script
+    # 남은 초는 서버 응답(auto_hide_seconds)이 원본
+    assert 'startCountdown(responseBody.auto_hide_seconds)' in reveal_script
+
+
+def test_팀원_목록은_좁은_화면에서_가로_스크롤_없이_쌓인다():
+    member_card = (FLASK_ROOT / 'templates' / 'admin' / 'gbrain' / 'member_card.html').read_text(encoding='utf-8')
+    members_script = read_script('gbrain-members.js')
+
+    assert 'min-w-[' not in member_card
+    assert '<table' not in member_card
+    assert 'md:flex-row' in members_script
+
+
+def test_팀원_관리_버튼은_키_발급이_먼저고_종료는_더보기_안에_있다():
+    members_script = read_script('gbrain-members.js')
+    buttons_source = members_script[members_script.index('function renderMemberButtons'):]
+
+    assert buttons_source.index("'issue'") < buttons_source.index('"expand"') < buttons_source.index("'end'")
+    # 종료는 더보기 메뉴 항목으로만 (목록에 바로 노출 금지)
+    assert "menuItems.push(renderMenuItem(member, 'end'" in buttons_source
+    assert "renderActionButton(member, 'end'" not in members_script

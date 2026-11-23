@@ -192,6 +192,22 @@
 {% include "admin/gbrain/token_dialogs.html" %}
 {% include "admin/gbrain/team_dialogs.html" %}
 {% include "admin/gbrain/member_dialogs.html" %}
+
+<!-- 되돌릴 수 없는 작업 확인 창 (gbrain-page-common.js confirmDanger): 취소가 기본 포커스 -->
+<dialog id="gbrain-confirm-modal" class="modal">
+  <div class="modal-box max-w-md">
+    <h3 class="font-bold text-lg flex items-center gap-2">
+      <i data-lucide="triangle-alert" class="size-5 text-error"></i><span id="gbrain-confirm-title">-</span>
+    </h3>
+    <p id="gbrain-confirm-message" class="text-sm mt-3"></p>
+    <ul id="gbrain-confirm-consequences" class="list-disc pl-5 mt-3 space-y-1 text-sm opacity-80"></ul>
+    <form method="dialog" class="modal-action">
+      <button id="gbrain-confirm-cancel" value="cancel" class="btn btn-ghost btn-sm">취소</button>
+      <button id="gbrain-confirm-accept" value="accept" class="btn btn-error btn-sm">확인</button>
+    </form>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button value="cancel">닫기</button></form>
+</dialog>
 {% endblock %}
 {% block extra_js %}
 <!-- 토큰 카드 기준 값 (서버 설정이 원본, gbrain_instance.describe_token_page_settings) -->
@@ -200,6 +216,7 @@
 <script src="{{ root }}/static/js/gbrain.js?v={{ asset('js/gbrain.js') }}"></script>
 <script src="{{ root }}/static/js/gbrain-token-result.js?v={{ asset('js/gbrain-token-result.js') }}"></script>
 <script src="{{ root }}/static/js/gbrain-tokens.js?v={{ asset('js/gbrain-tokens.js') }}"></script>
+<script src="{{ root }}/static/js/gbrain-member-key-reveal.js?v={{ asset('js/gbrain-member-key-reveal.js') }}"></script>
 <script src="{{ root }}/static/js/gbrain-member-keys.js?v={{ asset('js/gbrain-member-keys.js') }}"></script>
 <script src="{{ root }}/static/js/gbrain-members.js?v={{ asset('js/gbrain-members.js') }}"></script>
 <script src="{{ root }}/static/js/gbrain-teams.js?v={{ asset('js/gbrain-teams.js') }}"></script>

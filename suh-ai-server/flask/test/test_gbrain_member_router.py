@@ -140,4 +140,4 @@ def test_상태_변경_경로는_모두_감사한다(client, resolver, audit_cal
 def test_관리_화면에_팀원_카드가_있다(client):
     page = client.get('/admin/gbrain').get_data(as_text=True)
 
-    assert 'id="member-table-body"' in page and 'gbrain-members.js' in page
+    assert 'id="member-list"' in page and 'gbrain-members.js' in page
