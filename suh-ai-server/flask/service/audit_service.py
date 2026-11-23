@@ -116,6 +116,14 @@ class AuditAction(str, Enum):
     GBRAIN_TOKEN_REVOKE = "GBRAIN_TOKEN_REVOKE"
     # gbrain 팀 브레인 만들기 (#210)
     GBRAIN_TEAM_CREATE = "GBRAIN_TEAM_CREATE"
+    # gbrain 팀원·팀원 키 (#221): 상세는 팀원 id·handle·브레인·토큰 id·권한만, 키 원문 없음
+    GBRAIN_MEMBER_CREATE = "GBRAIN_MEMBER_CREATE"
+    GBRAIN_MEMBER_UPDATE = "GBRAIN_MEMBER_UPDATE"
+    GBRAIN_MEMBER_END = "GBRAIN_MEMBER_END"
+    GBRAIN_MEMBER_KEY_CREATE = "GBRAIN_MEMBER_KEY_CREATE"
+    GBRAIN_MEMBER_KEY_REVOKE = "GBRAIN_MEMBER_KEY_REVOKE"
+    GBRAIN_MEMBER_KEY_REVEAL = "GBRAIN_MEMBER_KEY_REVEAL"
+    GBRAIN_MEMBER_KEY_LINK = "GBRAIN_MEMBER_KEY_LINK"
 
 
 def record(category: AuditCategory, action: AuditAction, actor_ip: str, detail: dict = None, *,

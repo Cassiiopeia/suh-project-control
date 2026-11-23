@@ -7,8 +7,9 @@ import pytest
 FLASK_ROOT = Path(__file__).resolve().parent.parent
 TEMPLATE_PATH = FLASK_ROOT / 'templates' / 'admin' / 'gbrain.html'
 SCRIPT_DIRECTORY = FLASK_ROOT / 'static' / 'js'
-# 화면 규칙 검사 대상 스크립트 4개: 개인 서버, 토큰 카드, 토큰 결과 창, 팀 브레인 카드
-GBRAIN_SCRIPT_NAMES = ['gbrain.js', 'gbrain-tokens.js', 'gbrain-token-result.js', 'gbrain-teams.js']
+# 화면 규칙 검사 대상 스크립트 6개: 개인 서버, 토큰 카드, 토큰 결과 창, 팀 브레인 카드, 팀원 카드, 팀원 키 (#221)
+GBRAIN_SCRIPT_NAMES = ['gbrain.js', 'gbrain-tokens.js', 'gbrain-token-result.js', 'gbrain-teams.js',
+                       'gbrain-members.js', 'gbrain-member-keys.js']
 
 
 # 화면 본문 + 부분 템플릿 2개 (토큰 대화창, 팀 브레인 대화창)
@@ -61,8 +62,8 @@ def test_결과_창_스크립트가_토큰_카드보다_먼저_로드된다():
     assert template.index('gbrain-token-result.js') < template.index('gbrain-tokens.js?')
 
 
-# 배지를 만드는 스크립트 3개 (결과 창은 배지 없음)
-BADGE_SCRIPT_NAMES = ['gbrain.js', 'gbrain-tokens.js', 'gbrain-teams.js']
+# 배지를 만드는 스크립트 5개 (결과 창은 배지 없음)
+BADGE_SCRIPT_NAMES = ['gbrain.js', 'gbrain-tokens.js', 'gbrain-teams.js', 'gbrain-members.js', 'gbrain-member-keys.js']
 
 
 @pytest.mark.parametrize('script_name', BADGE_SCRIPT_NAMES)
