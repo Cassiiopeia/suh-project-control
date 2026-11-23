@@ -1,14 +1,47 @@
 {
   "metadata": {
-    "lastUpdated": "2026-11-23T01:31:53Z",
-    "currentVersion": "2.0.100",
+    "lastUpdated": "2026-11-23T01:51:46Z",
+    "currentVersion": "2.0.101",
     "projectType": "python",
-    "totalReleases": 96,
+    "totalReleases": 97,
     "projectTypes": [
       "python"
     ]
   },
   "releases": [
+    {
+      "version": "2.0.101",
+      "project_type": "python",
+      "project_types": [
+        "python"
+      ],
+      "date": "2026-11-23",
+      "pr_number": 217,
+      "raw_summary": "## Summary by CodeRabbit\n\n## 릴리스 노트\n\n* **개선**\n  * gbrain 화면이 서버 설정 값을 그대로 보여 주도록 정리\n  * gbrain 서버 안내·오류 문구를 해요체로 다듬음\n  * gbrain 관리 화면 구조를 정리해 유지보수를 쉽게 함\n\n* **문서**\n  * gbrain 코드 점검 보고서 추가\n\n* **기타**\n  * 이름·포트·주소가 서버 설정과 어긋나지 않게 검사하는 시험 추가",
+      "parsed_changes": {
+        "개선": {
+          "title": "개선",
+          "items": [
+            "gbrain 화면이 서버 설정 값을 그대로 보여 주도록 정리",
+            "gbrain 서버 안내·오류 문구를 해요체로 다듬음",
+            "gbrain 관리 화면 구조를 정리해 유지보수를 쉽게 함"
+          ]
+        },
+        "문서": {
+          "title": "문서",
+          "items": [
+            "gbrain 코드 점검 보고서 추가"
+          ]
+        },
+        "기타": {
+          "title": "기타",
+          "items": [
+            "이름·포트·주소가 서버 설정과 어긋나지 않게 검사하는 시험 추가"
+          ]
+        }
+      },
+      "parse_method": "markdown"
+    },
     {
       "version": "2.0.100",
       "project_type": "python",
