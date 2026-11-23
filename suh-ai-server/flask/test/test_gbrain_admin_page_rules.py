@@ -11,8 +11,12 @@ SCRIPT_DIRECTORY = FLASK_ROOT / 'static' / 'js'
 GBRAIN_SCRIPT_NAMES = ['gbrain.js', 'gbrain-tokens.js', 'gbrain-token-result.js', 'gbrain-teams.js']
 
 
+# 화면 본문 + 부분 템플릿 2개 (토큰 대화창, 팀 브레인 대화창)
+PARTIAL_TEMPLATE_PATHS = sorted((FLASK_ROOT / 'templates' / 'admin' / 'gbrain').glob('*.html'))
+
+
 def read_template() -> str:
-    return TEMPLATE_PATH.read_text(encoding='utf-8')
+    return '\n'.join(path.read_text(encoding='utf-8') for path in [TEMPLATE_PATH] + PARTIAL_TEMPLATE_PATHS)
 
 
 def read_script(script_name: str) -> str:
@@ -24,7 +28,7 @@ def test_브레인을_바꾸면_늦게_온_이전_목록_응답을_버린다():
 
     assert 'requestNumber !== latestListRequestNumber' in tokens_script
     # 응답 전까지 발급 버튼 잠금 (이전 브레인 기본 권한으로 발급 방지)
-    assert "el('token-create-open').disabled = true" in tokens_script
+    assert "getElement('token-create-open').disabled = true" in tokens_script
 
 
 def test_발급_창은_만들_곳과_실제_기본_권한을_보여_준다():
@@ -32,12 +36,12 @@ def test_발급_창은_만들_곳과_실제_기본_권한을_보여_준다():
     tokens_script = read_script('gbrain-tokens.js')
 
     assert 'id="token-create-target"' in template
-    assert 'data-scope-default-badge="read_write"' in template
-    assert 'data-scope-default-badge="read_only"' in template
+    assert 'data-scope-default-badge="{{ token_page_settings.read_write_scope_preset }}"' in template
+    assert 'data-scope-default-badge="{{ token_page_settings.read_only_scope_preset }}"' in template
     assert '(기본,' not in template  # 권한 라벨에 기본값 고정 문구 금지
-    assert "TEAM_DEFAULT_SCOPE_PRESET = 'read_only'" in tokens_script
+    assert 'PAGE_SETTINGS.team_default_scope_preset' in tokens_script
     # 창을 연 때의 브레인으로 발급
-    assert "brain: el('token-create-modal').dataset.brain" in tokens_script
+    assert "brain: getElement('token-create-modal').dataset.brain" in tokens_script
 
 
 def test_팀_토큰_결과_창은_팀원_안내와_전체_복사를_맨_위에_둔다():
@@ -95,3 +99,49 @@ def test_화면_문구는_해요체로_쓴다(source_name):
     visible_source = re.sub(r'<!--.*?-->|/\*.*?\*/|//[^\n]*', '', source, flags=re.S)
 
     assert not re.search(r'(습니다|합니다|입니다|하세요)', visible_source)
+
+
+def test_토큰_카드는_서버_설정_값만_쓰고_사본_상수를_두지_않는다():
+    tokens_script = read_script('gbrain-tokens.js')
+    template = read_template()
+
+    # 개인 브레인 id·MCP 이름·공개 주소·권한 값은 gbrain_instance.describe_token_page_settings 가 원본
+    for copied_literal in ["'personal'", "'gbrain'", 'suhsaechan.kr', "'read_write'", "'read_only'"]:
+        assert copied_literal not in tokens_script, copied_literal
+    assert 'id="gbrain-token-page-settings"' in template
+    assert 'https://ai.suhsaechan.kr/mcp' not in template
+
+
+@pytest.mark.parametrize('script_name', GBRAIN_SCRIPT_NAMES)
+def test_공통_함수는_gbrain_page_common_한_곳에만_둔다(script_name):
+    script = read_script(script_name)
+    template = read_template()
+
+    for duplicated_definition in ['function el(', 'function readJson(', 'function describeFailure(']:
+        assert duplicated_definition not in script, f'{script_name}: {duplicated_definition}'
+    assert 'window.gbrainPage' in script
+    assert template.index('gbrain-page-common.js') < template.index(script_name + '?')
+
+
+@pytest.mark.parametrize('script_name', GBRAIN_SCRIPT_NAMES)
+def test_스크립트가_찾는_요소_id_는_템플릿에_모두_있다(script_name):
+    template = read_template()
+    base_template = (FLASK_ROOT / 'templates' / 'admin' / 'base.html').read_text(encoding='utf-8')
+    element_ids = set(re.findall(r"getElement\('([^']+)'\)", read_script(script_name)))
+
+    assert element_ids, f'{script_name}: getElement 사용이 없어요'
+    for element_id in element_ids:
+        assert f'id="{element_id}"' in template + base_template, f'{script_name}: #{element_id}'
+
+
+# 화면으로 나가는 서버 문구 (오류·요약): gbrain 서비스·라우터
+BACKEND_MESSAGE_PATHS = sorted((FLASK_ROOT / 'service').glob('gbrain_*.py')) + sorted((FLASK_ROOT / 'router').glob('gbrain_*.py'))
+
+
+@pytest.mark.parametrize('source_path', BACKEND_MESSAGE_PATHS, ids=lambda path: path.name)
+def test_서버가_화면으로_보내는_gbrain_문구도_해요체로_쓴다(source_path):
+    for line in source_path.read_text(encoding='utf-8').splitlines():
+        if line.strip().startswith('#') or 'logger.' in line:
+            continue  # 주석·영어 로그 제외
+        for literal in re.findall(r"""['"]([^'"]*)['"]""", line):
+            assert not re.search(r'(습니다|합니다|입니다)', literal), f'{source_path.name}: {literal}'

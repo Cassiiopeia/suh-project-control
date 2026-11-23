@@ -6,6 +6,8 @@ import os
 
 from flask import Blueprint, render_template
 
+from service.gbrain_instance import describe_naming_hints, describe_token_page_settings
+
 admin_bp = Blueprint('admin', __name__)
 
 # 정적 자산 캐시 버스팅: 템플릿에서 {{ asset('js/palworld.js') }} → 파일 수정시각 토큰.
@@ -87,8 +89,9 @@ def ai_db():
 
 @admin_bp.route('/admin/gbrain', methods=['GET'])
 def gbrain():
-    """gbrain HTTP 서버(MCP) 관리 페이지 (상태·제어·로그·관리자 화면 로그인)"""
-    return render_template('admin/gbrain.html', root='..', active='gbrain')
+    """gbrain HTTP 서버(MCP) 관리 페이지 (상태·제어·로그·관리자 화면 로그인·토큰·팀 브레인)"""
+    return render_template('admin/gbrain.html', root='..', active='gbrain',
+                           token_page_settings=describe_token_page_settings(), naming_hints=describe_naming_hints())
 
 
 @admin_bp.route('/admin/models', methods=['GET'])

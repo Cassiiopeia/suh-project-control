@@ -3,11 +3,10 @@
    팀 브레인: 팀원에게 보낼 안내 + 전체 복사를 맨 위에, 직접 넣는 값은 접어 둠
    토큰 원문은 입력칸에만 두고 콘솔·저장소에 남기지 않음 */
 (function () {
+  const { getElement } = window.gbrainPage;
   // 원문이 들어가는 칸 (창을 닫으면 모두 비움)
   const SECRET_FIELD_IDS = ['token-secret-value', 'token-cli-command', 'token-config-snippet', 'token-team-guide-text'];
   const READ_ONLY_SCOPE_KEY = 'read';
-
-  function el(id) { return document.getElementById(id); }
 
   // 결과 창에 넣을 값: 한 줄 명령, mcpServers 설정 조각
   function buildCliCommand(serverName, mcpUrl, secret) {
@@ -51,18 +50,18 @@
 
   // 개인·팀 브레인에 따라 안내 문구·펼침 상태 전환
   function applyBrainKind(isTeam) {
-    el('token-team-guide').hidden = !isTeam;
-    el('token-self-install').open = !isTeam;
-    el('token-self-install-summary').textContent = isTeam
+    getElement('token-team-guide').hidden = !isTeam;
+    getElement('token-self-install').open = !isTeam;
+    getElement('token-self-install-summary').textContent = isTeam
       ? '직접 넣는 값 보기 (팀원이 한 줄 대신 설정 파일을 쓸 때)'
       : '이 기기에 넣는 값';
-    el('token-secret-warning').textContent = isTeam
+    getElement('token-secret-warning').textContent = isTeam
       ? '이 토큰은 지금만 볼 수 있어요. 창을 닫기 전에 아래 팀원 안내를 복사해서 그 팀원에게 보내 주세요.'
       : '이 토큰은 지금만 볼 수 있어요. 창을 닫기 전에 먼저 복사해 두세요. 잃어버리면 이 토큰을 폐기하고 새로 만들면 돼요.';
-    el('token-self-install-caution').textContent = isTeam
+    getElement('token-self-install-caution').textContent = isTeam
       ? '토큰은 비밀번호와 같아요. 그 팀원에게 1:1 로만 전하고, 팀원은 자기 컴퓨터에만 넣어요.'
       : '토큰은 비밀번호와 같아요. 이 기기의 Claude Code 에만 넣어 두세요.';
-    el('token-secret-close').textContent = isTeam ? '팀원에게 보냈어요, 닫기' : '다 넣었어요, 닫기';
+    getElement('token-secret-close').textContent = isTeam ? '팀원에게 보냈어요, 닫기' : '다 넣었어요, 닫기';
   }
 
   /* 발급 응답 > 결과 창 열기 (fallback: 목록에서 받은 주소·이름) */
@@ -70,25 +69,25 @@
     const mcpUrl = created.mcp_url || fallbackMcpUrl;
     const serverName = created.mcp_server_name || fallbackServerName;
     const cliCommand = buildCliCommand(serverName, mcpUrl, created.secret);
-    el('token-secret-title').textContent = created.token.name + ' 토큰을 만들었어요';
-    el('token-secret-value').value = created.secret;
-    el('token-cli-command').value = cliCommand;
-    el('token-config-snippet').value = buildConfigSnippet(serverName, mcpUrl, created.secret);
+    getElement('token-secret-title').textContent = created.token.name + ' 토큰을 만들었어요';
+    getElement('token-secret-value').value = created.secret;
+    getElement('token-cli-command').value = cliCommand;
+    getElement('token-config-snippet').value = buildConfigSnippet(serverName, mcpUrl, created.secret);
     document.querySelectorAll('[data-mcp-server-name]').forEach(function (span) { span.textContent = serverName; });
-    el('token-team-guide-text').value = created.is_team
+    getElement('token-team-guide-text').value = created.is_team
       ? buildTeammateGuide(created.brain, serverName, cliCommand, created.token.scopes) : '';
     applyBrainKind(!!created.is_team);
-    el('token-secret-modal').showModal();
+    getElement('token-secret-modal').showModal();
   }
 
   // 결과 창 닫힘 > 원문이 담긴 칸 모두 비움 (다시 열어도 볼 수 없게)
   function clearTokenResult() {
-    SECRET_FIELD_IDS.forEach(function (id) { el(id).value = ''; });
+    SECRET_FIELD_IDS.forEach(function (id) { getElement(id).value = ''; });
   }
 
   // 복사 (clipboard API 없으면 칸 선택 > execCommand), 결과 창·팀 브레인 결과 창 공용
   async function copyFieldValue(fieldId) {
-    const field = el(fieldId);
+    const field = getElement(fieldId);
     try {
       if (navigator.clipboard && window.isSecureContext) {
         await navigator.clipboard.writeText(field.value);
@@ -109,6 +108,6 @@
     document.querySelectorAll('[data-copy-target]').forEach(function (button) {
       button.addEventListener('click', function () { copyFieldValue(button.dataset.copyTarget); });
     });
-    el('token-secret-modal').addEventListener('close', clearTokenResult);
+    getElement('token-secret-modal').addEventListener('close', clearTokenResult);
   });
 })();

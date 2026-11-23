@@ -3,15 +3,11 @@
    목록을 읽으면 'gbrain-teams-loaded' 이벤트로 토큰 카드의 브레인 선택지를 채움
    새 쓰기 계정 비번은 결과 창 입력칸에만 두고 닫으면 비움 */
 (function () {
+  const { getElement, readResponseBody, describeFailure, SERVICE_STATE_LABELS } = window.gbrainPage;
   const API = '../gbrain/teams';
   const LIST_REFRESH_MILLISECONDS = 15000;
   const LOG_LINES = 200;
 
-  // 서비스 상태 코드 > 표시 문구 (gbrain.js 와 같은 값)
-  const SERVICE_STATE_LABELS = {
-    running: '구동 중', stopped: '정지됨', start_pending: '시작 중', stop_pending: '중지 중',
-    not_installed: '미설치', unknown: '확인 불가',
-  };
   // 만들기 단계 > 표시 이름, 결과 값 > 문구
   const STEP_LABELS = {
     database: 'DB', writer_role: '쓰기 계정', prepare: '브레인 준비', admin_token: '관리자 토큰', config: 'gbrain 설정',
@@ -23,24 +19,14 @@
     included: '팀 브레인 전체 감시에 포함됐어요',
   };
 
-  function el(id) { return document.getElementById(id); }
-
-  async function readJson(response) {
-    try { return await response.json(); } catch (e) { return {}; }
-  }
-
-  function describeFailure(result, fallbackMessage) {
-    return (result.error || fallbackMessage) + (result.code ? ' [' + result.code + ']' : '');
-  }
-
   /* ---------- 1. 목록 ---------- */
   async function loadTeams() {
-    const tableBody = el('team-table-body');
+    const tableBody = getElement('team-table-body');
     try {
       const response = await apiFetch(API + '?t=' + Date.now());
-      const result = await readJson(response);
-      if (!response.ok) throw new Error(describeFailure(result, '팀 브레인 목록을 불러오지 못했어요'));
-      const brains = result.brains || [];
+      const responseBody = await readResponseBody(response);
+      if (!response.ok) throw new Error(describeFailure(responseBody, '팀 브레인 목록을 불러오지 못했어요'));
+      const brains = responseBody.brains || [];
       renderTeams(brains);
       document.dispatchEvent(new CustomEvent('gbrain-teams-loaded', { detail: { brains: brains } }));
     } catch (error) {
@@ -49,7 +35,7 @@
   }
 
   function renderTeams(brains) {
-    const tableBody = el('team-table-body');
+    const tableBody = getElement('team-table-body');
     if (!brains.length) {
       tableBody.innerHTML = '<tr><td colspan="6" class="text-center opacity-50 py-6">아직 팀 브레인이 없어요. "팀 브레인 만들기"로 시작해 보세요.</td></tr>';
       return;
@@ -90,34 +76,34 @@
 
   /* ---------- 2. 만들기 ---------- */
   function openCreateModal() {
-    el('team-create-form').reset();
-    el('team-create-error').hidden = true;
-    el('team-create-modal').showModal();
-    el('team-project').focus();
+    getElement('team-create-form').reset();
+    getElement('team-create-error').hidden = true;
+    getElement('team-create-modal').showModal();
+    getElement('team-project').focus();
   }
 
   async function submitCreateForm(event) {
     event.preventDefault();
-    const submitButton = el('team-create-submit');
-    const errorText = el('team-create-error');
+    const submitButton = getElement('team-create-submit');
+    const errorText = getElement('team-create-error');
     errorText.hidden = true;
     submitButton.disabled = true;
     submitButton.textContent = '만드는 중이에요... (최대 몇 분)';
     try {
       const response = await apiFetch(API, {
         method: 'POST',
-        body: JSON.stringify({ project: el('team-project').value.trim(), writer_password: el('team-writer-password').value }),
+        body: JSON.stringify({ project: getElement('team-project').value.trim(), writer_password: getElement('team-writer-password').value }),
       });
-      const result = await readJson(response);
-      el('team-writer-password').value = '';
+      const responseBody = await readResponseBody(response);
+      getElement('team-writer-password').value = '';
       if (!response.ok) {
         // 중간 실패라도 새 쓰기 계정 비번은 결과 창으로 1번 보여 줌 (다시 받을 수 없음)
-        if (result.writer_secret) openResultModal(result, true);
-        throw new Error(describeFailure(result, '팀 브레인을 만들지 못했어요'));
+        if (responseBody.writer_secret) openResultModal(responseBody, true);
+        throw new Error(describeFailure(responseBody, '팀 브레인을 만들지 못했어요'));
       }
-      el('team-create-modal').close();
-      openResultModal(result, false);
-      showToast(result.brain.project + ' 팀 브레인을 만들었어요', 'success');
+      getElement('team-create-modal').close();
+      openResultModal(responseBody, false);
+      showToast(responseBody.brain.project + ' 팀 브레인을 만들었어요', 'success');
     } catch (error) {
       errorText.textContent = error.message;
       errorText.hidden = false;
@@ -128,19 +114,19 @@
     }
   }
 
-  function openResultModal(result, isPartialFailure) {
-    const steps = result.steps || {};
-    el('team-result-title').textContent = isPartialFailure
+  function openResultModal(responseBody, isPartialFailure) {
+    const steps = responseBody.steps || {};
+    getElement('team-result-title').textContent = isPartialFailure
       ? '팀 브레인을 만들다 멈췄어요. 원인을 고친 뒤 다시 만들기를 누르면 이어서 해요'
-      : (result.brain.project + ' 팀 브레인을 만들었어요');
-    el('team-result-steps').innerHTML = Object.keys(steps).map(function (stepName) {
+      : (responseBody.brain.project + ' 팀 브레인을 만들었어요');
+    getElement('team-result-steps').innerHTML = Object.keys(steps).map(function (stepName) {
       return '<li><span class="font-semibold">' + escapeHtml(STEP_LABELS[stepName] || stepName) + '</span> : ' +
         escapeHtml(STEP_RESULT_LABELS[steps[stepName]] || steps[stepName]) + '</li>';
     }).join('');
-    const writerSecret = result.writer_secret;
-    el('team-writer-secret').hidden = !writerSecret;
-    el('team-writer-connection-url').value = writerSecret ? writerSecret.sync_connection_url : '';
-    el('team-result-modal').showModal();
+    const writerSecret = responseBody.writer_secret;
+    getElement('team-writer-secret').hidden = !writerSecret;
+    getElement('team-writer-connection-url').value = writerSecret ? writerSecret.sync_connection_url : '';
+    getElement('team-result-modal').showModal();
   }
 
   /* ---------- 3. 재시작·로그 ---------- */
@@ -149,9 +135,9 @@
     button.disabled = true;
     try {
       const response = await apiFetch(API + '/' + encodeURIComponent(project) + '/control/restart', { method: 'POST', body: '{}' });
-      const result = await readJson(response);
-      if (!response.ok) throw new Error(describeFailure(result, '재시작하지 못했어요'));
-      showToast(result.summary || '재시작했어요', 'success');
+      const responseBody = await readResponseBody(response);
+      if (!response.ok) throw new Error(describeFailure(responseBody, '재시작하지 못했어요'));
+      showToast(responseBody.summary || '재시작했어요', 'success');
     } catch (error) {
       showToast(escapeHtml(error.message), 'error');
     } finally {
@@ -161,34 +147,34 @@
   }
 
   async function openLogs(project) {
-    el('team-log-title').textContent = project + ' 팀 브레인 로그 (끝 ' + LOG_LINES + '줄)';
-    el('team-log-container').textContent = '불러오는 중이에요...';
-    el('team-log-modal').showModal();
+    getElement('team-log-title').textContent = project + ' 팀 브레인 로그 (끝 ' + LOG_LINES + '줄)';
+    getElement('team-log-container').textContent = '불러오는 중이에요...';
+    getElement('team-log-modal').showModal();
     try {
       const response = await apiFetch(API + '/' + encodeURIComponent(project) + '/logs?lines=' + LOG_LINES);
-      const result = await readJson(response);
-      if (!response.ok) throw new Error(describeFailure(result, '로그를 불러오지 못했어요'));
-      el('team-log-container').textContent = (result.logs || []).join('\n') || '로그가 비어 있어요';
+      const responseBody = await readResponseBody(response);
+      if (!response.ok) throw new Error(describeFailure(responseBody, '로그를 불러오지 못했어요'));
+      getElement('team-log-container').textContent = (responseBody.logs || []).join('\n') || '로그가 비어 있어요';
     } catch (error) {
-      el('team-log-container').textContent = error.message;
+      getElement('team-log-container').textContent = error.message;
     }
   }
 
   // 결과 창 닫힘 > 비번이 담긴 칸 비움
   function clearResultModal() {
-    el('team-writer-connection-url').value = '';
+    getElement('team-writer-connection-url').value = '';
   }
 
   /* ---------- 초기화 ---------- */
   document.addEventListener('DOMContentLoaded', function () {
     loadTeams();
     setInterval(loadTeams, LIST_REFRESH_MILLISECONDS);
-    el('team-refresh').addEventListener('click', loadTeams);
-    el('team-create-open').addEventListener('click', openCreateModal);
-    el('team-create-form').addEventListener('submit', submitCreateForm);
+    getElement('team-refresh').addEventListener('click', loadTeams);
+    getElement('team-create-open').addEventListener('click', openCreateModal);
+    getElement('team-create-form').addEventListener('submit', submitCreateForm);
     document.querySelectorAll('[data-close-team-modal]').forEach(function (button) {
-      button.addEventListener('click', function () { el('team-create-modal').close(); });
+      button.addEventListener('click', function () { getElement('team-create-modal').close(); });
     });
-    el('team-result-modal').addEventListener('close', clearResultModal);
+    getElement('team-result-modal').addEventListener('close', clearResultModal);
   });
 })();

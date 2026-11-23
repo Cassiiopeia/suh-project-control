@@ -13,7 +13,8 @@ import requests
 from config.gbrain_server_config import (
     GBRAIN_HTTP_TIMEOUT_SECONDS, GBRAIN_OWNER_SESSION_REUSE_SECONDS, GBRAIN_SERVER_URL, read_admin_token,
 )
-from service.gbrain_server_service import GbrainServerError
+from service.gbrain_instance import READ_ONLY_SCOPE_PRESET, READ_WRITE_SCOPE_PRESET
+from service.gbrain_server_service import ADMIN_TOKEN_MISSING_MESSAGE, GbrainServerError
 
 logger = logging.getLogger(__name__)
 
@@ -24,12 +25,11 @@ TOKEN_ID_PATTERN = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}
 # gbrain 발급 토큰 원문 접두사 (형식 밖 응답은 화면에 내보내지 않음)
 TOKEN_SECRET_PREFIX = 'gbrain_'
 
-# 권한 선택지 2개: read_write 읽기+쓰기(기본), read_only 읽기 전용
+# 권한 선택지 2개 > gbrain 권한 목록
 SCOPES_BY_PRESET = {
-    'read_write': ['read', 'write'],
-    'read_only': ['read'],
+    READ_WRITE_SCOPE_PRESET: ['read', 'write'],
+    READ_ONLY_SCOPE_PRESET: ['read'],
 }
-DEFAULT_SCOPE_PRESET = 'read_write'
 
 OWNER_LOGIN_PATH = '/admin/login'
 OWNER_SESSION_COOKIE_NAME = 'gbrain_admin'
@@ -181,8 +181,7 @@ class GbrainTokenService:
         """관리자 토큰 > gbrain 소유자 세션 id (토큰·세션 값은 기록하지 않음)"""
         admin_token = read_admin_token(self.admin_token_file)
         if admin_token is None:
-            raise GbrainServerError('gbrain 관리자 토큰 파일이 없어요 (scripts/setup-gbrain-http.ps1 실행 필요)',
-                                    'admin_token_missing', 503)
+            raise GbrainServerError(ADMIN_TOKEN_MISSING_MESSAGE, 'admin_token_missing', 503)
         try:
             response = requests.post(self.server_url + OWNER_LOGIN_PATH, json={'token': admin_token},
                                      timeout=self.timeout_seconds)

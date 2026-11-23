@@ -20,9 +20,9 @@ gbrain_bp = Blueprint('gbrain', __name__)
 
 # 제어 행위 > (감사 행위, 성공 문구, 서비스 호출 메서드 이름)
 CONTROL_ACTIONS = {
-    'start': (AuditAction.GBRAIN_START, 'gbrain 서버를 시작했습니다.', 'start_service'),
-    'stop': (AuditAction.GBRAIN_STOP, 'gbrain 서버를 중지했습니다.', 'stop_service'),
-    'restart': (AuditAction.GBRAIN_RESTART, 'gbrain 서버를 재시작했습니다.', 'restart_service'),
+    'start': (AuditAction.GBRAIN_START, 'gbrain 서버를 시작했어요', 'start_service'),
+    'stop': (AuditAction.GBRAIN_STOP, 'gbrain 서버를 중지했어요', 'stop_service'),
+    'restart': (AuditAction.GBRAIN_RESTART, 'gbrain 서버를 재시작했어요', 'restart_service'),
 }
 
 
@@ -43,7 +43,7 @@ def get_status():
         return jsonify({'success': True, **_service().get_status()}), 200
     except Exception as error:
         logger.error(f'[gbrain status] failed 500 : {type(error).__name__}')
-        return jsonify({'success': False, 'error': 'gbrain 상태 조회 실패', 'code': 'status_failed'}), 500
+        return jsonify({'success': False, 'error': 'gbrain 상태를 확인하지 못했어요', 'code': 'status_failed'}), 500
 
 
 @gbrain_bp.route('/gbrain/logs', methods=['GET'])
@@ -51,7 +51,7 @@ def get_logs():
     try:
         lines = int(request.args.get('lines', GBRAIN_LOG_DEFAULT_LINES))
     except ValueError:
-        return jsonify({'success': False, 'error': 'lines 는 정수여야 합니다', 'code': 'invalid_lines'}), 400
+        return jsonify({'success': False, 'error': 'lines 는 정수로 보내 주세요', 'code': 'invalid_lines'}), 400
     try:
         return jsonify({'success': True, 'logs': _service().read_logs(lines)}), 200
     except GbrainServerError as error:
@@ -62,11 +62,11 @@ def get_logs():
 @audited(AuditCategory.GBRAIN)
 def control_service(action):
     if action not in CONTROL_ACTIONS:
-        return jsonify({'success': False, 'error': '지원하지 않는 제어입니다', 'code': 'invalid_action'}), 400
+        return jsonify({'success': False, 'error': '지원하는 제어는 start, stop, restart 예요', 'code': 'invalid_action'}), 400
     audit_action, summary, method_name = CONTROL_ACTIONS[action]
     set_audit_action(audit_action)
     if not getattr(_service(), method_name)():
-        return jsonify({'success': False, 'error': f'gbrain 서버 {action} 실패 (서버 로그 확인)',
+        return jsonify({'success': False, 'error': f'gbrain 서버 {action} 을 끝내지 못했어요 (서버 로그를 확인해 주세요)',
                         'code': 'control_failed'}), 500
     return jsonify({'success': True, 'summary': summary}), 200
 

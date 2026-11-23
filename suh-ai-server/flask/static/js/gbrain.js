@@ -1,26 +1,15 @@
 /* gbrain HTTP 서버 관리 페이지: 상태 > 제어 > 관리자 화면 로그인 > 로그. base: /admin/gbrain > API: ../gbrain/* */
 (function () {
+  const { getElement, readResponseBody, describeFailure, SERVICE_STATE_LABELS } = window.gbrainPage;
   const API = '../gbrain';
   const STATUS_REFRESH_MILLISECONDS = 5000;
   const LOG_REFRESH_MILLISECONDS = 5000;
-
-  // 서비스 상태 코드 > 표시 문구 (그 외는 원문)
-  const SERVICE_STATE_LABELS = {
-    running: '구동 중', stopped: '정지됨', start_pending: '시작 중', stop_pending: '중지 중',
-    not_installed: '미설치', unknown: '확인 불가',
-  };
-
-  function el(id) { return document.getElementById(id); }
-
-  async function readJson(response) {
-    try { return await response.json(); } catch (e) { return {}; }
-  }
 
   /* ---------- 1. 상태 ---------- */
   async function loadStatus() {
     try {
       const response = await apiFetch(API + '/status?t=' + Date.now());
-      const status = await readJson(response);
+      const status = await readResponseBody(response);
       if (!response.ok) throw new Error(describeFailure(status, '상태를 확인하지 못했어요'));
       renderStatus(status);
     } catch (error) {
@@ -29,20 +18,15 @@
     }
   }
 
-  // 실패 문구 + 에러 코드 (화면 문구 규칙: 오류에는 코드 함께)
-  function describeFailure(result, fallbackMessage) {
-    return (result.error || fallbackMessage) + (result.code ? ' [' + result.code + ']' : '');
-  }
-
   function setBadge(id, badgeClass, text) {
-    const badge = el(id);
+    const badge = getElement(id);
     badge.className = 'badge ' + badgeClass + ' badge-sm whitespace-nowrap';
     badge.textContent = text;
   }
 
   // failureMessage: 상태 조회 실패 문구(에러 코드 포함) > 배지 툴팁
   function renderStatus(status, failureMessage) {
-    const serviceBadge = el('service-status-badge');
+    const serviceBadge = getElement('service-status-badge');
     serviceBadge.title = failureMessage || '';
     if (!status) {
       serviceBadge.className = 'badge badge-ghost gap-1 text-xs py-2 px-2.5 whitespace-nowrap';
@@ -63,30 +47,30 @@
     if (status.is_healthy) setBadge('health-badge', 'badge-success', '정상');
     else setBadge('health-badge', status.service_running ? 'badge-warning' : 'badge-ghost', '응답 없음');
 
-    el('running-version').textContent = status.version || '-';
-    el('installed-version').textContent = (status.installed_version || '-') +
+    getElement('running-version').textContent = status.version || '-';
+    getElement('installed-version').textContent = (status.installed_version || '-') +
       (status.is_restart_pending ? ' (재시작 필요)' : '');
-    el('service-name').textContent = status.service_name || '-';
+    getElement('service-name').textContent = status.service_name || '-';
 
     renderConfig(status);
     const hasAdminToken = !!status.has_admin_token;
-    el('admin-token-warning').hidden = hasAdminToken;
-    el('admin-login').disabled = !hasAdminToken;
+    getElement('admin-token-warning').hidden = hasAdminToken;
+    getElement('admin-login').disabled = !hasAdminToken;
     setBadge('admin-token-badge', hasAdminToken ? 'badge-success' : 'badge-warning', hasAdminToken ? '준비됨' : '없음');
   }
 
   function renderConfig(status) {
     if (status.config_error) {
-      el('engine').textContent = '설정 파일을 읽지 못했어요';
+      getElement('engine').textContent = '설정 파일을 읽지 못했어요';
       return;
     }
     const database = status.database || {};
-    el('engine').textContent = status.engine || '-';
-    el('database').textContent = database.host ? database.host + ':' + database.port + ' / ' + database.name : '-';
-    el('database-user').textContent = database.user || '-';
-    el('embedding-model').textContent = status.embedding_model
+    getElement('engine').textContent = status.engine || '-';
+    getElement('database').textContent = database.host ? database.host + ':' + database.port + ' / ' + database.name : '-';
+    getElement('database-user').textContent = database.user || '-';
+    getElement('embedding-model').textContent = status.embedding_model
       ? status.embedding_model + ' (' + status.embedding_dimensions + '차원)' : '-';
-    el('server-url').textContent = status.server_url || '-';
+    getElement('server-url').textContent = status.server_url || '-';
   }
 
   /* ---------- 2. 서비스 제어 ---------- */
@@ -103,9 +87,9 @@
     setControlDisabled(true);
     try {
       const response = await apiFetch(API + '/control/' + action, { method: 'POST', body: JSON.stringify({}) });
-      const result = await readJson(response);
-      if (!response.ok) throw new Error(describeFailure(result, '서버를 제어하지 못했어요'));
-      showToast(result.summary || '처리했어요', 'success');
+      const responseBody = await readResponseBody(response);
+      if (!response.ok) throw new Error(describeFailure(responseBody, '서버를 제어하지 못했어요'));
+      showToast(responseBody.summary || '처리했어요', 'success');
     } catch (error) {
       showToast('gbrain 서버를 제어하지 못했어요: ' + escapeHtml(error.message), 'error');
     } finally {
@@ -117,37 +101,37 @@
   }
 
   function setControlDisabled(isDisabled) {
-    ['service-start', 'service-stop', 'service-restart'].forEach(function (id) { el(id).disabled = isDisabled; });
+    ['service-start', 'service-stop', 'service-restart'].forEach(function (id) { getElement(id).disabled = isDisabled; });
   }
 
   /* ---------- 3. 관리자 화면 로그인 (1회용 경로 > 같은 출처 /admin/auth/...) ---------- */
   async function openAdminDashboard() {
-    el('admin-login').disabled = true;
+    getElement('admin-login').disabled = true;
     try {
       const response = await apiFetch(API + '/admin-login', { method: 'POST', body: JSON.stringify({}) });
-      const result = await readJson(response);
-      if (!response.ok) throw new Error(describeFailure(result, '로그인 링크를 만들지 못했어요'));
+      const responseBody = await readResponseBody(response);
+      if (!response.ok) throw new Error(describeFailure(responseBody, '로그인 링크를 만들지 못했어요'));
       // 경로는 서버가 /admin/auth/<64자 hex> 로 검증 > 출처 루트 기준 이동
-      window.location.assign(result.login_path);
+      window.location.assign(responseBody.login_path);
     } catch (error) {
       showToast('gbrain 관리자 화면을 열지 못했어요: ' + escapeHtml(error.message), 'error');
-      el('admin-login').disabled = false;
+      getElement('admin-login').disabled = false;
     }
   }
 
   /* ---------- 4. 로그 ---------- */
   async function loadLogs() {
-    const box = el('log-container');
+    const box = getElement('log-container');
     try {
       const response = await apiFetch(API + '/logs?lines=200&t=' + Date.now());
-      const result = await readJson(response);
-      if (!response.ok) throw new Error(describeFailure(result, '로그를 불러오지 못했어요'));
-      if (!result.logs || !result.logs.length) {
+      const responseBody = await readResponseBody(response);
+      if (!response.ok) throw new Error(describeFailure(responseBody, '로그를 불러오지 못했어요'));
+      if (!responseBody.logs || !responseBody.logs.length) {
         box.innerHTML = '<div class="opacity-50 text-center py-10">아직 쌓인 로그가 없어요.</div>';
         return;
       }
       const isScrolledToBottom = (box.scrollHeight - box.scrollTop - box.clientHeight) < 35;
-      box.innerHTML = result.logs.map(function (line) {
+      box.innerHTML = responseBody.logs.map(function (line) {
         let lineClass = 'opacity-80';
         if (/error|fatal|failed/i.test(line)) lineClass = 'text-error font-semibold';
         else if (/warn|degraded/i.test(line)) lineClass = 'text-warning';
@@ -166,13 +150,13 @@
     loadLogs();
     setInterval(loadStatus, STATUS_REFRESH_MILLISECONDS);
     setInterval(function () {
-      if (el('log-auto').checked && !document.hidden) loadLogs();
+      if (getElement('log-auto').checked && !document.hidden) loadLogs();
     }, LOG_REFRESH_MILLISECONDS);
 
-    el('service-start').addEventListener('click', function () { controlService('start'); });
-    el('service-stop').addEventListener('click', function () { controlService('stop'); });
-    el('service-restart').addEventListener('click', function () { controlService('restart'); });
-    el('admin-login').addEventListener('click', openAdminDashboard);
-    el('log-refresh').addEventListener('click', loadLogs);
+    getElement('service-start').addEventListener('click', function () { controlService('start'); });
+    getElement('service-stop').addEventListener('click', function () { controlService('stop'); });
+    getElement('service-restart').addEventListener('click', function () { controlService('restart'); });
+    getElement('admin-login').addEventListener('click', openAdminDashboard);
+    getElement('log-refresh').addEventListener('click', loadLogs);
   });
 })();
