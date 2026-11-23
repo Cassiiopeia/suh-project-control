@@ -10,7 +10,7 @@ from urllib.parse import quote
 
 from config import gbrain_server_config as config
 from service.ai_db.ai_db_errors import AiDbError
-from service.gbrain_instance import PERSONAL_BRAIN_ID
+from service.gbrain_instance import PERSONAL_BRAIN_ID, to_team_database_name, to_team_writer_role
 from service.gbrain_server_service import GbrainServerError, GbrainServerService
 from service.gbrain_team_provisioner import gbrain_team_provisioner
 from service.gbrain_team_registry import GbrainTeamRegistryError, gbrain_team_registry
@@ -22,14 +22,6 @@ PROJECT_PATTERN = re.compile(config.GBRAIN_TEAM_PROJECT_PATTERN)
 RESERVED_PROJECT_KEYS = frozenset({PERSONAL_BRAIN_ID})
 # 동기화 맥이 쓰는 SSH 터널 포트 (외부 5432 는 닫혀 있음, #201)
 SYNC_TUNNEL_LOCAL_PORT = 15433
-
-
-def to_database_name(project: str) -> str:
-    return f'gbrain_{project}'
-
-
-def to_writer_role(project: str) -> str:
-    return f'{project}_writer'
 
 
 class GbrainTeamBrainService:
@@ -76,7 +68,7 @@ class GbrainTeamBrainService:
     def create_team_brain(self, project, writer_password=None) -> dict:
         """만들기 흐름 전체 > {brain, steps, writer_secret(새 계정일 때만)}"""
         self._validate_project(project)
-        database_name, writer_role = to_database_name(project), to_writer_role(project)
+        database_name, writer_role = to_team_database_name(project), to_team_writer_role(project)
         steps = {}
         ai_db_service = self._ai_db_service_factory()
 
@@ -160,7 +152,7 @@ class GbrainTeamBrainService:
     @staticmethod
     def _build_writer_secret_for(project, password) -> dict:
         """동기화 맥용 1회 표시: SSH 터널 127.0.0.1:15433 기준 연결 문자열"""
-        writer_role, database_name = to_writer_role(project), to_database_name(project)
+        writer_role, database_name = to_team_writer_role(project), to_team_database_name(project)
         return {
             'name': writer_role, 'database': database_name, 'password': password,
             'sync_connection_url': (f'postgresql://{writer_role}:{quote(password, safe="")}@127.0.0.1:'

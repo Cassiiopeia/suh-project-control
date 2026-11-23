@@ -11,8 +11,12 @@ GBRAIN_SERVICE_NAME = os.environ.get('GBRAIN_SERVICE_NAME', 'gbrain-http')
 GBRAIN_SERVER_URL = os.environ.get('GBRAIN_SERVER_URL', 'http://127.0.0.1:3131')
 # gbrain 설정 루트: {GBRAIN_HOME}/.gbrain/config.json (DB 주소·임베딩 모델)
 GBRAIN_HOME = os.environ.get('GBRAIN_HOME', 'C:/Users/kimchi')
+# 서비스 로그 파일 이름 (개인·팀 브레인 공통, 팀은 {팀 폴더}/logs/ 아래)
+GBRAIN_LOG_FILE_NAME = 'gbrain-http.log'
 # NSSM 이 쓰는 서비스 로그 (stdout·stderr 합침, 10MB 회전)
-GBRAIN_LOG_PATH = os.environ.get('GBRAIN_LOG_PATH', 'C:/AI/gbrain/logs/gbrain-http.log')
+GBRAIN_LOG_PATH = os.environ.get('GBRAIN_LOG_PATH', 'C:/AI/gbrain/logs/' + GBRAIN_LOG_FILE_NAME)
+# 개인 브레인 DB 이름
+GBRAIN_PERSONAL_DATABASE_NAME = 'gbrain'
 # 관리자 부트스트랩 토큰 파일 (SYSTEM·Administrators 만 읽기, 값은 절대 기록하지 않음)
 GBRAIN_ADMIN_TOKEN_FILE = os.environ.get('GBRAIN_ADMIN_TOKEN_FILE',
                                          'C:/AI/secrets/gbrain-admin-bootstrap-token')
@@ -30,8 +34,13 @@ GBRAIN_LOG_TAIL_BYTES = 1024 * 1024
 GBRAIN_ADMIN_GATE_COOKIE_NAME = 'ct_gbrain_admin_gate'
 GBRAIN_ADMIN_GATE_VALID_SECONDS = 12 * 60 * 60
 
-# MCP 기기 토큰 관리 (#207): 기기에 넣을 공개 주소 (nginx location = /mcp, #204)
-GBRAIN_PUBLIC_MCP_URL = os.environ.get('GBRAIN_PUBLIC_MCP_URL', 'https://ai.suhsaechan.kr/mcp')
+# 공개 주소 바탕: 개인 {base}/mcp, 팀 {base}/team/<project>/mcp
+GBRAIN_PUBLIC_BASE_URL = os.environ.get('GBRAIN_PUBLIC_BASE_URL', 'https://ai.suhsaechan.kr')
+# 공개 MCP 경로 2개 (nginx location = /mcp, location ~ ^/team/<project>/mcp$ 와 함께 바꿈)
+GBRAIN_PERSONAL_MCP_PATH = '/mcp'
+GBRAIN_TEAM_MCP_PATH_TEMPLATE = '/team/{project}/mcp'
+# MCP 기기 토큰 관리 (#207): 기기에 넣을 공개 주소 (#204)
+GBRAIN_PUBLIC_MCP_URL = os.environ.get('GBRAIN_PUBLIC_MCP_URL', GBRAIN_PUBLIC_BASE_URL + GBRAIN_PERSONAL_MCP_PATH)
 # gbrain 소유자 세션 재사용 시간: gbrain 세션 24시간보다 짧게 (만료 직전 요청 실패 방지)
 GBRAIN_OWNER_SESSION_REUSE_SECONDS = 23 * 60 * 60
 
@@ -44,10 +53,12 @@ GBRAIN_TEAM_SERVICE_PREFIX = 'gbrain-team-'
 # 내부 포트 범위 (3131 은 개인 브레인), 127.0.0.1 바인딩
 GBRAIN_TEAM_PORT_FIRST = 3141
 GBRAIN_TEAM_PORT_LAST = 3199
-# 관리자 토큰 파일: C:/AI/secrets/gbrain-team-<project>-admin-token (브레인마다 따로)
+# 관리자 토큰 파일: {GBRAIN_SECRETS_DIR}/gbrain-team-<project>-admin-token (브레인마다 따로)
 GBRAIN_SECRETS_DIR = os.environ.get('GBRAIN_SECRETS_DIR', 'C:/AI/secrets')
-# 공개 주소 바탕: {base}/team/<project>/mcp (nginx location ~ ^/team/<project>/mcp$)
-GBRAIN_PUBLIC_BASE_URL = os.environ.get('GBRAIN_PUBLIC_BASE_URL', 'https://ai.suhsaechan.kr')
+GBRAIN_TEAM_ADMIN_TOKEN_FILE_SUFFIX = '-admin-token'
+# 팀 DB·쓰기 계정 이름: gbrain_<project>, <project>_writer
+GBRAIN_TEAM_DATABASE_PREFIX = 'gbrain_'
+GBRAIN_TEAM_WRITER_ROLE_SUFFIX = '_writer'
 # Claude Code MCP 서버 이름: 개인 gbrain, 팀 gbrain-<project> (도구 이름 mcp__gbrain-<project>__* 로 분리)
 GBRAIN_PERSONAL_MCP_SERVER_NAME = 'gbrain'
 GBRAIN_TEAM_MCP_SERVER_PREFIX = 'gbrain-'

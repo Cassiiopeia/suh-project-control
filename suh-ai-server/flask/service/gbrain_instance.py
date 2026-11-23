@@ -40,13 +40,38 @@ class GbrainInstance:
         return 'read_only' if self.is_team else 'read_write'
 
 
+# ---------- 팀 브레인 이름 규칙 (프로젝트 키 > 이름, 여기 한 곳에서만 만듦) ----------
+def to_team_service_name(project: str) -> str:
+    return config.GBRAIN_TEAM_SERVICE_PREFIX + project
+
+
+def to_team_mcp_server_name(project: str) -> str:
+    return config.GBRAIN_TEAM_MCP_SERVER_PREFIX + project
+
+
+def to_team_mcp_url(project: str) -> str:
+    return config.GBRAIN_PUBLIC_BASE_URL + config.GBRAIN_TEAM_MCP_PATH_TEMPLATE.format(project=project)
+
+
+def to_team_database_name(project: str) -> str:
+    return config.GBRAIN_TEAM_DATABASE_PREFIX + project
+
+
+def to_team_writer_role(project: str) -> str:
+    return project + config.GBRAIN_TEAM_WRITER_ROLE_SUFFIX
+
+
+def to_team_admin_token_file(project: str) -> str:
+    return os.path.join(config.GBRAIN_SECRETS_DIR, to_team_service_name(project) + config.GBRAIN_TEAM_ADMIN_TOKEN_FILE_SUFFIX)
+
+
 def build_personal_instance() -> GbrainInstance:
     port = int(config.GBRAIN_SERVER_URL.rsplit(':', 1)[-1].rstrip('/'))
     return GbrainInstance(
         brain_id=PERSONAL_BRAIN_ID, label='개인 브레인', service_name=config.GBRAIN_SERVICE_NAME, port=port,
         gbrain_home=None, admin_token_file=None, log_path=config.GBRAIN_LOG_PATH,
         mcp_url=config.GBRAIN_PUBLIC_MCP_URL, mcp_server_name=config.GBRAIN_PERSONAL_MCP_SERVER_NAME,
-        database_name='gbrain')
+        database_name=config.GBRAIN_PERSONAL_DATABASE_NAME)
 
 
 def build_team_instance(project: str, port: int, database_name: str, writer_role: str) -> GbrainInstance:
@@ -54,10 +79,10 @@ def build_team_instance(project: str, port: int, database_name: str, writer_role
     team_home = os.path.join(config.GBRAIN_TEAM_ROOT, project)
     return GbrainInstance(
         brain_id=project, label=f'{project} 팀 브레인',
-        service_name=config.GBRAIN_TEAM_SERVICE_PREFIX + project, port=port,
+        service_name=to_team_service_name(project), port=port,
         gbrain_home=team_home,
-        admin_token_file=os.path.join(config.GBRAIN_SECRETS_DIR, f'gbrain-team-{project}-admin-token'),
-        log_path=os.path.join(team_home, 'logs', 'gbrain-http.log'),
-        mcp_url=f'{config.GBRAIN_PUBLIC_BASE_URL}/team/{project}/mcp',
-        mcp_server_name=config.GBRAIN_TEAM_MCP_SERVER_PREFIX + project,
+        admin_token_file=to_team_admin_token_file(project),
+        log_path=os.path.join(team_home, 'logs', config.GBRAIN_LOG_FILE_NAME),
+        mcp_url=to_team_mcp_url(project),
+        mcp_server_name=to_team_mcp_server_name(project),
         database_name=database_name, writer_role=writer_role, is_team=True)
