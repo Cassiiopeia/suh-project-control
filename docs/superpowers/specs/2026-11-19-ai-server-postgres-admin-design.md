@@ -3,6 +3,10 @@
 - 작성: 2026-11-19
 - 출발점: Twin-Fang/elum#1485 (개인 gbrain 을 윈도우 AI 서버 PG 로 이전)
 
+> **2026-11-23 현황 (#218)**: DB 화면의 "gbrain 팀원은 읽기 권한으로 따로 줘요" 안내와 팀원 읽기 권한 주기(#198)는 걷어냄.
+> 팀원은 DB 계정 대신 `/admin/gbrain` 의 팀 브레인 읽기 전용 토큰(`/team/<project>/mcp`, #210)으로 연결. 외부 `5432` 는 공유기에서 닫혀 있음.
+> 상세: [팀원 읽기 권한 제거](2026-11-23-remove-gbrain-team-reader-grant-design.md)
+
 > **2026-11-22 현황 (#201)**: 아래 "gbrain 원격 MCP 서버 운영" 제외 결정은 바뀜.
 > 소유자 맥 전용 MCP 서버를 AI 서버에 둠 ([gbrain HTTP 서버 관제소 관리](2026-11-22-gbrain-http-server-control-tower-design.md)). 팀원 원격 MCP·팀원별 토큰은 여전히 범위 밖
 

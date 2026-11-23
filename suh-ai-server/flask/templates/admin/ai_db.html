@@ -20,8 +20,10 @@
           <span class="flex items-center gap-2"><i data-lucide="database" class="size-5 text-primary"></i>데이터베이스</span>
           <button id="database-add" class="btn btn-primary btn-sm"><i data-lucide="plus" class="size-4"></i>DB 만들기</button>
         </h2>
-        <p class="text-xs opacity-70">새 DB에는 vector 확장을 설치하고, 권한을 준 계정만 접속할 수 있어요. gbrain 팀원은 읽기 권한으로 따로 줘요.</p>
-        <div id="database-list" class="space-y-3"><p class="text-sm opacity-60">불러오는 중</p></div>
+        <p class="text-xs opacity-70">새 DB에는 vector 확장을 설치하고, 권한을 준 계정만 접속할 수 있어요.
+          gbrain 팀원에게는 DB 계정 대신 <a href="{{ root }}/admin/gbrain" class="link link-primary">gbrain 서버</a> 화면에서 팀 브레인 읽기 전용 토큰을 보내 주세요.</p>
+        <!-- data-gbrain-page-url: DB별 gbrain 줄의 팀 브레인 토큰 안내 링크 -->
+        <div id="database-list" class="space-y-3" data-gbrain-page-url="{{ root }}/admin/gbrain"><p class="text-sm opacity-60">불러오는 중</p></div>
       </div>
     </section>
 
@@ -101,19 +103,19 @@
   <form method="dialog" class="modal-backdrop"><button>닫기</button></form>
 </dialog>
 
-<!-- gbrain: 브레인 준비(쓰기 계정 고르기) / 팀원 읽기 권한 주기 (일반 접속 권한과 별도 흐름) -->
+<!-- gbrain: 브레인 준비 (쓰기 계정 고르기) -->
 <dialog id="gbrain-modal" class="modal">
   <form id="gbrain-form" class="modal-box">
-    <h3 class="font-bold text-lg flex items-center gap-2"><i data-lucide="brain" class="size-5 text-primary"></i><span id="gbrain-title">브레인 준비</span></h3>
-    <p class="text-sm mt-2"><span id="gbrain-database" class="font-mono font-bold"></span> <span id="gbrain-description"></span></p>
+    <h3 class="font-bold text-lg flex items-center gap-2"><i data-lucide="brain" class="size-5 text-primary"></i><span>브레인 준비</span></h3>
+    <p class="text-sm mt-2"><span id="gbrain-database" class="font-mono font-bold"></span> 에 동기화할 쓰기 계정을 골라요.</p>
     <div class="space-y-3 mt-4">
       <select id="gbrain-role" class="select w-full" required></select>
-      <p id="gbrain-hint" class="text-xs opacity-70"></p>
+      <p class="text-xs opacity-70">확장·RLS 자동 설정을 하고 쓰기 계정이 모든 행을 다룰 수 있게 해요. 후보가 없으면 먼저 접속 권한을 주세요.</p>
       <p id="gbrain-form-error" class="text-sm text-error" hidden></p>
     </div>
     <div class="modal-action">
       <button type="button" class="btn btn-ghost" data-close-modal>취소</button>
-      <button type="submit" id="gbrain-submit" class="btn btn-primary">준비</button>
+      <button type="submit" class="btn btn-primary">준비</button>
     </div>
   </form>
   <form method="dialog" class="modal-backdrop"><button>닫기</button></form>

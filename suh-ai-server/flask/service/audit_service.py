@@ -101,8 +101,9 @@ class AuditAction(str, Enum):
     AI_DB_ROLE_DELETE = "AI_DB_ROLE_DELETE"
     AI_DB_GRANT = "AI_DB_GRANT"
     AI_DB_REVOKE = "AI_DB_REVOKE"
-    # AI 서버 공용 PG gbrain 팀 브레인: 준비 / 읽기 전용 팀원 주기·빼기 (상세는 DB·계정 이름만)
+    # AI 서버 공용 PG gbrain 팀 브레인: 준비 (상세는 DB·계정 이름만)
     AI_DB_GBRAIN_PREPARE = "AI_DB_GBRAIN_PREPARE"
+    # 팀원 읽기 권한 주기·빼기: 기능 제거(#218), 과거 감사 기록 표시·검색용으로만 유지
     AI_DB_GBRAIN_READER_GRANT = "AI_DB_GBRAIN_READER_GRANT"
     AI_DB_GBRAIN_READER_REVOKE = "AI_DB_GBRAIN_READER_REVOKE"
     # gbrain HTTP 서버(MCP): 서비스 제어 / 관리자 화면 로그인 (1회용 링크·쿠키는 기록하지 않음)

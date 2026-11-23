@@ -1,6 +1,7 @@
 """test_admin_router.py — 어드민 페이지 렌더 및 no-emoji 검증"""
 import os
 import re
+from pathlib import Path
 import pytest
 from flask import Flask
 
@@ -158,3 +159,14 @@ def test_ai_db_page_renders(client):
     assert 'ai-db.js' in body
     assert 'secret-modal' in body
     assert 'delete-confirm-name' in body
+
+
+def test_ai_db_page는_팀원_읽기_권한_대신_팀_브레인_토큰으로_안내한다(client):
+    """#218: 팀원 DB 직접 읽기 권한 화면 제거 > gbrain 화면 팀 브레인 토큰 안내"""
+    body = client.get('/admin/ai-db').get_data(as_text=True)
+    assert '팀원은 읽기 권한으로' not in body
+    assert '팀 브레인 읽기 전용 토큰' in body
+    assert 'data-gbrain-page-url=' in body and '/admin/gbrain' in body
+    script = (Path(__file__).resolve().parent.parent / 'static' / 'js' / 'ai-db.js').read_text(encoding='utf-8')
+    for removed_text in ('gbrain-grant-reader', 'gbrain-revoke-reader', '/gbrain/readers/', '팀원 읽기 권한 주기'):
+        assert removed_text not in script

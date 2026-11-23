@@ -8,7 +8,7 @@ import secrets
 from urllib.parse import quote
 
 from service.ai_db.ai_db_errors import (
-    AiDbError, AiDbUnavailable, ConfirmMismatch, InvalidName, ProtectedObject, SameReaderWriter,
+    AiDbError, AiDbUnavailable, ConfirmMismatch, InvalidName, ProtectedObject,
 )
 
 logger = logging.getLogger(__name__)
@@ -144,19 +144,6 @@ class AiDbService:
         client.prepare_gbrain_database(database_name, writer_role)
         logger.info(f"[ai-db] gbrain prepared : {database_name} writer={writer_role}")
 
-    def grant_gbrain_reader(self, database_name, reader_role, writer_role) -> None:
-        """검증 (DB, 읽기·쓰기 계정, 서로 다름) > 읽기 전용 권한 (일반 grant 의 CREATE 는 주지 않음)"""
-        client = self._require_client()
-        self._validate_gbrain_reader(database_name, reader_role, writer_role)
-        client.grant_gbrain_reader(database_name, reader_role, writer_role)
-        logger.info(f"[ai-db] gbrain reader granted : {reader_role} -> {database_name} writer={writer_role}")
-
-    def revoke_gbrain_reader(self, database_name, reader_role, writer_role) -> None:
-        client = self._require_client()
-        self._validate_gbrain_reader(database_name, reader_role, writer_role)
-        client.revoke_gbrain_reader(database_name, reader_role, writer_role)
-        logger.info(f"[ai-db] gbrain reader revoked : {reader_role} -> {database_name} writer={writer_role}")
-
     # ---- 연결 문자열 ----
 
     def build_connection_url(self, role_name: str, password: str, database_name: str = None) -> str:
@@ -206,15 +193,6 @@ class AiDbService:
             raise ProtectedObject()
         if not is_valid_name(name):
             raise InvalidName()
-
-    @classmethod
-    def _validate_gbrain_reader(cls, database_name, reader_role, writer_role) -> None:
-        """읽기 = 쓰기 계정이면 거부 (빼기 시 쓰기 계정 BYPASSRLS 까지 회수됨)"""
-        cls._validate_database_name(database_name)
-        cls._validate_role_name(reader_role)
-        cls._validate_role_name(writer_role)
-        if reader_role == writer_role:
-            raise SameReaderWriter()
 
     @staticmethod
     def _validate_confirm(name: str, confirm_name) -> None:

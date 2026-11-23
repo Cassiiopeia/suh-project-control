@@ -56,11 +56,6 @@ class InvalidName(AiDbError):
     code = "invalid_name"
 
 
-class SameReaderWriter(AiDbError):
-    """읽기 계정 = 쓰기 계정 (쓰기 계정 BYPASSRLS 회수 방지)"""
-    code = "same_reader_writer"
-
-
 class ProtectedObject(AiDbError):
     code = "protected_object"
 

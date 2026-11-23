@@ -75,18 +75,10 @@ class FakePgAdminClient:
     def get_gbrain_status(self, database_name):
         self._require_gbrain_database(database_name)
         return {"is_ready": False, "has_ops_functions": True, "has_pages_table": False,
-                "writer_role": None, "readers": []}
+                "writer_role": None}
 
     def prepare_gbrain_database(self, database_name, writer_role):
         self.calls.append(("prepare_gbrain", database_name, writer_role))
-        self._require_gbrain_database(database_name)
-
-    def grant_gbrain_reader(self, database_name, reader_role, writer_role):
-        self.calls.append(("grant_gbrain_reader", database_name, reader_role, writer_role))
-        self._require_gbrain_database(database_name)
-
-    def revoke_gbrain_reader(self, database_name, reader_role, writer_role):
-        self.calls.append(("revoke_gbrain_reader", database_name, reader_role, writer_role))
         self._require_gbrain_database(database_name)
 
     def _require_gbrain_database(self, database_name):

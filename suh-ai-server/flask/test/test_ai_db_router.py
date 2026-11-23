@@ -188,24 +188,29 @@ def test_gbrain_상태는_준비_전이면_오류_없이_미준비(client):
     assert response.get_json()['is_ready'] is False
 
 
-def test_gbrain_준비와_읽기_권한_주기_빼기는_감사_대상이다(client, fake_client, audit_records):
-    body = {'writer_role': 'elum_member'}
-    assert client.post('/ai-db/databases/gbrain_elum/gbrain/prepare', json=body).status_code == 200
-    assert client.put('/ai-db/databases/gbrain_elum/gbrain/readers/team_a', json=body).status_code == 200
-    assert client.delete('/ai-db/databases/gbrain_elum/gbrain/readers/team_a', json=body).status_code == 200
+def test_gbrain_준비는_감사_대상이다(client, fake_client, audit_records):
+    assert client.post('/ai-db/databases/gbrain_elum/gbrain/prepare', json={'writer_role': 'elum_member'}).status_code == 200
 
-    assert [call[0] for call in fake_client.calls] == ['prepare_gbrain', 'grant_gbrain_reader', 'revoke_gbrain_reader']
-    assert [call.args[1] for call in audit_records.call_args_list] == [
-        AuditAction.AI_DB_GBRAIN_PREPARE, AuditAction.AI_DB_GBRAIN_READER_GRANT, AuditAction.AI_DB_GBRAIN_READER_REVOKE]
-    assert recorded_details(audit_records)[1] == {'database': 'gbrain_elum', 'role': 'team_a', 'writer_role': 'elum_member'}
+    assert [call[0] for call in fake_client.calls] == ['prepare_gbrain']
+    assert [call.args[1] for call in audit_records.call_args_list] == [AuditAction.AI_DB_GBRAIN_PREPARE]
+    assert recorded_details(audit_records)[0] == {'database': 'gbrain_elum', 'writer_role': 'elum_member'}
+
+
+@pytest.mark.parametrize('method', ['put', 'delete'])
+def test_팀원_읽기_권한_경로는_제거돼_404이고_감사_기록도_없다(client, fake_client, audit_records, method):
+    """#218: 팀원은 DB 직접 읽기 대신 팀 브레인 MCP 토큰 (BYPASSRLS 주는 경로 차단)"""
+    response = getattr(client, method)('/ai-db/databases/gbrain_elum/gbrain/readers/team_a',
+                                       json={'writer_role': 'elum_member'})
+    assert response.status_code == 404
+    assert fake_client.calls == []
+    assert audit_records.call_count == 0
 
 
 @pytest.mark.parametrize('method,path,body,status_code,error', [
-    ('put', '/ai-db/databases/gbrain_elum/gbrain/readers/ai_db_admin', {'writer_role': 'elum_member'}, 403, 'protected_object'),
     ('post', '/ai-db/databases/gbrain/gbrain/prepare', {'writer_role': 'elum_member'}, 403, 'protected_object'),
-    ('put', '/ai-db/databases/gbrain_elum/gbrain/readers/team_a', {'writer_role': 'Bad-Name'}, 400, 'invalid_name'),
-    ('put', '/ai-db/databases/gbrain_elum/gbrain/readers/team_a', {}, 400, 'invalid_name'),
-    ('put', '/ai-db/databases/gbrain_elum/gbrain/readers/team_a', {'writer_role': 'team_a'}, 400, 'same_reader_writer'),
+    ('post', '/ai-db/databases/gbrain_elum/gbrain/prepare', {'writer_role': 'ai_db_admin'}, 403, 'protected_object'),
+    ('post', '/ai-db/databases/gbrain_elum/gbrain/prepare', {'writer_role': 'Bad-Name'}, 400, 'invalid_name'),
+    ('post', '/ai-db/databases/gbrain_elum/gbrain/prepare', {}, 400, 'invalid_name'),
 ])
 def test_gbrain_검증_실패는_클라이언트를_부르지_않는다(client, fake_client, audit_records, method, path, body, status_code, error):
     response = getattr(client, method)(path, json=body)

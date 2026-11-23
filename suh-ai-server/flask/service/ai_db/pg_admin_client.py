@@ -1,5 +1,5 @@
 """
-AI 서버 PG 관리 클라이언트: DB·계정 생성/삭제, 비번 설정, 접속 권한 주기/빼기, gbrain 준비·읽기 팀원
+AI 서버 PG 관리 클라이언트: DB·계정 생성/삭제, 비번 설정, 접속 권한 주기/빼기, gbrain 준비
 이름은 sql.Identifier, 비번은 클라이언트에서 SCRAM 해시 후 sql.Literal 로만 조립 (문자열 포맷 금지)
 """
 import logging
@@ -53,17 +53,8 @@ SELECT to_regnamespace('ai_db_ops') IS NOT NULL,
         WHERE n.nspname = 'public' AND p.proname = 'auto_enable_rls' LIMIT 1),
        to_regclass('public.pages') IS NOT NULL
 """
-# 읽기 팀원: public.pages SELECT 받은 계정 (표 소유자 제외, 표 없으면 빈 목록)
-GBRAIN_READERS_SQL = """
-SELECT DISTINCT r.rolname::text
-FROM pg_class c CROSS JOIN LATERAL aclexplode(c.relacl) a JOIN pg_roles r ON r.oid = a.grantee
-WHERE c.oid = to_regclass('public.pages') AND a.privilege_type = 'SELECT' AND a.grantee <> c.relowner
-ORDER BY 1
-"""
 # ai_db_ops 함수 호출 (sql/ai_db_ops_gbrain.sql, 대상 DB 안에서 실행)
 GBRAIN_PREPARE_SQL = "SELECT ai_db_ops.prepare_gbrain_database({})"
-GBRAIN_GRANT_READER_SQL = "SELECT ai_db_ops.grant_gbrain_reader({}, {})"
-GBRAIN_REVOKE_READER_SQL = "SELECT ai_db_ops.revoke_gbrain_reader({}, {})"
 
 
 class PgAdminClient:
@@ -141,20 +132,11 @@ class PgAdminClient:
         self._require_database(database_name)
         has_ops_schema, has_event_trigger, writer_role, has_pages_table = \
             self._fetch(sql.SQL(GBRAIN_STATUS_SQL), database_name=database_name)[0]
-        readers = [row[0] for row in self._fetch(sql.SQL(GBRAIN_READERS_SQL), database_name=database_name)]
         return {"is_ready": bool(has_ops_schema and has_event_trigger), "has_ops_functions": bool(has_ops_schema),
-                "has_pages_table": bool(has_pages_table), "writer_role": writer_role,
-                "readers": [reader for reader in readers if reader != writer_role]}
+                "has_pages_table": bool(has_pages_table), "writer_role": writer_role}
 
     def prepare_gbrain_database(self, database_name: str, writer_role: str) -> None:
         self._call_gbrain_ops(database_name, GBRAIN_PREPARE_SQL, writer_role)
-
-    def grant_gbrain_reader(self, database_name: str, reader_role: str, writer_role: str) -> None:
-        """CONNECT·USAGE·SELECT·기본 권한·BYPASSRLS 만 (public 스키마 CREATE 없음 = 일반 grant 미사용)"""
-        self._call_gbrain_ops(database_name, GBRAIN_GRANT_READER_SQL, reader_role, writer_role)
-
-    def revoke_gbrain_reader(self, database_name: str, reader_role: str, writer_role: str) -> None:
-        self._call_gbrain_ops(database_name, GBRAIN_REVOKE_READER_SQL, reader_role, writer_role)
 
     # ---- 내부 ----
 
