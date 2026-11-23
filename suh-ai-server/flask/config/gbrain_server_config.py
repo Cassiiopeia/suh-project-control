@@ -2,6 +2,7 @@
 gbrain HTTP 서버(MCP) 관리 설정: 서비스 이름, 내부 주소, 설정·로그·관리자 토큰 위치, 게이트 쿠키
 값을 바꾸면 함께 바꿀 곳: scripts/setup-gbrain-http.ps1, scripts/gbrain/run-gbrain-http.cmd,
 config/nginx.conf(gbrain_backend, team_brain_upstream), config/control_tower/services.yml(gbrain-mcp, gbrain-team-*)
+사본 일치는 test/test_gbrain_cross_runtime_names.py 가 검사
 """
 import os
 
