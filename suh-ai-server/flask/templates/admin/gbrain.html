@@ -8,7 +8,7 @@
   <div id="admin-token-warning" class="alert alert-warning text-sm" hidden>
     <i data-lucide="alert-triangle" class="size-5"></i>
     <span>gbrain 관리자 토큰 파일이 없어서 관리자 화면에 로그인하지 못해요.
-      서버에서 <span class="font-mono">scripts/setup-gbrain-http.ps1</span> 을 관리자 권한으로 실행해 주세요.</span>
+      서버에서 <span class="font-mono">{{ naming_hints.setup_script_path }}</span> 을 관리자 권한으로 실행해 주세요.</span>
   </div>
 
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -22,7 +22,7 @@
           <span id="service-status-badge" class="badge badge-ghost gap-1 text-xs py-2 px-2.5">확인 중</span>
         </h2>
         <p class="text-xs opacity-60 mt-1">
-          Claude Code 기기들이 공개 주소(<span class="font-mono">/mcp</span>)나 SSH 터널로 함께 쓰는 개인 MCP 메모리 서버예요.
+          Claude Code 기기들이 공개 주소(<span class="font-mono">{{ naming_hints.personal_mcp_path }}</span>)나 SSH 터널로 함께 쓰는 개인 MCP 메모리 서버예요.
           멈추면 연결된 모든 세션의 gbrain 도구가 끊겨요. 여기서 바로 다시 띄울 수 있어요.
         </p>
 

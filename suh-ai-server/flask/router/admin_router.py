@@ -6,7 +6,7 @@ import os
 
 from flask import Blueprint, render_template
 
-from service.gbrain_instance import describe_token_page_settings
+from service.gbrain_instance import describe_naming_hints, describe_token_page_settings
 
 admin_bp = Blueprint('admin', __name__)
 
@@ -91,7 +91,7 @@ def ai_db():
 def gbrain():
     """gbrain HTTP 서버(MCP) 관리 페이지 (상태·제어·로그·관리자 화면 로그인·토큰·팀 브레인)"""
     return render_template('admin/gbrain.html', root='..', active='gbrain',
-                           token_page_settings=describe_token_page_settings())
+                           token_page_settings=describe_token_page_settings(), naming_hints=describe_naming_hints())
 
 
 @admin_bp.route('/admin/models', methods=['GET'])

@@ -167,3 +167,11 @@ def test_관리_페이지는_토큰_카드_기준_값을_서버_설정에서_싣
         'personal_default_scope_preset': 'read_write', 'team_default_scope_preset': 'read_only',
     }
     assert 'value="read_only"' in page_html and '>개인 브레인 (gbrain)<' in page_html
+
+
+def test_관리_페이지_설명의_이름_규칙은_실제_규칙_함수에서_렌더한다(client):
+    page_html = client.get('/admin/gbrain').get_data(as_text=True)
+
+    for rendered_hint in ['DB 는 gbrain_&lt;키&gt;', '쓰기 계정은 &lt;키&gt;_writer', '공개 주소는 /team/&lt;키&gt;/mcp',
+                          '팀원 MCP 이름은 gbrain-&lt;키&gt;', 'scripts/setup-gbrain-http.ps1', '공개 주소(<span class="font-mono">/mcp</span>)']:
+        assert rendered_hint in page_html, rendered_hint

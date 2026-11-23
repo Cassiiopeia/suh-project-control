@@ -67,9 +67,11 @@ GBRAIN_TEAM_MCP_SERVER_PREFIX = 'gbrain-'
 GBRAIN_TEAM_PROJECT_PATTERN = r'^[a-z][a-z0-9]{1,19}$'
 # 설치 도구 위치 (개인 브레인 setup-gbrain-http.ps1 이 설치한 bun·gbrain 을 같이 씀)
 GBRAIN_BUN_HOME = os.environ.get('GBRAIN_BUN_HOME', GBRAIN_HOME)
+# 설치 스크립트: 화면·오류 문구에 쓰는 레포 기준 경로 + 실제 실행 경로
+GBRAIN_SETUP_SCRIPT_DISPLAY_PATH = 'scripts/setup-gbrain-http.ps1'
 GBRAIN_SETUP_SCRIPT_PATH = os.environ.get(
     'GBRAIN_SETUP_SCRIPT_PATH',
-    os.path.join(os.path.dirname(__file__), '..', '..', 'scripts', 'setup-gbrain-http.ps1'))
+    os.path.join(os.path.dirname(__file__), '..', '..', *GBRAIN_SETUP_SCRIPT_DISPLAY_PATH.split('/')))
 # nginx 설치 폴더 후보 (deploy-nginx.ps1 과 같은 규칙: C:/tools/nginx-*)
 GBRAIN_NGINX_GLOB = os.environ.get('GBRAIN_NGINX_GLOB', 'C:/tools/nginx-*')
 # 서비스 설치·초기화 제한 시간 (기동 후 /health 60초 대기 포함)

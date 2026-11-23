@@ -91,6 +91,19 @@ def describe_token_page_settings() -> dict:
     }
 
 
+def describe_naming_hints() -> dict:
+    """관리 화면 설명 문구의 이름 규칙 예시 (<키> 자리표시, 실제 규칙 함수로 만듦)"""
+    placeholder_project = '<키>'
+    return {
+        'personal_mcp_path': config.GBRAIN_PERSONAL_MCP_PATH,
+        'team_mcp_path': config.GBRAIN_TEAM_MCP_PATH_TEMPLATE.format(project=placeholder_project),
+        'team_database_name': to_team_database_name(placeholder_project),
+        'team_writer_role': to_team_writer_role(placeholder_project),
+        'team_mcp_server_name': to_team_mcp_server_name(placeholder_project),
+        'setup_script_path': config.GBRAIN_SETUP_SCRIPT_DISPLAY_PATH,
+    }
+
+
 def build_team_instance(project: str, port: int, database_name: str, writer_role: str) -> GbrainInstance:
     """팀 프로젝트 키 > 서비스·폴더·토큰·로그·공개 주소 (모두 이름 규칙으로 정해짐)"""
     team_home = os.path.join(config.GBRAIN_TEAM_ROOT, project)

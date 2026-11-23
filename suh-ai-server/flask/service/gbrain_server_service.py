@@ -15,7 +15,7 @@ import requests
 from config.gbrain_server_config import (
     GBRAIN_ADMIN_GATE_VALID_SECONDS, GBRAIN_FORCED_STOP_AFTER_SECONDS, GBRAIN_HTTP_TIMEOUT_SECONDS, GBRAIN_LOG_MAX_LINES, GBRAIN_LOG_PATH,
     GBRAIN_LOG_TAIL_BYTES, GBRAIN_SERVER_URL, GBRAIN_SERVICE_NAME, GBRAIN_SERVICE_TIMEOUT_SECONDS,
-    get_gbrain_config_path, read_admin_token,
+    GBRAIN_SETUP_SCRIPT_DISPLAY_PATH, get_gbrain_config_path, read_admin_token,
 )
 from service.gbrain_admin_gate import create_gate_cookie_value, is_gate_cookie_valid
 from util.windows_service_client import WindowsServiceClient
@@ -25,6 +25,8 @@ logger = logging.getLogger(__name__)
 # gbrain 1회용 로그인 경로: /admin/auth/{nonce 64자 hex}
 ADMIN_LOGIN_PATH_PATTERN = re.compile(r'^/admin/auth/[0-9a-f]{64}$')
 MAGIC_LINK_ENDPOINT_PATH = '/admin/api/issue-magic-link'
+# 관리자 토큰 파일 없음 문구 (관리자 화면 로그인·토큰 관리 공통)
+ADMIN_TOKEN_MISSING_MESSAGE = f'gbrain 관리자 토큰 파일이 없어요 ({GBRAIN_SETUP_SCRIPT_DISPLAY_PATH} 을 실행해 주세요)'
 
 
 class GbrainServerError(Exception):
@@ -144,8 +146,7 @@ class GbrainServerService:
         """1회용 로그인 경로 + 게이트 쿠키 값 (링크를 GET 하지 않음, 경로·쿠키를 기록하지 않음)"""
         admin_token = read_admin_token()
         if admin_token is None:
-            raise GbrainServerError('gbrain 관리자 토큰 파일이 없어요 (scripts/setup-gbrain-http.ps1 을 실행해 주세요)',
-                                    'admin_token_missing', 503)
+            raise GbrainServerError(ADMIN_TOKEN_MISSING_MESSAGE, 'admin_token_missing', 503)
         login_path = self._issue_login_path(admin_token)
         return {
             'login_path': login_path,
