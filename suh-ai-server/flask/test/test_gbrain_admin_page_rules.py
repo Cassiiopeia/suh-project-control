@@ -11,8 +11,12 @@ SCRIPT_DIRECTORY = FLASK_ROOT / 'static' / 'js'
 GBRAIN_SCRIPT_NAMES = ['gbrain.js', 'gbrain-tokens.js', 'gbrain-token-result.js', 'gbrain-teams.js']
 
 
+# 화면 본문 + 부분 템플릿 2개 (토큰 대화창, 팀 브레인 대화창)
+PARTIAL_TEMPLATE_PATHS = sorted((FLASK_ROOT / 'templates' / 'admin' / 'gbrain').glob('*.html'))
+
+
 def read_template() -> str:
-    return TEMPLATE_PATH.read_text(encoding='utf-8')
+    return '\n'.join(path.read_text(encoding='utf-8') for path in [TEMPLATE_PATH] + PARTIAL_TEMPLATE_PATHS)
 
 
 def read_script(script_name: str) -> str:
