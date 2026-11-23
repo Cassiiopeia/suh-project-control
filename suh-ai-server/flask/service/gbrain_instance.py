@@ -9,6 +9,9 @@ from config import gbrain_server_config as config
 
 # 개인 브레인 id (토큰 API ?brain= 기본값)
 PERSONAL_BRAIN_ID = 'personal'
+# 토큰 권한 선택지 2개 (화면 라디오 값과 같음): 개인 기본 읽기+쓰기, 팀 기본 읽기 전용
+READ_WRITE_SCOPE_PRESET = 'read_write'
+READ_ONLY_SCOPE_PRESET = 'read_only'
 
 
 @dataclass(frozen=True)
@@ -37,7 +40,7 @@ class GbrainInstance:
     @property
     def default_scope_preset(self) -> str:
         # 팀원 토큰은 읽기 전용이 기본, 개인 기기는 읽기+쓰기 (#207)
-        return 'read_only' if self.is_team else 'read_write'
+        return READ_ONLY_SCOPE_PRESET if self.is_team else READ_WRITE_SCOPE_PRESET
 
 
 # ---------- 팀 브레인 이름 규칙 (프로젝트 키 > 이름, 여기 한 곳에서만 만듦) ----------
@@ -72,6 +75,20 @@ def build_personal_instance() -> GbrainInstance:
         gbrain_home=None, admin_token_file=None, log_path=config.GBRAIN_LOG_PATH,
         mcp_url=config.GBRAIN_PUBLIC_MCP_URL, mcp_server_name=config.GBRAIN_PERSONAL_MCP_SERVER_NAME,
         database_name=config.GBRAIN_PERSONAL_DATABASE_NAME)
+
+
+def describe_token_page_settings() -> dict:
+    """관리 화면 토큰 카드 기준 값 (JS 는 이 값만 씀, 사본 상수 없음)"""
+    personal_instance = build_personal_instance()
+    return {
+        'personal_brain_id': PERSONAL_BRAIN_ID,
+        'personal_mcp_url': personal_instance.mcp_url,
+        'personal_mcp_server_name': personal_instance.mcp_server_name,
+        'read_write_scope_preset': READ_WRITE_SCOPE_PRESET,
+        'read_only_scope_preset': READ_ONLY_SCOPE_PRESET,
+        'personal_default_scope_preset': READ_WRITE_SCOPE_PRESET,
+        'team_default_scope_preset': READ_ONLY_SCOPE_PRESET,
+    }
 
 
 def build_team_instance(project: str, port: int, database_name: str, writer_role: str) -> GbrainInstance:

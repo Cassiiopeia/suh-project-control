@@ -32,10 +32,10 @@ def test_발급_창은_만들_곳과_실제_기본_권한을_보여_준다():
     tokens_script = read_script('gbrain-tokens.js')
 
     assert 'id="token-create-target"' in template
-    assert 'data-scope-default-badge="read_write"' in template
-    assert 'data-scope-default-badge="read_only"' in template
+    assert 'data-scope-default-badge="{{ token_page_settings.read_write_scope_preset }}"' in template
+    assert 'data-scope-default-badge="{{ token_page_settings.read_only_scope_preset }}"' in template
     assert '(기본,' not in template  # 권한 라벨에 기본값 고정 문구 금지
-    assert "TEAM_DEFAULT_SCOPE_PRESET = 'read_only'" in tokens_script
+    assert 'PAGE_SETTINGS.team_default_scope_preset' in tokens_script
     # 창을 연 때의 브레인으로 발급
     assert "brain: el('token-create-modal').dataset.brain" in tokens_script
 
@@ -95,3 +95,14 @@ def test_화면_문구는_해요체로_쓴다(source_name):
     visible_source = re.sub(r'<!--.*?-->|/\*.*?\*/|//[^\n]*', '', source, flags=re.S)
 
     assert not re.search(r'(습니다|합니다|입니다|하세요)', visible_source)
+
+
+def test_토큰_카드는_서버_설정_값만_쓰고_사본_상수를_두지_않는다():
+    tokens_script = read_script('gbrain-tokens.js')
+    template = read_template()
+
+    # 개인 브레인 id·MCP 이름·공개 주소·권한 값은 gbrain_instance.describe_token_page_settings 가 원본
+    for copied_literal in ["'personal'", "'gbrain'", 'suhsaechan.kr', "'read_write'", "'read_only'"]:
+        assert copied_literal not in tokens_script, copied_literal
+    assert 'id="gbrain-token-page-settings"' in template
+    assert 'https://ai.suhsaechan.kr/mcp' not in template

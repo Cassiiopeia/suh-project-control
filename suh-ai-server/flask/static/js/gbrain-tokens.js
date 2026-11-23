@@ -4,13 +4,10 @@
    브레인을 바꾸면 그 브레인 기준(이름·주소·기본 권한)으로 바로 전환, 늦게 온 이전 목록 응답은 버림 */
 (function () {
   const API = '../gbrain/tokens';
-  const DEFAULT_MCP_URL = 'https://ai.suhsaechan.kr/mcp';
-  // 개인 브레인 id·Claude Code 설정 이름 (팀 브레인은 서버가 gbrain-<project> 를 알려 줌)
-  const PERSONAL_BRAIN_ID = 'personal';
-  const PERSONAL_MCP_SERVER_NAME = 'gbrain';
-  // 기본 권한: 개인 읽기 + 쓰기, 팀 읽기 전용 (서버 default_scope_preset 과 같은 값)
-  const PERSONAL_DEFAULT_SCOPE_PRESET = 'read_write';
-  const TEAM_DEFAULT_SCOPE_PRESET = 'read_only';
+  // 개인 브레인 id·주소·MCP 이름·기본 권한: 서버 설정이 템플릿에 실어 준 값 (사본 상수 없음)
+  const PAGE_SETTINGS = JSON.parse(document.getElementById('gbrain-token-page-settings').textContent);
+  const PERSONAL_BRAIN_ID = PAGE_SETTINGS.personal_brain_id;
+  const PERSONAL_MCP_SERVER_NAME = PAGE_SETTINGS.personal_mcp_server_name;
   // 이 시간 안에 쓴 토큰은 폐기 확인 문구를 더 강하게 (24시간)
   const RECENT_USE_MILLISECONDS = 24 * 60 * 60 * 1000;
 
@@ -64,12 +61,12 @@
   // 브레인 id > 화면에 쓸 이름·주소·기본 권한 (팀 값은 팀 목록에서, 없으면 목록 응답이 채움)
   function describeBrainContext(brainId) {
     if (brainId === PERSONAL_BRAIN_ID) {
-      return { brainId: brainId, isTeam: false, mcpUrl: DEFAULT_MCP_URL, mcpServerName: PERSONAL_MCP_SERVER_NAME,
-        defaultScopePreset: PERSONAL_DEFAULT_SCOPE_PRESET, label: '개인 브레인' };
+      return { brainId: brainId, isTeam: false, mcpUrl: PAGE_SETTINGS.personal_mcp_url, mcpServerName: PERSONAL_MCP_SERVER_NAME,
+        defaultScopePreset: PAGE_SETTINGS.personal_default_scope_preset, label: '개인 브레인' };
     }
     const teamBrain = teamBrainById[brainId] || {};
     return { brainId: brainId, isTeam: true, mcpUrl: teamBrain.mcp_url || '', mcpServerName: teamBrain.mcp_server_name || '',
-      defaultScopePreset: TEAM_DEFAULT_SCOPE_PRESET, label: brainId + ' 팀 브레인' };
+      defaultScopePreset: PAGE_SETTINGS.team_default_scope_preset, label: brainId + ' 팀 브레인' };
   }
 
   // 카드 설명 문구·발급 버튼을 지금 브레인 기준으로

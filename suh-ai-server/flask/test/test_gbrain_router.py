@@ -1,4 +1,7 @@
 """gbrain_router: 상태·로그·제어·관리자 로그인·게이트 (서비스는 가짜, 감사 기록은 캡처)"""
+import json
+import re
+
 import pytest
 
 from app import app as flask_app
@@ -150,3 +153,17 @@ def test_관리_페이지_렌더(client):
     response = client.get('/admin/gbrain')
     assert response.status_code == 200
     assert 'gbrain.js' in response.get_data(as_text=True)
+
+
+def test_관리_페이지는_토큰_카드_기준_값을_서버_설정에서_싣는다(client):
+    page_html = client.get('/admin/gbrain').get_data(as_text=True)
+    settings_json = re.search(r'<script id="gbrain-token-page-settings" type="application/json">(.*?)</script>', page_html, re.S)
+
+    assert settings_json
+    settings = json.loads(settings_json.group(1))
+    assert settings == {
+        'personal_brain_id': 'personal', 'personal_mcp_url': 'https://ai.suhsaechan.kr/mcp', 'personal_mcp_server_name': 'gbrain',
+        'read_write_scope_preset': 'read_write', 'read_only_scope_preset': 'read_only',
+        'personal_default_scope_preset': 'read_write', 'team_default_scope_preset': 'read_only',
+    }
+    assert 'value="read_only"' in page_html and '>개인 브레인 (gbrain)<' in page_html

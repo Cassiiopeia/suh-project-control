@@ -92,7 +92,7 @@
         <div class="flex items-center gap-2">
           <!-- 브레인 선택 (#210): 개인 브레인 + 팀 브레인들, 목록·발급·폐기가 고른 브레인에 적용 -->
           <select id="token-brain-select" class="select select-sm w-44" aria-label="토큰을 관리할 브레인">
-            <option value="personal">개인 브레인 (gbrain)</option>
+            <option value="{{ token_page_settings.personal_brain_id }}">개인 브레인 ({{ token_page_settings.personal_mcp_server_name }})</option>
           </select>
           <button id="token-refresh" class="btn btn-ghost btn-sm" title="토큰 목록 새로고침">
             <i data-lucide="refresh-cw" class="size-4"></i>
@@ -104,8 +104,8 @@
       </div>
       <p class="text-xs opacity-60">
         토큰을 넣은 Claude Code 가
-        <span id="token-mcp-url" class="font-mono break-all">https://ai.suhsaechan.kr/mcp</span> 로
-        <span id="token-mcp-server-name" class="font-mono">gbrain</span> 에 붙어요.
+        <span id="token-mcp-url" class="font-mono break-all">{{ token_page_settings.personal_mcp_url }}</span> 로
+        <span id="token-mcp-server-name" class="font-mono">{{ token_page_settings.personal_mcp_server_name }}</span> 에 붙어요.
         <span id="token-personal-hint">컴퓨터마다 토큰을 하나씩 만들고, 컴퓨터를 바꾸거나 잃어버리면 그 토큰만 폐기해 주세요.</span>
         <span id="token-team-hint" hidden>팀원마다 토큰을 하나씩 만들어 결과 창의 안내를 그 팀원에게 1:1 로 보내요. 기본 권한은 읽기 전용이에요.
           팀원이 나가면 그 토큰만 폐기해 주세요.</span>
@@ -194,7 +194,7 @@
     </h3>
     <!-- 만들 곳: 개인/팀 브레인을 헷갈리지 않게 (#213) -->
     <div class="bg-base-200 rounded-lg px-3 py-2 mt-3 text-sm">
-      만들 곳: <span id="token-create-target" class="font-semibold">개인 브레인 (gbrain)</span>
+      만들 곳: <span id="token-create-target" class="font-semibold">개인 브레인 ({{ token_page_settings.personal_mcp_server_name }})</span>
     </div>
     <div class="space-y-3 mt-4">
       <label class="flex flex-col gap-1 w-full">
@@ -208,15 +208,15 @@
       <div class="space-y-1">
         <div class="text-sm font-medium">권한</div>
         <label class="flex cursor-pointer items-start gap-2 py-1">
-          <input type="radio" name="token-scope-preset" value="read_write" class="radio radio-sm mt-0.5" checked>
+          <input type="radio" name="token-scope-preset" value="{{ token_page_settings.read_write_scope_preset }}" class="radio radio-sm mt-0.5" checked>
           <span class="text-sm leading-snug">읽기 + 쓰기
-            <span class="badge badge-ghost badge-sm ml-1" data-scope-default-badge="read_write">기본</span>
+            <span class="badge badge-ghost badge-sm ml-1" data-scope-default-badge="{{ token_page_settings.read_write_scope_preset }}">기본</span>
             <span class="block text-xs opacity-60">Claude 가 기억을 찾고 새로 저장해요</span></span>
         </label>
         <label class="flex cursor-pointer items-start gap-2 py-1">
-          <input type="radio" name="token-scope-preset" value="read_only" class="radio radio-sm mt-0.5">
+          <input type="radio" name="token-scope-preset" value="{{ token_page_settings.read_only_scope_preset }}" class="radio radio-sm mt-0.5">
           <span class="text-sm leading-snug">읽기 전용
-            <span class="badge badge-ghost badge-sm ml-1" data-scope-default-badge="read_only" hidden>기본</span>
+            <span class="badge badge-ghost badge-sm ml-1" data-scope-default-badge="{{ token_page_settings.read_only_scope_preset }}" hidden>기본</span>
             <span class="block text-xs opacity-60">Claude 가 기억을 찾아 읽기만 해요</span></span>
         </label>
       </div>
@@ -292,10 +292,10 @@
             <div class="font-semibold">연결하는 순서</div>
             <ol class="list-decimal list-inside space-y-1">
               <li>연결할 컴퓨터에서 터미널을 열어요.</li>
-              <li>방법 1 의 한 줄을 붙여 넣고 Enter 를 눌러요. 이미 <span class="font-mono" data-mcp-server-name>gbrain</span> 이 있다고 나오면 먼저
-                <span class="font-mono">claude mcp remove <span data-mcp-server-name>gbrain</span> -s user</span> 를 실행하고 다시 붙여 넣어요.</li>
+              <li>방법 1 의 한 줄을 붙여 넣고 Enter 를 눌러요. 이미 <span class="font-mono" data-mcp-server-name>{{ token_page_settings.personal_mcp_server_name }}</span> 이 있다고 나오면 먼저
+                <span class="font-mono">claude mcp remove <span data-mcp-server-name>{{ token_page_settings.personal_mcp_server_name }}</span> -s user</span> 를 실행하고 다시 붙여 넣어요.</li>
               <li>열려 있는 Claude Code 를 모두 닫고 다시 열어요.</li>
-              <li>Claude Code 에서 <span class="font-mono">/mcp</span> 를 입력해 <span class="font-mono" data-mcp-server-name>gbrain</span> 이 connected 로 보이면 끝이에요.</li>
+              <li>Claude Code 에서 <span class="font-mono">/mcp</span> 를 입력해 <span class="font-mono" data-mcp-server-name>{{ token_page_settings.personal_mcp_server_name }}</span> 이 connected 로 보이면 끝이에요.</li>
             </ol>
             <div id="token-self-install-caution" class="opacity-70">토큰은 비밀번호와 같아요. 이 기기의 Claude Code 에만 넣어 두세요.</div>
           </div>
@@ -389,6 +389,8 @@
 </dialog>
 {% endblock %}
 {% block extra_js %}
+<!-- 토큰 카드 기준 값 (서버 설정이 원본, gbrain_instance.describe_token_page_settings) -->
+<script id="gbrain-token-page-settings" type="application/json">{{ token_page_settings | tojson }}</script>
 <script src="{{ root }}/static/js/gbrain.js?v={{ asset('js/gbrain.js') }}"></script>
 <script src="{{ root }}/static/js/gbrain-token-result.js?v={{ asset('js/gbrain-token-result.js') }}"></script>
 <script src="{{ root }}/static/js/gbrain-tokens.js?v={{ asset('js/gbrain-tokens.js') }}"></script>
