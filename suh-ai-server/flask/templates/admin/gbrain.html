@@ -391,6 +391,7 @@
 {% block extra_js %}
 <!-- 토큰 카드 기준 값 (서버 설정이 원본, gbrain_instance.describe_token_page_settings) -->
 <script id="gbrain-token-page-settings" type="application/json">{{ token_page_settings | tojson }}</script>
+<script src="{{ root }}/static/js/gbrain-page-common.js?v={{ asset('js/gbrain-page-common.js') }}"></script>
 <script src="{{ root }}/static/js/gbrain.js?v={{ asset('js/gbrain.js') }}"></script>
 <script src="{{ root }}/static/js/gbrain-token-result.js?v={{ asset('js/gbrain-token-result.js') }}"></script>
 <script src="{{ root }}/static/js/gbrain-tokens.js?v={{ asset('js/gbrain-tokens.js') }}"></script>

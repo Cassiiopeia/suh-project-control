@@ -1,8 +1,9 @@
-/* gbrain MCP 기기 토큰 카드 (#207, #210, #213): 브레인 선택 > 목록 > 새 토큰(발급) > 결과 창(gbrain-token-result.js) > 폐기
+/* gbrain MCP 기기 토큰 카드 (#207, #210, #213): 브레인 선택 > 목록 > 새 토큰(발급) > 결과 창(gbrain-token-responseBody.js) > 폐기
    API: ../gbrain/tokens (GET 목록, POST 발급), ../gbrain/tokens/{id}/revoke (POST 폐기), 모두 brain 지정
    브레인 선택지: gbrain-teams.js 가 보내는 'gbrain-teams-loaded' 이벤트로 채움
    브레인을 바꾸면 그 브레인 기준(이름·주소·기본 권한)으로 바로 전환, 늦게 온 이전 목록 응답은 버림 */
 (function () {
+  const { getElement, readResponseBody, describeFailure } = window.gbrainPage;
   const API = '../gbrain/tokens';
   // 개인 브레인 id·주소·MCP 이름·기본 권한: 서버 설정이 템플릿에 실어 준 값 (사본 상수 없음)
   const PAGE_SETTINGS = JSON.parse(document.getElementById('gbrain-token-page-settings').textContent);
@@ -21,19 +22,8 @@
   // 목록 요청 순번: 마지막 요청의 응답만 화면에 반영
   let latestListRequestNumber = 0;
 
-  function el(id) { return document.getElementById(id); }
-
   function selectedBrain() {
-    return el('token-brain-select').value || PERSONAL_BRAIN_ID;
-  }
-
-  async function readJson(response) {
-    try { return await response.json(); } catch (e) { return {}; }
-  }
-
-  // 실패 문구 + 에러 코드 (화면 문구 규칙: 오류에는 코드 함께)
-  function describeFailure(result, fallbackMessage) {
-    return (result.error || fallbackMessage) + (result.code ? ' [' + result.code + ']' : '');
+    return getElement('token-brain-select').value || PERSONAL_BRAIN_ID;
   }
 
   const DATE_TIME_FORMAT = new Intl.DateTimeFormat('ko-KR', {
@@ -71,11 +61,11 @@
 
   // 카드 설명 문구·발급 버튼을 지금 브레인 기준으로
   function renderBrainContext() {
-    el('token-mcp-url').textContent = brainContext.mcpUrl || '-';
-    el('token-mcp-server-name').textContent = brainContext.mcpServerName || '-';
-    el('token-personal-hint').hidden = brainContext.isTeam;
-    el('token-team-hint').hidden = !brainContext.isTeam;
-    el('token-create-open-label').textContent = brainContext.isTeam ? '팀원 토큰 만들기' : '새 기기 연결';
+    getElement('token-mcp-url').textContent = brainContext.mcpUrl || '-';
+    getElement('token-mcp-server-name').textContent = brainContext.mcpServerName || '-';
+    getElement('token-personal-hint').hidden = brainContext.isTeam;
+    getElement('token-team-hint').hidden = !brainContext.isTeam;
+    getElement('token-create-open-label').textContent = brainContext.isTeam ? '팀원 토큰 만들기' : '새 기기 연결';
   }
 
   // 브레인 변경 > 이전 브레인 표·기본 권한을 바로 치우고 새로 불러옴
@@ -89,24 +79,24 @@
   async function loadTokens() {
     const requestNumber = ++latestListRequestNumber;
     const requestedBrain = selectedBrain();
-    const tableBody = el('token-table-body');
+    const tableBody = getElement('token-table-body');
     // 응답 전까지 발급 잠금 + 이전 브레인 표 숨김 (다른 브레인 기본값·폐기 버튼으로 잘못 누르지 않게)
-    el('token-create-open').disabled = true;
+    getElement('token-create-open').disabled = true;
     tableBody.innerHTML = '<tr><td colspan="6" class="text-center opacity-50 py-6">토큰 목록을 불러오는 중이에요...</td></tr>';
     try {
       const response = await apiFetch(API + '?brain=' + encodeURIComponent(requestedBrain) + '&t=' + Date.now());
-      const result = await readJson(response);
+      const responseBody = await readResponseBody(response);
       if (requestNumber !== latestListRequestNumber) return;  // 그사이 브레인을 바꿈 > 버림
-      if (!response.ok) throw new Error(describeFailure(result, '토큰 목록을 불러오지 못했어요'));
+      if (!response.ok) throw new Error(describeFailure(responseBody, '토큰 목록을 불러오지 못했어요'));
       brainContext = Object.assign(describeBrainContext(requestedBrain), {
-        mcpUrl: result.mcp_url || brainContext.mcpUrl,
-        mcpServerName: result.mcp_server_name || brainContext.mcpServerName,
-        defaultScopePreset: result.default_scope_preset || brainContext.defaultScopePreset,
-        isTeam: !!result.is_team,
+        mcpUrl: responseBody.mcp_url || brainContext.mcpUrl,
+        mcpServerName: responseBody.mcp_server_name || brainContext.mcpServerName,
+        defaultScopePreset: responseBody.default_scope_preset || brainContext.defaultScopePreset,
+        isTeam: !!responseBody.is_team,
       });
       renderBrainContext();
-      renderTokens(result.tokens || []);
-      el('token-create-open').disabled = false;
+      renderTokens(responseBody.tokens || []);
+      getElement('token-create-open').disabled = false;
     } catch (error) {
       if (requestNumber !== latestListRequestNumber) return;
       tableBody.innerHTML = '<tr><td colspan="6" class="text-center text-error py-6">' + escapeHtml(error.message) + '</td></tr>';
@@ -114,7 +104,7 @@
   }
 
   function renderTokens(tokens) {
-    const tableBody = el('token-table-body');
+    const tableBody = getElement('token-table-body');
     if (!tokens.length) {
       const emptyHint = brainContext.isTeam ? '"팀원 토큰 만들기"로 팀원마다 하나씩 만들어 보세요.' : '"새 기기 연결"로 시작해 보세요.';
       tableBody.innerHTML = '<tr><td colspan="6" class="text-center opacity-50 py-6">아직 만든 토큰이 없어요. ' + emptyHint + '</td></tr>';
@@ -152,26 +142,26 @@
   /* ---------- 2. 발급 ---------- */
   // 발급 창: 만들 곳(브레인)·이름 안내·기본 권한을 지금 브레인 기준으로
   function openCreateModal() {
-    el('token-create-form').reset();
-    el('token-create-title').textContent = brainContext.isTeam ? '팀원 토큰 만들기' : '새 기기 연결';
-    el('token-create-target').textContent = brainContext.label + ' (' + (brainContext.mcpServerName || '-') + ')';
-    el('token-name-label').textContent = brainContext.isTeam ? '팀원·기기 이름' : '기기 이름';
-    el('token-device-name').placeholder = brainContext.isTeam ? '예: kim-macbook' : '예: work-macbook';
+    getElement('token-create-form').reset();
+    getElement('token-create-title').textContent = brainContext.isTeam ? '팀원 토큰 만들기' : '새 기기 연결';
+    getElement('token-create-target').textContent = brainContext.label + ' (' + (brainContext.mcpServerName || '-') + ')';
+    getElement('token-name-label').textContent = brainContext.isTeam ? '팀원·기기 이름' : '기기 이름';
+    getElement('token-device-name').placeholder = brainContext.isTeam ? '예: kim-macbook' : '예: work-macbook';
     document.querySelectorAll('[data-scope-default-badge]').forEach(function (badge) {
       badge.hidden = badge.dataset.scopeDefaultBadge !== brainContext.defaultScopePreset;
     });
     const defaultScopeInput = document.querySelector('input[name="token-scope-preset"][value="' + brainContext.defaultScopePreset + '"]');
     if (defaultScopeInput) defaultScopeInput.checked = true;
-    el('token-create-modal').dataset.brain = brainContext.brainId;
-    el('token-create-error').hidden = true;
-    el('token-create-modal').showModal();
-    el('token-device-name').focus();
+    getElement('token-create-modal').dataset.brain = brainContext.brainId;
+    getElement('token-create-error').hidden = true;
+    getElement('token-create-modal').showModal();
+    getElement('token-device-name').focus();
   }
 
   async function submitCreateForm(event) {
     event.preventDefault();
-    const submitButton = el('token-create-submit');
-    const errorText = el('token-create-error');
+    const submitButton = getElement('token-create-submit');
+    const errorText = getElement('token-create-error');
     const scopeInput = document.querySelector('input[name="token-scope-preset"]:checked');
     errorText.hidden = true;
     submitButton.disabled = true;
@@ -180,15 +170,15 @@
         method: 'POST',
         body: JSON.stringify({
           // 창을 연 때의 브레인으로 발급 (창이 열린 뒤 선택이 바뀌어도 같은 곳)
-          name: el('token-device-name').value.trim(), brain: el('token-create-modal').dataset.brain,
+          name: getElement('token-device-name').value.trim(), brain: getElement('token-create-modal').dataset.brain,
           scope_preset: scopeInput ? scopeInput.value : brainContext.defaultScopePreset,
         }),
       });
-      const result = await readJson(response);
-      if (!response.ok) throw new Error(describeFailure(result, '토큰을 만들지 못했어요'));
-      el('token-create-modal').close();
-      window.gbrainTokenResult.open(result, brainContext.mcpUrl, brainContext.mcpServerName);
-      showToast(result.token.name + ' 토큰을 만들었어요', 'success');
+      const responseBody = await readResponseBody(response);
+      if (!response.ok) throw new Error(describeFailure(responseBody, '토큰을 만들지 못했어요'));
+      getElement('token-create-modal').close();
+      window.gbrainTokenResult.open(responseBody, brainContext.mcpUrl, brainContext.mcpServerName);
+      showToast(responseBody.token.name + ' 토큰을 만들었어요', 'success');
       loadTokens();
     } catch (error) {
       errorText.textContent = error.message;
@@ -200,7 +190,7 @@
 
   // 팀 브레인 목록 > 브레인 선택지 (고른 값 유지, 사라진 브레인이면 개인으로)
   function renderBrainOptions(brains) {
-    const select = el('token-brain-select');
+    const select = getElement('token-brain-select');
     const previousValue = select.value;
     teamBrainById = {};
     brains.forEach(function (brain) { teamBrainById[brain.project] = brain; });
@@ -229,8 +219,8 @@
     try {
       const response = await apiFetch(API + '/' + encodeURIComponent(token.id) + '/revoke',
         { method: 'POST', body: JSON.stringify({ brain: brainContext.brainId }) });
-      const result = await readJson(response);
-      if (!response.ok) throw new Error(describeFailure(result, '토큰을 폐기하지 못했어요'));
+      const responseBody = await readResponseBody(response);
+      if (!response.ok) throw new Error(describeFailure(responseBody, '토큰을 폐기하지 못했어요'));
       showToast(token.name + ' 토큰을 폐기했어요. 이제 이 토큰으로는 접속할 수 없어요', 'success');
     } catch (error) {
       showToast(escapeHtml(error.message), 'error');
@@ -243,13 +233,13 @@
   document.addEventListener('DOMContentLoaded', function () {
     renderBrainContext();
     loadTokens();
-    el('token-refresh').addEventListener('click', loadTokens);
-    el('token-brain-select').addEventListener('change', onBrainSelected);
+    getElement('token-refresh').addEventListener('click', loadTokens);
+    getElement('token-brain-select').addEventListener('change', onBrainSelected);
     document.addEventListener('gbrain-teams-loaded', function (event) { renderBrainOptions(event.detail.brains || []); });
-    el('token-create-open').addEventListener('click', openCreateModal);
-    el('token-create-form').addEventListener('submit', submitCreateForm);
+    getElement('token-create-open').addEventListener('click', openCreateModal);
+    getElement('token-create-form').addEventListener('submit', submitCreateForm);
     document.querySelectorAll('[data-close-token-modal]').forEach(function (button) {
-      button.addEventListener('click', function () { el('token-create-modal').close(); });
+      button.addEventListener('click', function () { getElement('token-create-modal').close(); });
     });
   });
 })();
