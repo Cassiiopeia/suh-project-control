@@ -11,7 +11,6 @@ from psycopg2 import sql
 from ai_db_fixtures import PUBLIC_HOST, PUBLIC_PORT, FakePgAdminClient, make_service
 from service.ai_db.ai_db_errors import (
     AiDbUnavailable, ConfirmMismatch, DatabaseInUse, GbrainOpsMissing, InvalidName, NotFound, ProtectedObject,
-    SameReaderWriter,
 )
 from service.ai_db.pg_admin_client import PgAdminClient
 
@@ -240,17 +239,19 @@ def test_pgcode는_관리_오류로_바뀐다(pgcode, expected):
 
 # ---- gbrain 팀 브레인 ----
 
-@pytest.mark.parametrize("database_name,reader_role,writer_role", [
-    ("gbrain", "team_a", "elum_member"), ("template1", "team_a", "elum_member"),
-    ("gbrain_elum", "gbrain", "elum_member"), ("gbrain_elum", "postgres", "elum_member"),
-    ("gbrain_elum", "team_a", "ai_db_admin"), ("gbrain_elum", "team_a", "gbrain"),
-])
-def test_gbrain_보호_DB와_보호_계정은_읽기_쓰기_어느_쪽도_차단(service, client, database_name, reader_role, writer_role):
+@pytest.mark.parametrize("database_name", ["gbrain", "template1", "postgres"])
+def test_gbrain_준비는_보호_DB를_막는다(service, client, database_name):
     with pytest.raises(ProtectedObject):
-        service.grant_gbrain_reader(database_name, reader_role, writer_role)
-    with pytest.raises(ProtectedObject):
-        service.revoke_gbrain_reader(database_name, reader_role, writer_role)
+        service.prepare_gbrain(database_name, "elum_member")
     assert client.calls == []
+
+
+def test_팀원_읽기_권한_주기_빼기_코드는_서비스와_클라이언트에_없다():
+    """#218: 팀원은 팀 브레인 MCP 토큰으로 연결 (SQL 회수 함수만 안전망으로 남김)"""
+    from service.ai_db.ai_db_service import AiDbService
+    for removed_name in ("grant_gbrain_reader", "revoke_gbrain_reader"):
+        assert not hasattr(AiDbService, removed_name)
+        assert not hasattr(PgAdminClient, removed_name)
 
 
 def test_gbrain_준비는_보호_쓰기_계정과_잘못된_이름을_막는다(service, client):
@@ -263,25 +264,14 @@ def test_gbrain_준비는_보호_쓰기_계정과_잘못된_이름을_막는다(
     assert client.calls == []
 
 
-def test_gbrain_읽기_계정이_쓰기_계정과_같으면_거부(service, client):
-    with pytest.raises(SameReaderWriter):
-        service.revoke_gbrain_reader("gbrain_elum", "elum_member", "elum_member")
-    assert client.calls == []
-
-
-def test_gbrain_읽기_권한은_일반_grant를_쓰지_않는다(service, client):
-    service.grant_gbrain_reader("gbrain_elum", "team_a", "elum_member")
-    assert client.calls == [("grant_gbrain_reader", "gbrain_elum", "team_a", "elum_member")]
-
-
 def test_gbrain_함수는_대상_DB에서_Literal_인자로_호출된다():
     pg_client, statements, connect_options = make_recording_client(fetch_rows=[(1,)])
 
-    pg_client.grant_gbrain_reader("gbrain_elum", "team_a", 'x"; drop')
+    pg_client.prepare_gbrain_database("gbrain_elum", 'x"; drop')
 
     call = statements[-1]
-    assert "ai_db_ops.grant_gbrain_reader" in repr(call)
-    assert [part.wrapped for part in call.seq if isinstance(part, sql.Literal)] == ["team_a", 'x"; drop']
+    assert "ai_db_ops.prepare_gbrain_database" in repr(call)
+    assert [part.wrapped for part in call.seq if isinstance(part, sql.Literal)] == ['x"; drop']
     assert connect_options[-1]["dbname"] == "gbrain_elum"
 
 
@@ -310,13 +300,13 @@ def test_gbrain_함수_오류_pgcode_변환(pgcode, expected):
     assert raised.value.code == expected
 
 
-@pytest.mark.parametrize("status_row,readers,expected_is_ready", [
-    ((False, False, None, False), [], False),                       # ops 스키마·트리거 없음 > 오류 아님
-    ((True, True, "elum_member", True), ["elum_member", "team_a"], True),
+@pytest.mark.parametrize("status_row,expected_is_ready", [
+    ((False, False, None, False), False),                       # ops 스키마·트리거 없음 > 오류 아님
+    ((True, True, "elum_member", True), True),
 ])
-def test_gbrain_상태는_ops_트리거_둘_다_있어야_준비됨이고_쓰기_계정은_읽기에서_뺀다(status_row, readers, expected_is_ready):
-    # 조회 순서: DB 존재 확인 > 상태 > 읽기 팀원
-    fetch_results = [[(1,)], [status_row], [(reader,) for reader in readers]]
+def test_gbrain_상태는_ops_트리거_둘_다_있어야_준비됨이고_읽기_팀원은_싣지_않는다(status_row, expected_is_ready):
+    # 조회 순서: DB 존재 확인 > 상태 (읽기 팀원 조회 없음, #218)
+    fetch_results = [[(1,)], [status_row]]
 
     class QueueCursor(RecordingCursor):
         def fetchall(self):
@@ -329,7 +319,8 @@ def test_gbrain_상태는_ops_트리거_둘_다_있어야_준비됨이고_쓰기
 
     status = pg_client.get_gbrain_status("gbrain_elum")
     assert status["is_ready"] is expected_is_ready
-    assert status["readers"] == ([] if not readers else ["team_a"])
+    assert "readers" not in status
+    assert fetch_results == []
 
 
 def test_ops_미설치면_GbrainOpsMissing(service, client):

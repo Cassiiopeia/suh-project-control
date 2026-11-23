@@ -16,7 +16,7 @@ ai_db_bp = Blueprint('ai_db', __name__, url_prefix='/ai-db')
 # 오류 코드 > HTTP 상태 (없는 코드는 502: PG 쪽 예상 밖 실패)
 ERROR_STATUS_CODES = {
     'ai_db_unavailable': 503,
-    'bad_request': 400, 'invalid_name': 400, 'confirm_mismatch': 400, 'same_reader_writer': 400,
+    'bad_request': 400, 'invalid_name': 400, 'confirm_mismatch': 400,
     'protected_object': 403, 'permission_denied': 403,
     'not_found': 404,
     'already_exists': 409, 'database_in_use': 409, 'role_in_use': 409,
@@ -165,11 +165,11 @@ def revoke_access(database_name, role_name):
     return jsonify({'ok': True})
 
 
-# ---- gbrain 팀 브레인 (본문 writer_role 필수: 읽기 기본 권한의 기준 계정) ----
+# ---- gbrain 팀 브레인 (준비만, 팀원은 DB 대신 팀 브레인 MCP 토큰으로 연결) ----
 
 @ai_db_bp.route('/databases/<database_name>/gbrain', methods=['GET'])
 def gbrain_status(database_name):
-    """준비 여부·쓰기 계정·읽기 팀원 (ops 스키마·pages 표 없어도 오류 아님)"""
+    """준비 여부·쓰기 계정 (ops 스키마·pages 표 없어도 오류 아님)"""
     return jsonify(_service().get_gbrain_status(database_name))
 
 
@@ -179,22 +179,4 @@ def prepare_gbrain(database_name):
     writer_role = _optional_text(_json_body(), 'writer_role')
     set_audit_detail({'database': database_name, 'writer_role': writer_role})
     _service().prepare_gbrain(database_name, writer_role)
-    return jsonify({'ok': True})
-
-
-@ai_db_bp.route('/databases/<database_name>/gbrain/readers/<role_name>', methods=['PUT'])
-@audited(AuditCategory.AI_DB, AuditAction.AI_DB_GBRAIN_READER_GRANT)
-def grant_gbrain_reader(database_name, role_name):
-    writer_role = _optional_text(_json_body(), 'writer_role')
-    set_audit_detail({'database': database_name, 'role': role_name, 'writer_role': writer_role})
-    _service().grant_gbrain_reader(database_name, role_name, writer_role)
-    return jsonify({'ok': True})
-
-
-@ai_db_bp.route('/databases/<database_name>/gbrain/readers/<role_name>', methods=['DELETE'])
-@audited(AuditCategory.AI_DB, AuditAction.AI_DB_GBRAIN_READER_REVOKE)
-def revoke_gbrain_reader(database_name, role_name):
-    writer_role = _optional_text(_json_body(), 'writer_role')
-    set_audit_detail({'database': database_name, 'role': role_name, 'writer_role': writer_role})
-    _service().revoke_gbrain_reader(database_name, role_name, writer_role)
     return jsonify({'ok': True})

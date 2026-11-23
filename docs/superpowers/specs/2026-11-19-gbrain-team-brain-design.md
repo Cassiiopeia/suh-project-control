@@ -6,6 +6,12 @@
 - 다음 문서: [gbrain HTTP 서버 관제소 관리](2026-11-22-gbrain-http-server-control-tower-design.md) (#201)
 - 다음 문서: [gbrain 팀 브레인 MCP](2026-11-23-gbrain-team-brain-mcp-design.md) (#210): 팀원은 DB 마운트 대신 팀 브레인 MCP 서버(`/team/<project>/mcp`, 읽기 전용 토큰)로 붙음
 
+> **2026-11-23 현황 (#218): 팀원 읽기 권한 기능 제거**
+> - 이 문서의 "팀원 읽기 권한 주기·빼기"(화면 버튼·대화창, `PUT`/`DELETE /ai-db/databases/<db>/gbrain/readers/<role>`, `same_reader_writer`, SQL `grant_gbrain_reader`)는 걷어냄. 경로는 이제 404
+> - 이유: 외부 `5432` 가 공유기에서 닫혀 쓸 수 없는 흐름을 화면이 안내했고, 팀원 계정에 `BYPASSRLS` 를 주는 경로 자체가 보안 위험. 점검 시 실제로 준 읽기 계정은 없었음
+> - 대신: 팀원은 관제소 `/admin/gbrain` 토큰 카드에서 팀 브레인을 골라 받은 읽기 전용 토큰으로 `https://ai.suhsaechan.kr/team/<project>/mcp` 에 붙음 ([팀 브레인 MCP](2026-11-23-gbrain-team-brain-mcp-design.md), #210)
+> - 남긴 것: 브레인 준비(쓰기 계정), 안전망 SQL `ai_db_ops.revoke_gbrain_reader` (화면·API 없음, 직접 호출). 설계 메모: [팀원 읽기 권한 제거](2026-11-23-remove-gbrain-team-reader-grant-design.md)
+
 > **2026-11-23 현황 (#210)**
 > - 5장 팀원 절차(외부 DB 직접 마운트)는 쓰지 않음: 팀 브레인마다 gbrain HTTP 서버를 두고 `https://ai.suhsaechan.kr/team/<project>/mcp` 에 읽기 전용 토큰으로 붙음
 > - 새 팀 브레인은 관제소 "팀 브레인 만들기" 한 번으로 DB·쓰기 계정·브레인 준비·서비스·공개 경로까지 만듦 (passQL 도 이 흐름으로 옮김, DB 그대로)

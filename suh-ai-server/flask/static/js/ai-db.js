@@ -1,6 +1,6 @@
 /* AI 서버 공용 PG 관리 화면. API: ../ai-db/*
    흐름: 상태 > DB·계정 목록 > 만들기 / 접속 권한 주기·빼기 / 비번 재발급(1회 표시) / 이름 입력 후 삭제 > 목록 새로 고침
-   gbrain: DB별 상태 > 브레인 준비(쓰기 계정) / 팀원 읽기 권한 주기·빼기 (일반 접속 권한과 섞지 않음) */
+   gbrain: DB별 상태 > 브레인 준비(쓰기 계정). 팀원은 DB 대신 gbrain 화면의 팀 브레인 토큰으로 연결 */
 (function () {
   const API = '../ai-db';
   // 미연결 표시용 에러 코드 (설계 6장)
@@ -18,7 +18,6 @@
     role_in_use: '권한이나 객체가 남아 있어요. DB 접속 권한을 먼저 빼 주세요.',
     bad_request: '요청 형식이 잘못됐어요.',
     gbrain_ops_missing: '이 DB에 관리 함수가 없어요. 슈퍼유저로 sql/ai_db_ops_gbrain.sql 을 먼저 실행하세요.',
-    same_reader_writer: '쓰기 계정은 읽기 팀원으로 줄 수 없어요.',
   };
   const BYTES_PER_MEGABYTE = 1024 * 1024;
 
@@ -27,10 +26,10 @@
   // 삭제 확인 대상 { kind: 'database' | 'role', name }
   let pendingDelete = null;
   let grantDatabaseName = null;
-  // DB 이름 > gbrain 상태 { is_ready, has_ops_functions, has_pages_table, writer_role, readers }
+  // DB 이름 > gbrain 상태 { is_ready, has_ops_functions, has_pages_table, writer_role }
   let gbrainByDatabase = {};
-  // gbrain 모달 대상 { mode: 'prepare' | 'reader', databaseName }
-  let pendingGbrain = null;
+  // 브레인 준비 모달 대상 DB 이름
+  let pendingGbrainDatabaseName = null;
 
   function el(id) { return document.getElementById(id); }
   const escapeHtml = window.escapeHtml;
@@ -88,11 +87,6 @@
     renderDatabases();
   }
 
-  function gbrainReadersOf(databaseName) {
-    const gbrain = gbrainByDatabase[databaseName];
-    return (gbrain && gbrain.readers) || [];
-  }
-
   async function loadRoles() {
     const result = await requestJson('/roles').catch(() => ({ isOk: false, body: {} }));
     if (!result.isOk) {
@@ -117,9 +111,7 @@
   function renderDatabaseItem(database) {
     const name = escapeHtml(database.name);
     const isProtected = database.is_protected;
-    // 읽기 팀원은 gbrain 섹션에서만 표시·회수 (일반 회수는 읽기 권한을 반쯤 남김)
-    const readers = gbrainReadersOf(database.name);
-    const accessBadges = (database.access_roles || []).filter(roleName => readers.indexOf(roleName) < 0).map(function (roleName) {
+    const accessBadges = (database.access_roles || []).map(function (roleName) {
       const removeButton = isProtected ? '' : '<button class="btn btn-ghost btn-xs px-1" data-action="revoke" data-role="' +
         escapeHtml(roleName) + '" aria-label="권한 빼기"><i data-lucide="x" class="size-3"></i></button>';
       return '<span class="badge badge-outline gap-1 font-mono">' + escapeHtml(roleName) + removeButton + '</span>';
@@ -138,7 +130,7 @@
     '</div>';
   }
 
-  // gbrain 섹션: 상태 배지 · 쓰기 계정 · 읽기 팀원(빼기) · 준비 / 읽기 권한 주기
+  // gbrain 섹션: 상태 배지 · 쓰기 계정 · 준비 / 팀 브레인 토큰 안내
   function renderGbrainSection(databaseName) {
     const gbrain = gbrainByDatabase[databaseName];
     const header = '<span class="flex items-center gap-1 opacity-70"><i data-lucide="brain" class="size-3"></i>gbrain</span>';
@@ -150,17 +142,11 @@
     if (!gbrain.is_ready || !gbrain.writer_role) {
       return '<div class="text-xs mt-2 pt-2 border-t border-base-300 flex flex-wrap items-center gap-2">' + header + statusBadge + opsHint + prepareButton + '</div>';
     }
-    const readerBadges = (gbrain.readers || []).map(function (roleName) {
-      return '<span class="badge badge-outline gap-1 font-mono">' + escapeHtml(roleName) +
-        '<button class="btn btn-ghost btn-xs px-1" data-action="gbrain-revoke-reader" data-role="' + escapeHtml(roleName) +
-        '" aria-label="읽기 권한 빼기"><i data-lucide="x" class="size-3"></i></button></span>';
-    }).join(' ') || '<span class="opacity-60">없음</span>';
-    return '<div class="text-xs mt-2 pt-2 border-t border-base-300 space-y-1">' +
-      '<div class="flex flex-wrap items-center gap-2">' + header + statusBadge +
-        '<span class="opacity-70">쓰기</span><span class="font-mono">' + escapeHtml(gbrain.writer_role) + '</span>' +
-        '<button class="btn btn-ghost btn-xs" data-action="gbrain-grant-reader"><i data-lucide="user-plus" class="size-3"></i>팀원 읽기 권한 주기</button></div>' +
-      '<div class="flex flex-wrap items-center gap-1"><span class="opacity-70">읽기 팀원:</span>' + readerBadges + '</div>' +
-    '</div>';
+    // 팀원 연결은 DB 계정이 아니라 팀 브레인 읽기 전용 토큰 (gbrain 화면)
+    const teamTokenLink = '<a class="link link-primary" href="' + escapeHtml(el('database-list').dataset.gbrainPageUrl || '') +
+      '"><i data-lucide="key-round" class="size-3 inline"></i> 팀원은 팀 브레인 토큰으로 연결해요</a>';
+    return '<div class="text-xs mt-2 pt-2 border-t border-base-300 flex flex-wrap items-center gap-2">' + header + statusBadge +
+      '<span class="opacity-70">쓰기</span><span class="font-mono">' + escapeHtml(gbrain.writer_role) + '</span>' + teamTokenLink + '</div>';
   }
 
   function renderRoles() {
@@ -255,8 +241,7 @@
     if (button.dataset.action === 'grant') {
       grantDatabaseName = databaseName;
       el('grant-database').textContent = databaseName;
-      // gbrain 읽기 팀원 제외 (일반 권한은 public 스키마 CREATE 까지 줘서 읽기 전용이 깨짐)
-      fillSelect(el('grant-role'), manageableRoleNames().filter(roleName => gbrainReadersOf(databaseName).indexOf(roleName) < 0));
+      fillSelect(el('grant-role'), manageableRoleNames());
       openModal('grant-modal');
     } else if (button.dataset.action === 'revoke') {
       const roleName = button.dataset.role;
@@ -266,56 +251,30 @@
     } else if (button.dataset.action === 'delete') {
       openDelete('database', databaseName);
     } else if (button.dataset.action === 'gbrain-prepare') {
-      openGbrainModal('prepare', databaseName);
-    } else if (button.dataset.action === 'gbrain-grant-reader') {
-      openGbrainModal('reader', databaseName);
-    } else if (button.dataset.action === 'gbrain-revoke-reader') {
-      const result = await requestJson(gbrainReaderPath(databaseName, button.dataset.role), { method: 'DELETE',
-        body: JSON.stringify({ writer_role: gbrainByDatabase[databaseName].writer_role }) });
-      showToast(result.isOk ? '읽기 권한을 뺐어요' : describeError(result.body.error), result.isOk ? 'success' : 'error');
-      loadDatabases();
+      openGbrainPrepareModal(databaseName);
     }
   }
 
-  /* ---------- 5-1. gbrain (준비: DB 접속 계정 중 쓰기 계정 / 읽기: 일반 접속 권한 없는 계정만) ---------- */
-  function gbrainReaderPath(databaseName, roleName) {
-    return '/databases/' + encodeURIComponent(databaseName) + '/gbrain/readers/' + encodeURIComponent(roleName);
-  }
-
-  function openGbrainModal(mode, databaseName) {
+  /* ---------- 5-1. gbrain 브레인 준비 (후보: 그 DB 접속 권한이 있는 관리 계정 = 쓰기 계정) ---------- */
+  function openGbrainPrepareModal(databaseName) {
     const database = databases.find(d => d.name === databaseName) || {};
-    const gbrain = gbrainByDatabase[databaseName] || {};
-    const readers = gbrain.readers || [];
-    // 일반 접속 권한 계정 = public 스키마 CREATE 보유 > 읽기 팀원 후보에서 제외
-    const generalAccessRoles = (database.access_roles || []).filter(roleName => readers.indexOf(roleName) < 0);
-    const isPrepare = mode === 'prepare';
-    const candidates = isPrepare ? generalAccessRoles.filter(roleName => manageableRoleNames().indexOf(roleName) >= 0)
-      : manageableRoleNames().filter(roleName => generalAccessRoles.indexOf(roleName) < 0 && readers.indexOf(roleName) < 0);
-    pendingGbrain = { mode: mode, databaseName: databaseName };
-    el('gbrain-title').textContent = isPrepare ? '브레인 준비' : '팀원 읽기 권한 주기';
+    const candidates = (database.access_roles || []).filter(roleName => manageableRoleNames().indexOf(roleName) >= 0);
+    pendingGbrainDatabaseName = databaseName;
     el('gbrain-database').textContent = databaseName;
-    el('gbrain-description').textContent = isPrepare ? '에 동기화할 쓰기 계정을 골라요.' : '을 읽기만 할 팀원 계정을 골라요.';
-    el('gbrain-hint').textContent = isPrepare
-      ? '확장·RLS 자동 설정을 하고 쓰기 계정이 모든 행을 다룰 수 있게 해요. 후보가 없으면 먼저 접속 권한을 주세요.'
-      : '계정은 DB를 고르지 않고 만든 뒤 여기서 주세요. 일반 접속 권한(쓰기 가능)이 있는 계정은 고를 수 없어요.';
-    el('gbrain-submit').textContent = isPrepare ? '준비' : '읽기 권한 주기';
     fillSelect(el('gbrain-role'), candidates);
     openModal('gbrain-modal');
   }
 
   async function onGbrainSubmit(event) {
     event.preventDefault();
-    if (!pendingGbrain) return;
-    const roleName = el('gbrain-role').value;
-    if (!roleName) return showFormError('gbrain-form-error', 'bad_request');
-    const databaseName = pendingGbrain.databaseName;
-    const isPrepare = pendingGbrain.mode === 'prepare';
-    const path = isPrepare ? '/databases/' + encodeURIComponent(databaseName) + '/gbrain/prepare' : gbrainReaderPath(databaseName, roleName);
-    const writerRole = isPrepare ? roleName : gbrainByDatabase[databaseName].writer_role;
-    const result = await requestJson(path, { method: isPrepare ? 'POST' : 'PUT', body: JSON.stringify({ writer_role: writerRole }) });
+    if (!pendingGbrainDatabaseName) return;
+    const writerRole = el('gbrain-role').value;
+    if (!writerRole) return showFormError('gbrain-form-error', 'bad_request');
+    const result = await requestJson('/databases/' + encodeURIComponent(pendingGbrainDatabaseName) + '/gbrain/prepare',
+      { method: 'POST', body: JSON.stringify({ writer_role: writerRole }) });
     if (!result.isOk) return showFormError('gbrain-form-error', result.body.error);
     el('gbrain-modal').close();
-    showToast(isPrepare ? '브레인을 준비했어요' : '읽기 권한을 줬어요', 'success');
+    showToast('브레인을 준비했어요', 'success');
     loadDatabases();
   }
 

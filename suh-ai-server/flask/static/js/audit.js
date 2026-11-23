@@ -79,8 +79,9 @@
     AI_DB_GRANT: 'AI 서버 DB 접속 권한 주기',
     AI_DB_REVOKE: 'AI 서버 DB 접속 권한 빼기',
     AI_DB_GBRAIN_PREPARE: 'AI 서버 DB 브레인 준비',
-    AI_DB_GBRAIN_READER_GRANT: 'AI 서버 DB 팀원 읽기 권한 주기',
-    AI_DB_GBRAIN_READER_REVOKE: 'AI 서버 DB 팀원 읽기 권한 빼기',
+    // 팀원 읽기 권한: 기능 제거(#218), 과거 기록 표시용
+    AI_DB_GBRAIN_READER_GRANT: 'AI 서버 DB 팀원 읽기 권한 주기 (제거된 기능)',
+    AI_DB_GBRAIN_READER_REVOKE: 'AI 서버 DB 팀원 읽기 권한 빼기 (제거된 기능)',
     GBRAIN_START: 'gbrain 서버 시작',
     GBRAIN_STOP: 'gbrain 서버 중지',
     GBRAIN_RESTART: 'gbrain 서버 재시작',

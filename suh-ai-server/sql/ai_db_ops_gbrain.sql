@@ -1,5 +1,6 @@
--- gbrain 팀 브레인 준비 함수: 슈퍼유저 전용 작업 3개를 ai_db_admin 에게 좁게 위임
--- 대상 3개: 이벤트 트리거(RLS 자동), BYPASSRLS 부여·회수, 읽기 전용 권한
+-- gbrain 팀 브레인 준비 함수: 슈퍼유저 전용 작업을 ai_db_admin 에게 좁게 위임
+-- 대상 2개: 이벤트 트리거(RLS 자동), 쓰기 계정 BYPASSRLS
+-- 팀원 읽기 권한 주기는 제거(#218): 팀원은 DB 대신 팀 브레인 MCP(/team/<프로젝트>/mcp) 읽기 전용 토큰으로 연결
 -- 슈퍼유저(gbrain)로 template1 과 기존 gbrain_* DB 에 1회 실행 (새 DB 는 template1 에서 복사)
 -- 호출 조건: 호출자(session_user)가 대상 계정을 ADMIN 으로 관리 (= ai_db_admin 이 만든 계정)
 
@@ -64,22 +65,10 @@ BEGIN
   EXECUTE format('ALTER ROLE %I BYPASSRLS', writer_role);
 END $$;
 
--- 읽기 전용 팀원: CONNECT·USAGE > 기존·이후 표 SELECT > BYPASSRLS (gbrain 표 RLS 켜짐, 정책 없음)
-CREATE OR REPLACE FUNCTION ai_db_ops.grant_gbrain_reader(reader_role text, writer_role text) RETURNS void
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog AS $$
-BEGIN
-  PERFORM ai_db_ops.assert_managed_role(reader_role);
-  PERFORM ai_db_ops.assert_managed_role(writer_role);
-  EXECUTE format('GRANT CONNECT ON DATABASE %I TO %I', current_database(), reader_role);
-  EXECUTE format('GRANT USAGE ON SCHEMA public TO %I', reader_role);
-  EXECUTE format('GRANT SELECT ON ALL TABLES IN SCHEMA public TO %I', reader_role);
-  EXECUTE format('GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO %I', reader_role);
-  EXECUTE format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public GRANT SELECT ON TABLES TO %I', writer_role, reader_role);
-  EXECUTE format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public GRANT SELECT ON SEQUENCES TO %I', writer_role, reader_role);
-  EXECUTE format('ALTER ROLE %I BYPASSRLS', reader_role);
-END $$;
+-- 팀원 읽기 권한 주기 함수 제거 (#218, BYPASSRLS 를 주는 경로 차단, 다시 실행하면 기존 DB 에서도 지움)
+DROP FUNCTION IF EXISTS ai_db_ops.grant_gbrain_reader(text, text);
 
--- 읽기 권한 회수 (grant 의 역순, BYPASSRLS 도 회수)
+-- 안전망: 예전(#198)에 준 읽기 권한 회수 (BYPASSRLS 포함). 화면·API 없음, 슈퍼유저나 ai_db_admin 이 직접 호출
 CREATE OR REPLACE FUNCTION ai_db_ops.revoke_gbrain_reader(reader_role text, writer_role text) RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog AS $$
 BEGIN
@@ -97,5 +86,4 @@ END $$;
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA ai_db_ops FROM PUBLIC;
 GRANT USAGE ON SCHEMA ai_db_ops TO ai_db_admin;
 GRANT EXECUTE ON FUNCTION ai_db_ops.prepare_gbrain_database(text) TO ai_db_admin;
-GRANT EXECUTE ON FUNCTION ai_db_ops.grant_gbrain_reader(text, text) TO ai_db_admin;
 GRANT EXECUTE ON FUNCTION ai_db_ops.revoke_gbrain_reader(text, text) TO ai_db_admin;
