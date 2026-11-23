@@ -3,16 +3,11 @@
    목록을 읽으면 'gbrain-teams-loaded' 이벤트로 토큰 카드의 브레인 선택지를 채움
    새 쓰기 계정 비번은 결과 창 입력칸에만 두고 닫으면 비움 */
 (function () {
-  const { getElement, readResponseBody, describeFailure } = window.gbrainPage;
+  const { getElement, readResponseBody, describeFailure, SERVICE_STATE_LABELS } = window.gbrainPage;
   const API = '../gbrain/teams';
   const LIST_REFRESH_MILLISECONDS = 15000;
   const LOG_LINES = 200;
 
-  // 서비스 상태 코드 > 표시 문구 (gbrain.js 와 같은 값)
-  const SERVICE_STATE_LABELS = {
-    running: '구동 중', stopped: '정지됨', start_pending: '시작 중', stop_pending: '중지 중',
-    not_installed: '미설치', unknown: '확인 불가',
-  };
   // 만들기 단계 > 표시 이름, 결과 값 > 문구
   const STEP_LABELS = {
     database: 'DB', writer_role: '쓰기 계정', prepare: '브레인 준비', admin_token: '관리자 토큰', config: 'gbrain 설정',

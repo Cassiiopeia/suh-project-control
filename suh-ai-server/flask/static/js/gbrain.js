@@ -1,15 +1,9 @@
 /* gbrain HTTP 서버 관리 페이지: 상태 > 제어 > 관리자 화면 로그인 > 로그. base: /admin/gbrain > API: ../gbrain/* */
 (function () {
-  const { getElement, readResponseBody, describeFailure } = window.gbrainPage;
+  const { getElement, readResponseBody, describeFailure, SERVICE_STATE_LABELS } = window.gbrainPage;
   const API = '../gbrain';
   const STATUS_REFRESH_MILLISECONDS = 5000;
   const LOG_REFRESH_MILLISECONDS = 5000;
-
-  // 서비스 상태 코드 > 표시 문구 (그 외는 원문)
-  const SERVICE_STATE_LABELS = {
-    running: '구동 중', stopped: '정지됨', start_pending: '시작 중', stop_pending: '중지 중',
-    not_installed: '미설치', unknown: '확인 불가',
-  };
 
   /* ---------- 1. 상태 ---------- */
   async function loadStatus() {
