@@ -127,6 +127,6 @@ def control_team_brain(project, action):
     set_audit_action(audit_action)
     set_audit_detail({'brain': instance.brain_id, 'service_name': instance.service_name})
     if not getattr(GbrainServerService.for_instance(instance), method_name)():
-        return jsonify({'success': False, 'error': f'팀 브레인 서버 {action} 실패 (서버 로그 확인)',
+        return jsonify({'success': False, 'error': f'팀 브레인 서버 {action} 을 끝내지 못했어요 (서버 로그를 확인해 주세요)',
                         'code': 'control_failed'}), 500
     return jsonify({'success': True, 'summary': summary}), 200

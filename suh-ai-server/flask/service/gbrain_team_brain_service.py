@@ -167,7 +167,7 @@ class GbrainTeamBrainService:
                                     'invalid_project', 400)
         # 형식은 맞지만 예약어 > 이유를 따로 알림
         if project in RESERVED_PROJECT_KEYS:
-            raise GbrainServerError(f'{project} 는 개인 브레인 이름이라 팀 브레인 키로 쓸 수 없어요. 다른 키를 써 주세요',
+            raise GbrainServerError(f'"{project}" 키는 개인 브레인 이름이라 팀 브레인 키로 쓸 수 없어요. 다른 키를 써 주세요',
                                     'reserved_project', 400)
 
     def _list_instances(self) -> list:

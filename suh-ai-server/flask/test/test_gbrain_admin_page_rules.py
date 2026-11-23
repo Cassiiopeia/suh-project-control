@@ -128,3 +128,16 @@ def test_스크립트가_찾는_요소_id_는_템플릿에_모두_있다(script_
     assert element_ids, f'{script_name}: getElement 사용이 없어요'
     for element_id in element_ids:
         assert f'id="{element_id}"' in template + base_template, f'{script_name}: #{element_id}'
+
+
+# 화면으로 나가는 서버 문구 (오류·요약): gbrain 서비스·라우터
+BACKEND_MESSAGE_PATHS = sorted((FLASK_ROOT / 'service').glob('gbrain_*.py')) + sorted((FLASK_ROOT / 'router').glob('gbrain_*.py'))
+
+
+@pytest.mark.parametrize('source_path', BACKEND_MESSAGE_PATHS, ids=lambda path: path.name)
+def test_서버가_화면으로_보내는_gbrain_문구도_해요체로_쓴다(source_path):
+    for line in source_path.read_text(encoding='utf-8').splitlines():
+        if line.strip().startswith('#') or 'logger.' in line:
+            continue  # 주석·영어 로그 제외
+        for literal in re.findall(r"""['"]([^'"]*)['"]""", line):
+            assert not re.search(r'(습니다|합니다|입니다)', literal), f'{source_path.name}: {literal}'

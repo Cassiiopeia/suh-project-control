@@ -126,7 +126,7 @@ class GbrainServerService:
                 log_file.seek(max(0, file_size - GBRAIN_LOG_TAIL_BYTES))
                 tail_text = log_file.read().decode('utf-8', errors='replace')
         except OSError:
-            raise GbrainServerError('gbrain 로그 파일을 읽을 수 없습니다', 'log_unreadable', 404)
+            raise GbrainServerError('gbrain 로그 파일을 읽지 못했어요', 'log_unreadable', 404)
         return tail_text.splitlines()[-line_count:]
 
     # ---------- 서비스 제어 ----------
@@ -144,7 +144,7 @@ class GbrainServerService:
         """1회용 로그인 경로 + 게이트 쿠키 값 (링크를 GET 하지 않음, 경로·쿠키를 기록하지 않음)"""
         admin_token = read_admin_token()
         if admin_token is None:
-            raise GbrainServerError('gbrain 관리자 토큰 파일이 없습니다 (scripts/setup-gbrain-http.ps1 실행 필요)',
+            raise GbrainServerError('gbrain 관리자 토큰 파일이 없어요 (scripts/setup-gbrain-http.ps1 을 실행해 주세요)',
                                     'admin_token_missing', 503)
         login_path = self._issue_login_path(admin_token)
         return {
@@ -160,21 +160,21 @@ class GbrainServerService:
                                      timeout=self.timeout_seconds)
         except requests.RequestException as error:
             logger.warning(f'[gbrain admin login] rejected 502 : server unreachable {type(error).__name__}')
-            raise GbrainServerError('gbrain 서버에 연결할 수 없습니다', 'unreachable')
+            raise GbrainServerError('gbrain 서버에 연결하지 못했어요', 'unreachable')
         if response.status_code == 401:
             logger.warning('[gbrain admin login] rejected 502 : admin token not accepted by gbrain')
-            raise GbrainServerError('gbrain 이 관리자 토큰을 거부했습니다 (서비스 재시작 필요할 수 있음)',
+            raise GbrainServerError('gbrain 이 관리자 토큰을 받지 않았어요 (서비스를 재시작해 보세요)',
                                     'admin_token_rejected')
         if response.status_code >= 400:
             logger.warning(f'[gbrain admin login] rejected 502 : gbrain status {response.status_code}')
-            raise GbrainServerError(f'gbrain 로그인 링크 발급 실패 (HTTP {response.status_code})', 'gbrain_error')
+            raise GbrainServerError(f'gbrain 로그인 링크를 만들지 못했어요 (HTTP {response.status_code})', 'gbrain_error')
         try:
             login_path = urlsplit(str(response.json().get('url', ''))).path
         except (ValueError, AttributeError):
             login_path = ''
         if not ADMIN_LOGIN_PATH_PATTERN.match(login_path):
             logger.warning('[gbrain admin login] rejected 502 : unexpected login link shape')
-            raise GbrainServerError('gbrain 로그인 링크 형식이 예상과 다릅니다', 'invalid_login_link')
+            raise GbrainServerError('gbrain 로그인 링크 형식이 예상과 달라요', 'invalid_login_link')
         return login_path
 
     @staticmethod
