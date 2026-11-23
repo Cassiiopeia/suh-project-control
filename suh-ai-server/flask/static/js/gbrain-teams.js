@@ -67,11 +67,11 @@
   function renderTeamRow(brain) {
     const stateLabel = SERVICE_STATE_LABELS[brain.service_state] || brain.service_state || '-';
     const serviceBadge = brain.service_running
-      ? '<span class="badge badge-success badge-sm">' + escapeHtml(stateLabel) + '</span>'
-      : '<span class="badge badge-error badge-sm">' + escapeHtml(stateLabel) + '</span>';
+      ? '<span class="badge badge-success badge-sm whitespace-nowrap">' + escapeHtml(stateLabel) + '</span>'
+      : '<span class="badge badge-error badge-sm whitespace-nowrap">' + escapeHtml(stateLabel) + '</span>';
     const healthBadge = brain.is_healthy
-      ? '<span class="badge badge-success badge-sm">정상</span>'
-      : '<span class="badge ' + (brain.service_running ? 'badge-warning' : 'badge-ghost') + ' badge-sm">응답 없음</span>';
+      ? '<span class="badge badge-success badge-sm whitespace-nowrap">정상</span>'
+      : '<span class="badge ' + (brain.service_running ? 'badge-warning' : 'badge-ghost') + ' badge-sm whitespace-nowrap">응답 없음</span>';
     const project = escapeHtml(brain.project);
     return '<tr>' +
       '<td><div class="font-mono text-xs font-semibold">' + project + '</div>' +

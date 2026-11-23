@@ -61,7 +61,7 @@
 | 서비스 | `service/gbrain_token_service.py` `GbrainTokenService` (`list_tokens`, `create_token`, `revoke_token`) |
 | 라우터 | `router/gbrain_token_router.py` `gbrain_token_bp` |
 | 설정 | `config/gbrain_server_config.py` `GBRAIN_PUBLIC_MCP_URL`, `GBRAIN_OWNER_SESSION_REUSE_SECONDS` |
-| 화면 | `templates/admin/gbrain.html` 카드 3, `static/js/gbrain-tokens.js` |
+| 화면 | `templates/admin/gbrain.html` 카드 3, `static/js/gbrain-tokens.js` (카드·발급·폐기), `static/js/gbrain-token-result.js` (결과 창·복사, #213) |
 | 감사 | `AuditAction.GBRAIN_TOKEN_CREATE`, `GBRAIN_TOKEN_REVOKE` |
 
 ## 5. 시험
