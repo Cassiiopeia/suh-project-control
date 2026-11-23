@@ -1,0 +1,38 @@
+{# gbrain 팀원별 API 키 카드 (#221, gbrain-members.js): 팀원 목록 > 펼치면 브레인별 키 상태·다시 보기·폐기 #}
+<div class="card bg-base-100 shadow border border-base-300">
+  <div class="card-body space-y-3">
+    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-base-300 pb-2">
+      <h2 class="card-title text-base">
+        <i data-lucide="contact" class="size-5 text-primary"></i>팀원별 API 키
+      </h2>
+      <div class="flex items-center gap-2">
+        <button id="member-refresh" class="btn btn-ghost btn-sm" title="팀원 목록 새로고침">
+          <i data-lucide="refresh-cw" class="size-4"></i>
+        </button>
+        <button id="member-create-open" class="btn btn-primary btn-sm">
+          <i data-lucide="user-plus" class="size-4"></i>팀원 추가
+        </button>
+      </div>
+    </div>
+    <!-- 암호화 비밀 문구 없음: 발급·다시 보기 막힘 -->
+    <div id="member-key-secret-warning" class="alert alert-warning text-sm" hidden>
+      <i data-lucide="alert-triangle" class="size-5"></i>
+      <span>서버에 팀원 키 암호화 비밀 문구(<span id="member-key-secret-env-name" class="font-mono">-</span>)가 없어서
+        발급과 다시 보기를 막아 두었어요. 서버 <span class="font-mono">.env</span> 에 추가하고 다시 시작해 주세요.</span>
+    </div>
+    <p class="text-xs opacity-60">
+      누구에게 어떤 브레인 키를 줬는지 관제소 DB 에 기록해요. 팀원은 관제소에 로그인하지 않고, 여기서 발급한 키를 1:1 로 받아요.
+      키 원문은 암호화해 보관하고, 관리자 키를 다시 넣어야 다시 볼 수 있어요. 팀원을 종료하면 그 사람의 키를 한 번에 폐기해요.
+    </p>
+    <div class="overflow-x-auto">
+      <table class="table table-sm min-w-[720px]">
+        <thead>
+          <tr><th>팀원</th><th>연락처 · 메모</th><th>상태</th><th>살아 있는 키</th><th class="text-right">관리</th></tr>
+        </thead>
+        <tbody id="member-table-body">
+          <tr><td colspan="5" class="text-center opacity-50 py-6">팀원 목록을 불러오는 중이에요...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>

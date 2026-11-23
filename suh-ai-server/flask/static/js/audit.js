@@ -89,6 +89,13 @@
     GBRAIN_TOKEN_CREATE: 'gbrain MCP 토큰 발급',
     GBRAIN_TOKEN_REVOKE: 'gbrain MCP 토큰 폐기',
     GBRAIN_TEAM_CREATE: 'gbrain 팀 브레인 만들기',
+    GBRAIN_MEMBER_CREATE: 'gbrain 팀원 추가',
+    GBRAIN_MEMBER_UPDATE: 'gbrain 팀원 수정',
+    GBRAIN_MEMBER_END: 'gbrain 팀원 종료 (키 일괄 폐기)',
+    GBRAIN_MEMBER_KEY_CREATE: 'gbrain 팀원 키 발급',
+    GBRAIN_MEMBER_KEY_REVOKE: 'gbrain 팀원 키 폐기',
+    GBRAIN_MEMBER_KEY_REVEAL: 'gbrain 팀원 키 다시 보기',
+    GBRAIN_MEMBER_KEY_LINK: 'gbrain 기존 토큰 팀원 연결',
   };
 
   // 카테고리 선택 시 행위 셀렉트를 해당 카테고리 것만으로 좁힌다
@@ -116,7 +123,9 @@
             'AI_DB_ROLE_PASSWORD_RESET', 'AI_DB_ROLE_DELETE', 'AI_DB_GRANT', 'AI_DB_REVOKE',
             'AI_DB_GBRAIN_PREPARE', 'AI_DB_GBRAIN_READER_GRANT', 'AI_DB_GBRAIN_READER_REVOKE'],
     GBRAIN: ['GBRAIN_START', 'GBRAIN_STOP', 'GBRAIN_RESTART', 'GBRAIN_ADMIN_LOGIN',
-             'GBRAIN_TOKEN_CREATE', 'GBRAIN_TOKEN_REVOKE', 'GBRAIN_TEAM_CREATE'],
+             'GBRAIN_TOKEN_CREATE', 'GBRAIN_TOKEN_REVOKE', 'GBRAIN_TEAM_CREATE',
+             'GBRAIN_MEMBER_CREATE', 'GBRAIN_MEMBER_UPDATE', 'GBRAIN_MEMBER_END', 'GBRAIN_MEMBER_KEY_CREATE',
+             'GBRAIN_MEMBER_KEY_REVOKE', 'GBRAIN_MEMBER_KEY_REVEAL', 'GBRAIN_MEMBER_KEY_LINK'],
   };
 
   var KST_FMT = new Intl.DateTimeFormat('ko-KR', {
