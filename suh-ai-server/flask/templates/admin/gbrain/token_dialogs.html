@@ -49,6 +49,10 @@
   <div class="modal-box max-w-2xl">
     <h3 class="font-bold text-lg flex items-center gap-2">
       <i data-lucide="key-round" class="size-5 text-primary"></i><span id="token-secret-title">토큰을 만들었어요</span>
+      <!-- 팀원 키 다시 보기 때만: 자동 닫힘까지 남은 초 (gbrain-member-key-reveal.js) -->
+      <span id="token-secret-countdown" class="badge badge-warning badge-sm whitespace-nowrap ml-auto gap-1" role="timer" aria-live="off" hidden>
+        <i data-lucide="timer" class="size-3"></i><span id="token-secret-countdown-text">-</span>
+      </span>
     </h3>
     <div class="alert alert-warning text-sm mt-3">
       <i data-lucide="alert-triangle" class="size-5"></i>

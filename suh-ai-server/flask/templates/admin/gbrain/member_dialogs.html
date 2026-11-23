@@ -75,35 +75,44 @@
   <form method="dialog" class="modal-backdrop"><button>닫기</button></form>
 </dialog>
 
-<!-- 다시 보기: 관리자 키 재확인 (입력값은 보내고 바로 비움) -->
+<!-- 다시 보기: 관리자 키 재확인 (입력값은 보내고 바로 비움, 결과 창은 남은 초를 보여 주고 저절로 닫힘) -->
 <dialog id="member-reveal-modal" class="modal">
-  <form id="member-reveal-form" class="modal-box">
+  <form id="member-reveal-form" class="modal-box max-w-md">
     <h3 class="font-bold text-lg flex items-center gap-2">
       <i data-lucide="eye" class="size-5 text-primary"></i>키 다시 보기
     </h3>
-    <p class="text-sm mt-3">관제소 관리자 키를 다시 넣어 주세요. 다시 볼 때마다 감사 기록에 남고, 결과 창은 잠시 뒤 저절로 닫혀요.</p>
-    <input id="member-reveal-admin-key" type="password" class="input w-full mt-3 font-mono" required autocomplete="off"
-           aria-label="관리자 키">
+    <div class="bg-base-200 rounded-lg px-3 py-2 mt-3 text-sm">볼 키: <span id="member-reveal-target" class="font-mono font-semibold break-all">-</span></div>
+    <label class="flex flex-col gap-1 w-full mt-4">
+      <span class="text-sm font-medium">관제소 관리자 키</span>
+      <input id="member-reveal-admin-key" type="password" class="input w-full font-mono" required autocomplete="off">
+      <span class="text-xs opacity-60">본인 확인을 위해 한 번 더 넣어 주세요. 볼 때마다 감사 기록에 남고, 결과 창은 남은 시간을 보여 주다가 저절로 닫혀요.</span>
+    </label>
     <p id="member-reveal-error" class="text-sm text-error mt-2" hidden></p>
     <div class="modal-action">
       <button type="button" class="btn btn-ghost btn-sm" data-close-member-modal="member-reveal-modal">취소</button>
-      <button type="submit" id="member-reveal-submit" class="btn btn-primary btn-sm">보기</button>
+      <button type="submit" id="member-reveal-submit" class="btn btn-primary btn-sm">확인하고 보기</button>
     </div>
   </form>
   <form method="dialog" class="modal-backdrop"><button>닫기</button></form>
 </dialog>
 
-<!-- 기존 토큰 연결: 관제소 DB 에 없는 살아 있는 gbrain 토큰 > 팀원 -->
+<!-- 기존 토큰 연결: 관제소 기록이 없는 살아 있는 gbrain 토큰 > 팀원 (토큰이 없으면 연결 버튼 잠금) -->
 <dialog id="member-link-modal" class="modal">
-  <form id="member-link-form" class="modal-box">
+  <form id="member-link-form" class="modal-box max-w-md">
     <h3 class="font-bold text-lg flex items-center gap-2">
       <i data-lucide="link" class="size-5 text-primary"></i>기존 토큰 연결
     </h3>
-    <p class="text-sm mt-3">#221 전에 만든 토큰을 <span id="member-link-target" class="font-semibold">-</span> 에게 연결해요.
-      원문은 gbrain 도 갖고 있지 않아서 다시 볼 수는 없어요.</p>
+    <p class="text-sm mt-3">이미 쓰고 있는 토큰을 <span id="member-link-target" class="font-semibold">-</span> 팀원의 키로 기록해요.
+      토큰은 그대로 살아 있고, 원문은 gbrain 에도 없어서 다시 보기는 할 수 없어요.</p>
     <div class="space-y-3 mt-4">
-      <select id="member-link-brain-select" class="select w-full" aria-label="브레인"></select>
-      <select id="member-link-token-select" class="select w-full font-mono" aria-label="연결할 토큰"></select>
+      <label class="flex flex-col gap-1 w-full">
+        <span class="text-sm font-medium">브레인</span>
+        <select id="member-link-brain-select" class="select w-full"></select>
+      </label>
+      <label class="flex flex-col gap-1 w-full">
+        <span class="text-sm font-medium">연결할 토큰 (관제소 기록이 없는 것만 보여요)</span>
+        <select id="member-link-token-select" class="select w-full font-mono"></select>
+      </label>
       <p id="member-link-error" class="text-sm text-error" hidden></p>
     </div>
     <div class="modal-action">

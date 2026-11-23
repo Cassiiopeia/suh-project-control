@@ -1,4 +1,4 @@
-/* gbrain 팀원 카드 (#221): 팀원 목록 > 추가·수정 > 종료(키 일괄 폐기), 펼치기는 gbrain-member-keys.js
+/* gbrain 팀원 카드 (#221): 팀원 목록 > 추가·수정 > 종료(확인 창 > 키 일괄 폐기), 펼치기는 gbrain-member-keys.js
    API: ../gbrain/members (GET 목록, POST 추가), ../gbrain/members/{id} (PUT 수정), ../gbrain/members/{id}/end (POST)
    목록 응답에 원문 없음, 암호화 비밀 문구가 없으면 경고를 띄움 */
 (function () {
@@ -18,7 +18,7 @@
 
   /* ---------- 1. 목록 ---------- */
   async function loadMembers() {
-    const tableBody = getElement('member-table-body');
+    const memberList = getElement('member-list');
     try {
       const response = await apiFetch(API + '?t=' + Date.now());
       const responseBody = await readResponseBody(response);
@@ -28,54 +28,84 @@
       getElement('member-key-secret-warning').hidden = isKeySecretConfigured;
       renderMembers(responseBody.members || []);
     } catch (error) {
-      tableBody.innerHTML = '<tr><td colspan="5" class="text-center text-error py-6">' + escapeHtml(error.message) + '</td></tr>';
+      memberList.innerHTML = '<li class="text-center text-sm text-error py-6">' + escapeHtml(error.message) + '</li>';
     }
   }
 
   function renderMembers(members) {
     memberById = {};
     members.forEach(function (member) { memberById[member.id] = member; });
-    const tableBody = getElement('member-table-body');
+    const memberList = getElement('member-list');
     if (!members.length) {
-      tableBody.innerHTML = '<tr><td colspan="5" class="text-center opacity-50 py-6">아직 팀원이 없어요. "팀원 추가"로 시작해 보세요.</td></tr>';
+      memberList.innerHTML = '<li class="text-center text-sm opacity-60 py-6">아직 팀원이 없어요. "팀원 추가"로 시작해 보세요.</li>';
       return;
     }
-    tableBody.innerHTML = members.map(renderMemberRow).join('');
-    tableBody.querySelectorAll('[data-member-action]').forEach(function (button) {
+    memberList.innerHTML = members.map(renderMemberItem).join('');
+    memberList.querySelectorAll('[data-member-action]').forEach(function (button) {
       button.addEventListener('click', function () {
-        const member = memberById[button.dataset.memberId];
-        if (member) onMemberAction(button.dataset.memberAction, member, button);
+        if (button.closest('.dropdown')) document.activeElement.blur();  // 더보기 메뉴 닫기
+        runMemberAction(button.dataset.memberAction, Number(button.dataset.memberId), button);
       });
     });
     if (window.lucide) lucide.createIcons();
   }
 
-  function renderMemberRow(member) {
-    const actionButton = function (action, icon, label, buttonClass) {
-      return '<button class="btn btn-xs whitespace-nowrap ' + buttonClass + '" data-member-action="' + action +
-        '" data-member-id="' + member.id + '"><i data-lucide="' + icon + '" class="size-3"></i>' + label + '</button>';
-    };
-    const buttons = [actionButton('expand', 'chevrons-down', '키 보기', 'btn-ghost')];
-    if (member.is_active) {
-      buttons.push(actionButton('issue', 'key-round', '키 발급', 'btn-primary btn-outline'));
-      buttons.push(actionButton('link', 'link', '기존 토큰 연결', 'btn-ghost'));
-      buttons.push(actionButton('edit', 'pencil', '수정', 'btn-ghost'));
-      if (!member.is_owner) buttons.push(actionButton('end', 'user-x', '종료', 'btn-error btn-outline'));
-    }
-    const brains = member.brains.length ? ' (' + member.brains.map(escapeHtml).join(', ') + ')' : '';
-    return '<tr class="' + (member.is_active ? '' : 'opacity-50') + '">' +
-      '<td><div class="font-semibold">' + escapeHtml(member.display_name) + '</div>' +
-      '<div class="font-mono text-[10px] opacity-50">' + escapeHtml(member.handle) + '</div></td>' +
-      '<td class="text-xs"><div>' + escapeHtml(member.contact || '-') + '</div>' +
-      '<div class="opacity-60 break-all">' + escapeHtml(member.memo || '') + '</div></td>' +
-      '<td>' + describeMemberStatus(member) + '</td>' +
-      '<td class="text-xs whitespace-nowrap">' + member.active_key_count + '개' + brains + '</td>' +
-      '<td class="text-right"><div class="flex flex-wrap justify-end gap-1">' + buttons.join('') + '</div></td>' +
-      '</tr>' +
-      '<tr data-member-keys-row="' + member.id + '" hidden><td colspan="5" class="bg-base-200"></td></tr>';
+  // 팀원 1명: 이름·상태 > 연락처·메모 > 사용 중인 키 > 관리 버튼 (좁은 화면은 세로로 쌓임) + 펼치는 키 목록
+  function renderMemberItem(member) {
+    const contactLine = [member.contact, member.memo].filter(Boolean).map(escapeHtml).join(' · ');
+    const brainLine = member.brains.length ? member.brains.map(escapeHtml).join(', ') : '';
+    return '<li data-member-item="' + member.id + '" class="py-3">' +
+      '<div class="flex flex-col gap-2 md:flex-row md:items-center md:gap-4' + (member.is_active ? '' : ' opacity-60') + '">' +
+      '<div class="flex-1 min-w-0">' +
+      '<div class="flex flex-wrap items-center gap-2"><span class="font-semibold">' + escapeHtml(member.display_name) + '</span>' +
+      describeMemberStatus(member) + '<span class="font-mono text-xs opacity-50">' + escapeHtml(member.handle) + '</span></div>' +
+      (contactLine ? '<div class="text-xs opacity-70 break-all mt-1">' + contactLine + '</div>' : '') +
+      '</div>' +
+      '<div class="text-xs md:w-44 shrink-0"><span class="opacity-60">사용 중인 키</span> <span class="font-semibold">' +
+      member.active_key_count + '개</span>' + (brainLine ? '<div class="opacity-60 break-all">' + brainLine + '</div>' : '') + '</div>' +
+      '<div class="flex flex-wrap items-center gap-1 md:justify-end shrink-0">' + renderMemberButtons(member) + '</div>' +
+      '</div>' +
+      '<div data-member-keys-panel="' + member.id + '" class="mt-3 bg-base-200 rounded-box px-3" hidden></div>' +
+      '</li>';
   }
 
-  function onMemberAction(action, member, button) {
+  // 버튼 순서: 키 발급(주 작업) > 키 목록 펼치기 > 더보기(기존 토큰 연결·정보 수정·종료), 종료한 팀원은 키 목록만
+  function renderMemberButtons(member) {
+    const buttons = [];
+    if (member.is_active) {
+      buttons.push(renderActionButton(member, 'issue', 'key-round', '키 발급', 'btn-primary btn-outline'));
+    }
+    buttons.push('<button class="btn btn-ghost btn-xs whitespace-nowrap" data-member-action="expand" data-member-id="' +
+      member.id + '" aria-expanded="false"><i data-lucide="chevron-down" class="size-3"></i>키 목록</button>');
+    if (member.is_active) {
+      const menuItems = [
+        renderMenuItem(member, 'link', 'link', '기존 토큰 연결', ''),
+        renderMenuItem(member, 'edit', 'pencil', '정보 수정', ''),
+      ];
+      if (!member.is_owner) menuItems.push(renderMenuItem(member, 'end', 'user-x', '팀원 종료', 'text-error'));
+      buttons.push('<div class="dropdown dropdown-end">' +
+        '<div tabindex="0" role="button" class="btn btn-ghost btn-xs btn-square" aria-label="' + escapeHtml(member.display_name) +
+        ' 더보기" title="더보기"><i data-lucide="ellipsis" class="size-4"></i></div>' +
+        '<ul tabindex="0" class="dropdown-content menu menu-sm z-10 w-44 p-1 mt-1 rounded-box border border-base-300 bg-base-100 shadow">' +
+        menuItems.join('') + '</ul></div>');
+    }
+    return buttons.join('');
+  }
+
+  function renderActionButton(member, action, icon, label, buttonClass) {
+    return '<button class="btn btn-xs whitespace-nowrap ' + buttonClass + '" data-member-action="' + action +
+      '" data-member-id="' + member.id + '"><i data-lucide="' + icon + '" class="size-3"></i>' + label + '</button>';
+  }
+
+  function renderMenuItem(member, action, icon, label, textClass) {
+    return '<li><button class="' + textClass + '" data-member-action="' + action + '" data-member-id="' + member.id +
+      '"><i data-lucide="' + icon + '" class="size-4"></i>' + label + '</button></li>';
+  }
+
+  // 목록 버튼·키 목록 빈 화면 버튼 공용 진입점
+  function runMemberAction(action, memberId, button) {
+    const member = memberById[memberId];
+    if (!member) return;
     if (action === 'edit') return openMemberForm(member);
     if (action === 'end') return endMember(member, button);
     const memberKeys = window.gbrainMemberKeys;
@@ -127,9 +157,16 @@
 
   /* ---------- 3. 종료 (키 일괄 폐기) ---------- */
   async function endMember(member, button) {
-    const confirmText = member.display_name + ' 팀원을 종료할까요?\n\n살아 있는 키 ' + member.active_key_count +
-      '개를 gbrain 에서 모두 폐기해서 그 사람의 연결이 바로 끊겨요. 되돌릴 수 없어요.';
-    if (!window.confirm(confirmText)) return;
+    const isConfirmed = await window.gbrainPage.confirmDanger({
+      title: member.display_name + ' 팀원을 종료할까요?',
+      consequences: [
+        member.active_key_count ? '사용 중인 키 ' + member.active_key_count + '개를 gbrain 에서 모두 폐기해요.' : '사용 중인 키는 없어요.',
+        '그 팀원의 브레인 연결이 바로 끊겨요.',
+        '종료는 되돌릴 수 없어요. 다시 함께하면 새 영문 id 로 추가해 주세요.',
+      ],
+      confirmLabel: member.active_key_count ? '종료하고 키 ' + member.active_key_count + '개 폐기' : '종료',
+    });
+    if (!isConfirmed) return;
     button.disabled = true;
     try {
       const response = await apiFetch(API + '/' + member.id + '/end', { method: 'POST' });
@@ -143,7 +180,10 @@
     }
   }
 
-  window.gbrainMembers = { reload: loadMembers };
+  window.gbrainMembers = {
+    reload: loadMembers, runAction: runMemberAction,
+    find: function (memberId) { return memberById[memberId]; },
+  };
 
   document.addEventListener('DOMContentLoaded', function () {
     loadMembers();
