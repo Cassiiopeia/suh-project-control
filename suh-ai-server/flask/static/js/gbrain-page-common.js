@@ -15,8 +15,10 @@ window.gbrainPage = (function () {
   }
 
   // 실패 문구 + 에러 코드 (화면 문구 규칙: 오류에는 코드 함께)
+  /* 실패 문구: 메시지 [코드] + 다음 할 일 (팀 브레인 만들기 응답의 next_step, #226) */
   function describeFailure(responseBody, fallbackMessage) {
-    return (responseBody.error || fallbackMessage) + (responseBody.code ? ' [' + responseBody.code + ']' : '');
+    return (responseBody.error || fallbackMessage) + (responseBody.code ? ' [' + responseBody.code + ']' : '')
+      + (responseBody.next_step ? ' · 다음 할 일: ' + responseBody.next_step : '');
   }
 
   /* 되돌릴 수 없는 작업 확인 창: 제목 + 설명 + 결과 목록 > 확인이면 true (취소·바깥 클릭·Esc 는 false)

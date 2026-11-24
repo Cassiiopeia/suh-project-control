@@ -10,13 +10,15 @@
 
   // 만들기 단계 > 표시 이름, 결과 값 > 문구
   const STEP_LABELS = {
-    database: 'DB', writer_role: '쓰기 계정', prepare: '브레인 준비', admin_token: '관리자 토큰', config: 'gbrain 설정',
-    service: '서버(서비스)', nginx: '공개 주소', monitoring: '관제소 감시',
+    database: 'DB', database_repair: 'DB 손보기', writer_role: '쓰기 계정', grants: '쓰기 계정 권한', prepare: '브레인 준비',
+    admin_token: '관리자 토큰', config: 'gbrain 설정', service: '서버(서비스)', nginx: '공개 주소', monitoring: '관제소 감시',
   };
   const STEP_RESULT_LABELS = {
-    created: '새로 만들었어요', kept: '있던 것을 그대로 써요', prepared: '준비했어요', written: '설정을 쓰고 스키마를 맞췄어요',
-    initialized: '새 브레인으로 초기화했어요', installed: '설치·기동하고 헬스를 확인했어요', published: '공개 경로를 열었어요',
-    included: '팀 브레인 전체 감시에 포함됐어요',
+    created: '새로 만들었어요', kept: '있던 것을 그대로 써요', adopted: '있던 빈 DB 를 받아 썼어요', reapplied: '다시 적용했어요',
+    prepared: '준비했어요', written: '설정을 쓰고 스키마를 맞췄어요', initialized: '새 브레인으로 초기화했어요',
+    installed: '설치·기동하고 헬스를 확인했어요', published: '공개 경로를 열었어요', included: '팀 브레인 전체 감시에 포함됐어요',
+    owner_changed: '소유자를 관리 계정으로 바꿨어요', ops_installed: '준비 함수를 설치했어요',
+    'owner_changed+ops_installed': '소유자를 바꾸고 준비 함수를 설치했어요',
   };
 
   /* ---------- 1. 목록 ---------- */

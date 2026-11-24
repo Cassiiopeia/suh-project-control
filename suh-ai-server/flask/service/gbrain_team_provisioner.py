@@ -39,6 +39,9 @@ class GbrainTeamProvisioner:
         logger.info(f'[gbrain team] admin token created : brain={instance.brain_id}')
         return True
 
+    def has_admin_token(self, instance) -> bool:
+        return os.path.exists(instance.admin_token_file)
+
     # ---------- gbrain 설정·스키마 ----------
     def has_brain_config(self, instance) -> bool:
         return os.path.exists(config.get_gbrain_config_path(instance.gbrain_home))
@@ -89,10 +92,14 @@ class GbrainTeamProvisioner:
     def get_nginx_map_path(self, instance) -> str:
         return os.path.join(config.GBRAIN_TEAM_ROOT, 'nginx', f'{instance.brain_id}.map')
 
+    def is_nginx_route_published(self, instance) -> bool:
+        """map 파일이 지금 포트와 같은 내용인지 (dry_run 용, 읽기만)"""
+        return self._read_text(self.get_nginx_map_path(instance)) == self._build_nginx_map_line(instance)
+
     def publish_nginx_route(self, instance) -> bool:
         """map 파일(<project> 127.0.0.1:<port>;) > nginx -t > reload, 검사 실패면 이전 내용 복원, 반환: 바뀌었으면 True"""
         map_path = self.get_nginx_map_path(instance)
-        map_line = f'{instance.brain_id} 127.0.0.1:{instance.port};\n'
+        map_line = self._build_nginx_map_line(instance)
         previous_line = self._read_text(map_path)
         if previous_line == map_line:
             return False
@@ -110,6 +117,10 @@ class GbrainTeamProvisioner:
                     map_stream.write(previous_line)
             raise
         return True
+
+    @staticmethod
+    def _build_nginx_map_line(instance) -> str:
+        return f'{instance.brain_id} 127.0.0.1:{instance.port};\n'
 
     def _reload_nginx(self) -> None:
         nginx_directory = self._find_nginx_directory()
@@ -176,6 +187,13 @@ class GbrainTeamProvisioner:
         except (OSError, ValueError):
             raise GbrainServerError('개인 gbrain 설정 파일을 읽지 못했어요 (임베딩 모델 기준값)', 'personal_config_unreadable', 500)
         return personal_config if isinstance(personal_config, dict) else {}
+
+    def read_personal_database_url(self) -> str:
+        """개인 브레인 DB 접속 문자열 (슈퍼유저, 이미 있는 팀 DB 손보기에만 씀, 값은 로그·응답에 넣지 않음)"""
+        database_url = str(self._read_personal_config().get('database_url', ''))
+        if not database_url:
+            raise GbrainServerError('개인 gbrain 설정에서 DB 주소를 찾지 못했어요', 'personal_config_unreadable', 500)
+        return database_url
 
     def _read_personal_database_address(self) -> tuple:
         database_url = str(self._read_personal_config().get('database_url', ''))

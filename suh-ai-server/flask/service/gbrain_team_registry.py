@@ -81,6 +81,15 @@ class GbrainTeamRegistry:
             self._write_entries(entries + [new_entry])
             return new_entry
 
+    def preview_entry(self, project: str, database_name: str, writer_role: str) -> dict:
+        """dry_run 용: 등록돼 있으면 그 항목, 아니면 받게 될 포트로 만든 항목 (파일에 쓰지 않음, is_registered 표시)"""
+        entries = self.list_entries()
+        existing_entry = next((entry for entry in entries if entry['project'] == project), None)
+        if existing_entry:
+            return {**existing_entry, 'is_registered': True}
+        return {'project': project, 'port': self._allocate_port(entries), 'database_name': database_name,
+                'writer_role': writer_role, 'created_at': None, 'is_registered': False}
+
     @staticmethod
     def _allocate_port(entries: list) -> int:
         used_ports = {int(entry['port']) for entry in entries if str(entry.get('port', '')).isdigit()}

@@ -144,6 +144,41 @@ class AiDbService:
         client.prepare_gbrain_database(database_name, writer_role)
         logger.info(f"[ai-db] gbrain prepared : {database_name} writer={writer_role}")
 
+    # ---- 팀 브레인 만들기 전용 (#226, 지우기·되돌리기 없음) ----
+
+    def inspect_team_database(self, database_name, writer_role) -> dict:
+        client = self._require_client()
+        self._validate_database_name(database_name)
+        self._validate_role_name(writer_role)
+        return client.inspect_team_database(database_name, writer_role)
+
+    def inspect_team_writer_role(self, writer_role) -> dict:
+        client = self._require_client()
+        self._validate_role_name(writer_role)
+        return client.inspect_team_writer_role(writer_role)
+
+    def create_team_database(self, database_name) -> None:
+        client = self._require_client()
+        self._validate_database_name(database_name)
+        client.create_team_database(database_name)
+        logger.info(f"[ai-db] team database created : {database_name}")
+
+    def create_team_writer_role(self, writer_role) -> str:
+        """무작위 비번으로 계정만 생성 > 비번 반환 (권한은 apply_team_writer_grants 가 매번 적용)"""
+        client = self._require_client()
+        self._validate_role_name(writer_role)
+        password = generate_password()
+        client.create_role(writer_role, password)
+        logger.info(f"[ai-db] team writer role created : {writer_role}")
+        return password
+
+    def apply_team_writer_grants(self, database_name, writer_role) -> None:
+        client = self._require_client()
+        self._validate_database_name(database_name)
+        self._validate_role_name(writer_role)
+        client.apply_team_writer_grants(database_name, writer_role)
+        logger.info(f"[ai-db] team writer grants applied : {writer_role} -> {database_name}")
+
     # ---- 연결 문자열 ----
 
     def build_connection_url(self, role_name: str, password: str, database_name: str = None) -> str:

@@ -19,6 +19,7 @@ class FakeTeamBrainService:
         self.create_error = None
         self.is_healthy = True
         self.created_with = None
+        self.planned_with = None
 
     def list_team_brains(self):
         return [{'project': 'passql', 'port': 3141, 'mcp_server_name': 'gbrain-passql'}]
@@ -31,6 +32,13 @@ class FakeTeamBrainService:
         if self.create_error:
             raise self.create_error
         return {'brain': {'project': project, 'port': 3141}, 'steps': {'config': 'written'}}
+
+    def plan_team_brain(self, project, writer_password=None):
+        self.planned_with = (project, writer_password)
+        if self.create_error:
+            raise self.create_error
+        return {'dry_run': True, 'can_create': True, 'brain': {'project': project, 'port': 3142},
+                'plan': {'database': 'would_create'}, 'blockers': [], 'details': {}}
 
     def find_instance(self, project):
         if project != 'passql':
@@ -120,6 +128,47 @@ def test_만들기_중간_실패는_단계와_새_비번을_응답에만_싣는�
     assert response.status_code == 500 and body['code'] == 'service_install_failed'
     assert body['writer_secret']['password'] == WRITER_PASSWORD
     assert audit_calls[0]['success'] is False and WRITER_PASSWORD not in str(audit_calls)
+
+
+def test_실패_응답에는_다음_할_일이_항상_실린다(client, team_service, audit_calls):
+    error = GbrainServerError('DB 에 팀 브레인이 아닌 객체가 있어서 멈췄어요', 'team_database_not_empty_unknown', 409)
+    error.details = {'steps': {}, 'failed_step': 'database'}
+    team_service.create_error = error
+
+    body = client.post('/gbrain/teams', json={'project': 'shop'}).get_json()
+
+    assert body['code'] == 'team_database_not_empty_unknown' and body['next_step'] and body['steps'] == {}
+    assert audit_calls[0]['detail']['failed_step'] == 'database'
+    assert audit_calls[0]['detail']['code'] == 'team_database_not_empty_unknown'
+
+
+def test_dry_run_은_계획만_돌려주고_만들기를_부르지_않으며_감사하지_않는다(client, team_service, audit_calls):
+    response = client.post('/gbrain/teams', json={'project': 'sandboxcheck', 'dry_run': True})
+
+    body = response.get_json()
+    assert response.status_code == 200 and response.headers['Cache-Control'] == 'no-store'
+    assert body['success'] is True and body['dry_run'] is True and body['plan']['database'] == 'would_create'
+    assert team_service.created_with is None and team_service.planned_with == ('sandboxcheck', None)
+    assert audit_calls == []
+
+
+def test_dry_run_실패도_dry_run_과_다음_할_일을_싣는다(client, team_service, audit_calls):
+    error = GbrainServerError('프로젝트 키 형식이 달라요', 'invalid_project', 400)
+    error.details = {'steps': {}, 'failed_step': 'dry_run'}
+    team_service.create_error = error
+
+    body = client.post('/gbrain/teams', json={'project': 'Bad', 'dry_run': True}).get_json()
+
+    assert body['dry_run'] is True and body['code'] == 'invalid_project' and body['next_step']
+    assert audit_calls == []
+
+
+@pytest.mark.parametrize('dry_run_value', ['true', 1, None, 'false'])
+def test_dry_run_이_bool_이_아니면_만들지_않고_400(client, team_service, audit_calls, dry_run_value):
+    response = client.post('/gbrain/teams', json={'project': 'sandboxcheck', 'dry_run': dry_run_value})
+
+    assert response.status_code == 400 and response.get_json()['code'] == 'invalid_dry_run'
+    assert team_service.created_with is None and audit_calls == []
 
 
 def test_헬스는_전부_정상이면_200_아니면_503(client, team_service):

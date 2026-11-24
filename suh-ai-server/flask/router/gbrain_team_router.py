@@ -2,6 +2,7 @@
 gbrain 팀 브레인 관리 API (#210): 관리 페이지 /admin/gbrain 의 팀 브레인 카드와 관제소 감시가 사용
 nginx /api/flask/ X-API-Key 뒤에서 동작 (감시는 127.0.0.1:5000 직접), 만들기·제어는 감사 기록
 만들기 응답에 새 쓰기 계정 비번이 실릴 수 있음 > Cache-Control: no-store, 감사 상세에는 이름만
+실패 응답 = success false + error(해요체) + code + next_step (+ 만들기는 steps·failed_step), dry_run 은 감사 생략 (#226)
 """
 import logging
 
@@ -12,7 +13,8 @@ from router import ai_db_router
 from service.audit_service import AuditAction, AuditCategory
 from service.gbrain_server_service import GbrainServerError, GbrainServerService
 from service.gbrain_team_brain_service import GbrainTeamBrainService
-from util.audit_helper import audited, set_audit_action, set_audit_detail
+from service.gbrain_team_errors import find_next_step
+from util.audit_helper import audited, set_audit_action, set_audit_detail, skip_audit
 
 logger = logging.getLogger(__name__)
 
@@ -50,8 +52,9 @@ def _no_store(response, status_code):
     return response, status_code
 
 
-def _error_response(error: GbrainServerError):
-    body = {'success': False, 'error': str(error), 'code': error.code, **(error.details or {})}
+def _error_response(error: GbrainServerError, extra_fields=None):
+    body = {'success': False, 'error': str(error), 'code': error.code, 'next_step': find_next_step(error.code),
+            **(error.details or {}), **(extra_fields or {})}
     return _no_store(jsonify(body), error.status_code)
 
 
@@ -77,18 +80,37 @@ def check_team_brains_health():
 @gbrain_team_bp.route('/gbrain/teams', methods=['POST'])
 @audited(AuditCategory.GBRAIN, AuditAction.GBRAIN_TEAM_CREATE)
 def create_team_brain():
-    """팀 브레인 만들기 (다시 눌러도 같은 결과), 새 쓰기 계정 비번은 이 응답에만"""
+    """팀 브레인 만들기 (다시 눌러도 같은 결과), 새 쓰기 계정 비번은 이 응답에만, dry_run true 면 계획만"""
     body = request.get_json(silent=True) or {}
     project = body.get('project')
     writer_password = body.get('writer_password') or None
+    dry_run = body.get('dry_run', False)
+    # dry_run 은 bool 만 (문자열 "true" 를 실제 만들기로 받지 않음)
+    if not isinstance(dry_run, bool):
+        skip_audit()
+        error = GbrainServerError('dry_run 은 true 나 false 로 보내 주세요', 'invalid_dry_run', 400)
+        return _error_response(error, {'steps': {}})
+    if dry_run:
+        return _plan_team_brain(project, writer_password)
     set_audit_detail({'project': str(project)[:32], 'has_writer_password': writer_password is not None})
     try:
         created = _service().create_team_brain(project, writer_password)
     except GbrainServerError as error:
-        set_audit_detail({'steps': (error.details or {}).get('steps')})
+        details = error.details or {}
+        set_audit_detail({'steps': details.get('steps'), 'failed_step': details.get('failed_step'), 'code': error.code})
         return _error_response(error)
     set_audit_detail({'steps': created['steps'], 'port': created['brain']['port']})
     return _no_store(jsonify({'success': True, **created}), 200)
+
+
+def _plan_team_brain(project, writer_password):
+    """dry_run: 바뀌는 것이 없어 감사 생략, 응답·오류 모두 dry_run true 를 실음"""
+    skip_audit()
+    try:
+        planned = _service().plan_team_brain(project, writer_password)
+    except GbrainServerError as error:
+        return _error_response(error, {'dry_run': True})
+    return _no_store(jsonify({'success': True, **planned}), 200)
 
 
 @gbrain_team_bp.route('/gbrain/teams/<project>/status', methods=['GET'])
