@@ -1,14 +1,33 @@
 {
   "metadata": {
-    "lastUpdated": "2026-11-24T07:39:01Z",
-    "currentVersion": "2.0.105",
+    "lastUpdated": "2026-11-24T07:43:23Z",
+    "currentVersion": "2.0.106",
     "projectType": "python",
-    "totalReleases": 101,
+    "totalReleases": 102,
     "projectTypes": [
       "python"
     ]
   },
   "releases": [
+    {
+      "version": "2.0.106",
+      "project_type": "python",
+      "project_types": [
+        "python"
+      ],
+      "date": "2026-11-24",
+      "pr_number": 233,
+      "raw_summary": "## Summary by CodeRabbit\n\n## 릴리스 노트\n\n* **버그 수정**\n  * AI 서버 배포 재시도 적용 후 서비스 재시작 단계가 실행되지 않던 문제 수정",
+      "parsed_changes": {
+        "버그_수정": {
+          "title": "버그 수정",
+          "items": [
+            "AI 서버 배포 재시도 적용 후 서비스 재시작 단계가 실행되지 않던 문제 수정"
+          ]
+        }
+      },
+      "parse_method": "markdown"
+    },
     {
       "version": "2.0.105",
       "project_type": "python",

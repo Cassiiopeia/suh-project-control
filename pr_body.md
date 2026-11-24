@@ -4,8 +4,8 @@
 
 ## 릴리스 노트
 
-* **개선**
-  * AI 서버 배포 중 서버 접속이 끊기면 자동으로 다시 시도해 배포가 중간에 멈추지 않음
+* **버그 수정**
+  * AI 서버 배포 재시도 적용 후 서비스 재시작 단계가 실행되지 않던 문제 수정
 
 <!-- end of auto-generated comment: release notes by coderabbit.ai -->
 
