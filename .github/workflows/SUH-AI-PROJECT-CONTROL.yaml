@@ -23,6 +23,10 @@
 #    - Nginx 설정 적용 및 재시작 (deploy-nginx.ps1)
 #    - Flask 서버 재시작 (deploy-flask.ps1)
 #
+# 서버 접속 단계 재시도 (#229):
+# - 서버 sshd가 무작위 대입 공격으로 MaxStartups 초과 시 새 연결을 끊음
+# - 업로드, 원격 스크립트 단계 5개를 wretry.action으로 감싸 접속 실패 시 자동 재시도
+#
 # 트리거 조건:
 # - main, deploy 브랜치에 push 시 자동 실행
 # - workflow_dispatch를 통한 수동 실행
@@ -41,6 +45,13 @@ on:
   push:
     branches: [ "main", "deploy" ]
   workflow_dispatch:
+
+env:
+  # Windows 서버 sshd 포트
+  SERVER_SSH_PORT: 2023
+  # 접속 단계 재시도: 최대 시도 횟수, 시도 간격 (30초)
+  SSH_RETRY_ATTEMPT_LIMIT: 6
+  SSH_RETRY_DELAY_MILLISECONDS: 30000
 
 jobs:
   prepare-and-upload:
@@ -88,16 +99,21 @@ jobs:
             echo "[INFO] FLASK_ENV_FILE secret not set - skip (.env unchanged on server)"
           fi
 
+      # with 값은 wretry가 YAML로 다시 파싱 > 비밀값은 toJSON으로 따옴표 처리 (특수문자 보호)
       - name: suh-ai-server 폴더 업로드
-        uses: appleboy/scp-action@v0.1.7
+        uses: Wandalen/wretry.action@e68c23e6309f2871ca8ae4763e7629b9c258e1ea # v3.8.0
         with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          port: 2023
-          password: ${{ secrets.SERVER_PASSWORD }}
-          source: "suh-ai-server"
-          target: "C:/AI/"
-          rm: false
+          action: appleboy/scp-action@v0.1.7
+          attempt_limit: ${{ env.SSH_RETRY_ATTEMPT_LIMIT }}
+          attempt_delay: ${{ env.SSH_RETRY_DELAY_MILLISECONDS }}
+          with: |
+            host: ${{ toJSON(secrets.SERVER_HOST) }}
+            username: ${{ toJSON(secrets.SERVER_USER) }}
+            port: ${{ env.SERVER_SSH_PORT }}
+            password: ${{ toJSON(secrets.SERVER_PASSWORD) }}
+            source: "suh-ai-server"
+            target: "C:/AI/"
+            rm: false
 
   deploy-and-restart:
     name: 배포 및 서비스 재시작
@@ -105,44 +121,60 @@ jobs:
     needs: prepare-and-upload
     steps:
       - name: 초기 배포 스크립트 실행
-        uses: appleboy/ssh-action@v1.1.0
+        uses: Wandalen/wretry.action@e68c23e6309f2871ca8ae4763e7629b9c258e1ea # v3.8.0
         with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          port: 2023
-          password: ${{ secrets.SERVER_PASSWORD }}
-          script_stop: true
-          script: |
-            powershell -ExecutionPolicy Bypass -File "C:\AI\suh-ai-server\scripts\deploy-init.ps1" -CommitSha "${{ github.sha }}" -GitHubAction
+          action: appleboy/ssh-action@v1.1.0
+          attempt_limit: ${{ env.SSH_RETRY_ATTEMPT_LIMIT }}
+          attempt_delay: ${{ env.SSH_RETRY_DELAY_MILLISECONDS }}
+          with: |
+            host: ${{ toJSON(secrets.SERVER_HOST) }}
+            username: ${{ toJSON(secrets.SERVER_USER) }}
+            port: ${{ env.SERVER_SSH_PORT }}
+            password: ${{ toJSON(secrets.SERVER_PASSWORD) }}
+            script_stop: true
+            script: |
+              powershell -ExecutionPolicy Bypass -File "C:\AI\suh-ai-server\scripts\deploy-init.ps1" -CommitSha "${{ github.sha }}" -GitHubAction
 
       - name: Nginx 설정 적용 및 재시작
-        uses: appleboy/ssh-action@v1.1.0
+        uses: Wandalen/wretry.action@e68c23e6309f2871ca8ae4763e7629b9c258e1ea # v3.8.0
         with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          port: 2023
-          password: ${{ secrets.SERVER_PASSWORD }}
-          script_stop: true
-          script: |
-            powershell -ExecutionPolicy Bypass -File "C:\AI\suh-ai-server\scripts\deploy-nginx.ps1"
+          action: appleboy/ssh-action@v1.1.0
+          attempt_limit: ${{ env.SSH_RETRY_ATTEMPT_LIMIT }}
+          attempt_delay: ${{ env.SSH_RETRY_DELAY_MILLISECONDS }}
+          with: |
+            host: ${{ toJSON(secrets.SERVER_HOST) }}
+            username: ${{ toJSON(secrets.SERVER_USER) }}
+            port: ${{ env.SERVER_SSH_PORT }}
+            password: ${{ toJSON(secrets.SERVER_PASSWORD) }}
+            script_stop: true
+            script: |
+              powershell -ExecutionPolicy Bypass -File "C:\AI\suh-ai-server\scripts\deploy-nginx.ps1"
 
       - name: Flask 서버 재시작
-        uses: appleboy/ssh-action@v1.1.0
+        uses: Wandalen/wretry.action@e68c23e6309f2871ca8ae4763e7629b9c258e1ea # v3.8.0
         with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          port: 2023
-          password: ${{ secrets.SERVER_PASSWORD }}
-          script_stop: true
-          script: |
-            powershell -ExecutionPolicy Bypass -File "C:\AI\suh-ai-server\scripts\deploy-flask.ps1"
+          action: appleboy/ssh-action@v1.1.0
+          attempt_limit: ${{ env.SSH_RETRY_ATTEMPT_LIMIT }}
+          attempt_delay: ${{ env.SSH_RETRY_DELAY_MILLISECONDS }}
+          with: |
+            host: ${{ toJSON(secrets.SERVER_HOST) }}
+            username: ${{ toJSON(secrets.SERVER_USER) }}
+            port: ${{ env.SERVER_SSH_PORT }}
+            password: ${{ toJSON(secrets.SERVER_PASSWORD) }}
+            script_stop: true
+            script: |
+              powershell -ExecutionPolicy Bypass -File "C:\AI\suh-ai-server\scripts\deploy-flask.ps1"
 
       - name: TTS 사전준비 스크립트 실행
-        uses: appleboy/ssh-action@v1.1.0
+        uses: Wandalen/wretry.action@e68c23e6309f2871ca8ae4763e7629b9c258e1ea # v3.8.0
         with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          port: 2023
-          password: ${{ secrets.SERVER_PASSWORD }}
-          script: |
-            powershell -ExecutionPolicy Bypass -File "C:\AI\suh-ai-server\scripts\deploy-tts.ps1"
+          action: appleboy/ssh-action@v1.1.0
+          attempt_limit: ${{ env.SSH_RETRY_ATTEMPT_LIMIT }}
+          attempt_delay: ${{ env.SSH_RETRY_DELAY_MILLISECONDS }}
+          with: |
+            host: ${{ toJSON(secrets.SERVER_HOST) }}
+            username: ${{ toJSON(secrets.SERVER_USER) }}
+            port: ${{ env.SERVER_SSH_PORT }}
+            password: ${{ toJSON(secrets.SERVER_PASSWORD) }}
+            script: |
+              powershell -ExecutionPolicy Bypass -File "C:\AI\suh-ai-server\scripts\deploy-tts.ps1"
