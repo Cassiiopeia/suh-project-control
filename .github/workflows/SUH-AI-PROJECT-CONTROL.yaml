@@ -25,7 +25,9 @@
 #
 # 서버 접속 단계 재시도 (#229):
 # - 서버 sshd가 무작위 대입 공격으로 MaxStartups 초과 시 새 연결을 끊음
-# - 업로드, 원격 스크립트 단계 5개를 wretry.action으로 감싸 접속 실패 시 자동 재시도
+# - 업로드: wretry.action으로 감싸 실패 시 재시도 (appleboy scp는 Docker 액션)
+# - 원격 스크립트 4개: ssh_with_retry.sh로 접속 실패(255)일 때만 재시도
+#   (appleboy ssh v1.1.0은 composite 액션 > wretry 미지원)
 #
 # 트리거 조건:
 # - main, deploy 브랜치에 push 시 자동 실행
@@ -120,61 +122,40 @@ jobs:
     runs-on: ubuntu-latest
     needs: prepare-and-upload
     steps:
-      - name: 초기 배포 스크립트 실행
-        uses: Wandalen/wretry.action@e68c23e6309f2871ca8ae4763e7629b9c258e1ea # v3.8.0
+      # 재시도 스크립트(.github/scripts/ssh_with_retry.sh)만 가져옴
+      - name: 재시도 스크립트 가져오기
+        uses: actions/checkout@v4
         with:
-          action: appleboy/ssh-action@v1.1.0
-          attempt_limit: ${{ env.SSH_RETRY_ATTEMPT_LIMIT }}
-          attempt_delay: ${{ env.SSH_RETRY_DELAY_MILLISECONDS }}
-          with: |
-            host: ${{ toJSON(secrets.SERVER_HOST) }}
-            username: ${{ toJSON(secrets.SERVER_USER) }}
-            port: ${{ env.SERVER_SSH_PORT }}
-            password: ${{ toJSON(secrets.SERVER_PASSWORD) }}
-            script_stop: true
-            script: |
-              powershell -ExecutionPolicy Bypass -File "C:\AI\suh-ai-server\scripts\deploy-init.ps1" -CommitSha "${{ github.sha }}" -GitHubAction
+          sparse-checkout: .github/scripts
+          sparse-checkout-cone-mode: false
+
+      - name: sshpass 설치
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
+
+      - name: 초기 배포 스크립트 실행
+        run: .github/scripts/ssh_with_retry.sh 'powershell -ExecutionPolicy Bypass -File "C:\AI\suh-ai-server\scripts\deploy-init.ps1" -CommitSha "${{ github.sha }}" -GitHubAction'
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SSHPASS: ${{ secrets.SERVER_PASSWORD }}
 
       - name: Nginx 설정 적용 및 재시작
-        uses: Wandalen/wretry.action@e68c23e6309f2871ca8ae4763e7629b9c258e1ea # v3.8.0
-        with:
-          action: appleboy/ssh-action@v1.1.0
-          attempt_limit: ${{ env.SSH_RETRY_ATTEMPT_LIMIT }}
-          attempt_delay: ${{ env.SSH_RETRY_DELAY_MILLISECONDS }}
-          with: |
-            host: ${{ toJSON(secrets.SERVER_HOST) }}
-            username: ${{ toJSON(secrets.SERVER_USER) }}
-            port: ${{ env.SERVER_SSH_PORT }}
-            password: ${{ toJSON(secrets.SERVER_PASSWORD) }}
-            script_stop: true
-            script: |
-              powershell -ExecutionPolicy Bypass -File "C:\AI\suh-ai-server\scripts\deploy-nginx.ps1"
+        run: .github/scripts/ssh_with_retry.sh 'powershell -ExecutionPolicy Bypass -File "C:\AI\suh-ai-server\scripts\deploy-nginx.ps1"'
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SSHPASS: ${{ secrets.SERVER_PASSWORD }}
 
       - name: Flask 서버 재시작
-        uses: Wandalen/wretry.action@e68c23e6309f2871ca8ae4763e7629b9c258e1ea # v3.8.0
-        with:
-          action: appleboy/ssh-action@v1.1.0
-          attempt_limit: ${{ env.SSH_RETRY_ATTEMPT_LIMIT }}
-          attempt_delay: ${{ env.SSH_RETRY_DELAY_MILLISECONDS }}
-          with: |
-            host: ${{ toJSON(secrets.SERVER_HOST) }}
-            username: ${{ toJSON(secrets.SERVER_USER) }}
-            port: ${{ env.SERVER_SSH_PORT }}
-            password: ${{ toJSON(secrets.SERVER_PASSWORD) }}
-            script_stop: true
-            script: |
-              powershell -ExecutionPolicy Bypass -File "C:\AI\suh-ai-server\scripts\deploy-flask.ps1"
+        run: .github/scripts/ssh_with_retry.sh 'powershell -ExecutionPolicy Bypass -File "C:\AI\suh-ai-server\scripts\deploy-flask.ps1"'
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SSHPASS: ${{ secrets.SERVER_PASSWORD }}
 
       - name: TTS 사전준비 스크립트 실행
-        uses: Wandalen/wretry.action@e68c23e6309f2871ca8ae4763e7629b9c258e1ea # v3.8.0
-        with:
-          action: appleboy/ssh-action@v1.1.0
-          attempt_limit: ${{ env.SSH_RETRY_ATTEMPT_LIMIT }}
-          attempt_delay: ${{ env.SSH_RETRY_DELAY_MILLISECONDS }}
-          with: |
-            host: ${{ toJSON(secrets.SERVER_HOST) }}
-            username: ${{ toJSON(secrets.SERVER_USER) }}
-            port: ${{ env.SERVER_SSH_PORT }}
-            password: ${{ toJSON(secrets.SERVER_PASSWORD) }}
-            script: |
-              powershell -ExecutionPolicy Bypass -File "C:\AI\suh-ai-server\scripts\deploy-tts.ps1"
+        run: .github/scripts/ssh_with_retry.sh 'powershell -ExecutionPolicy Bypass -File "C:\AI\suh-ai-server\scripts\deploy-tts.ps1"'
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SSHPASS: ${{ secrets.SERVER_PASSWORD }}
