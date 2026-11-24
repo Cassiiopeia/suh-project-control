@@ -1,17 +1,22 @@
 """
-팀 브레인 만들기·조회 (#210): 프로젝트마다 DB·쓰기 계정·gbrain HTTP 서버·공개 경로 1벌
-만들기 흐름 (다시 눌러도 같은 결과): 검증 > DB > 쓰기 계정 > 브레인 준비 > 등록(포트) > 관리자 토큰 >
-  gbrain 설정·스키마 > NSSM 서비스 > nginx 경로 > 감시(통합 헬스, 자동 포함)
+팀 브레인 만들기·조회 (#210, #226): 프로젝트마다 DB·쓰기 계정·gbrain HTTP 서버·공개 경로 1벌
+만들기 흐름 (다시 눌러도 같은 결과): 검증 > DB 검사·판정 > DB(만듦·받아 씀·그대로) > 쓰기 계정 > 권한 재적용 > 브레인 준비 >
+  등록(포트) > 관리자 토큰 > gbrain 설정·스키마 > NSSM 서비스 > nginx 경로 > 감시(통합 헬스, 자동 포함)
+지우는 단계 없음: 알 수 없는 객체가 있는 DB 는 멈추고 알림, 실패하면 끝난 단계·다음 할 일과 함께 오류
 쓰기 계정 비번: 새로 만들 때만 응답 1회 (동기화 맥용), 기존 계정은 운영자 입력으로만 받음 (재설정하면 맥 동기화가 끊김)
+dry_run: gbrain_team_dry_run 이 같은 검사로 계획만 돌려줌
 """
 import logging
 import re
 from urllib.parse import quote
 
 from config import gbrain_server_config as config
-from service.ai_db.ai_db_errors import AiDbError
 from service.gbrain_instance import PERSONAL_BRAIN_ID, to_team_database_name, to_team_writer_role
 from service.gbrain_server_service import GbrainServerError, GbrainServerService
+from service.gbrain_team_database_repair import GbrainTeamDatabaseRepair
+from service.gbrain_team_database_steps import GbrainTeamDatabaseSteps
+from service.gbrain_team_dry_run import build_team_brain_plan
+from service.gbrain_team_errors import attach_failure_context
 from service.gbrain_team_provisioner import gbrain_team_provisioner
 from service.gbrain_team_registry import GbrainTeamRegistryError, gbrain_team_registry
 
@@ -24,13 +29,23 @@ RESERVED_PROJECT_KEYS = frozenset({PERSONAL_BRAIN_ID})
 SYNC_TUNNEL_LOCAL_PORT = 15433
 
 
+class _CreateRun:
+    """만들기 1회 진행 상태: 끝난 단계, 지금 단계, 새 쓰기 계정 비번(있으면)"""
+
+    def __init__(self):
+        self.steps = {}
+        self.step = 'validate'
+        self.created_password = None
+
+
 class GbrainTeamBrainService:
     def __init__(self, ai_db_service_factory, registry=gbrain_team_registry, provisioner=gbrain_team_provisioner,
-                 server_service_factory=GbrainServerService.for_instance):
+                 server_service_factory=GbrainServerService.for_instance, database_repair=None):
         self._ai_db_service_factory = ai_db_service_factory
         self.registry = registry
         self.provisioner = provisioner
         self._server_service_factory = server_service_factory
+        self.database_repair = database_repair or GbrainTeamDatabaseRepair()
 
     # ---------- 조회 ----------
     def list_team_brains(self) -> list:
@@ -58,6 +73,9 @@ class GbrainTeamBrainService:
             raise GbrainServerError('팀 브레인을 찾지 못했어요', 'team_brain_not_found', 404)
         return instance
 
+    def read_service_state(self, instance) -> str:
+        return self._server_service_factory(instance).get_status().get('service_state')
+
     def check_health(self) -> dict:
         """감시용: 등록된 팀 브레인 전부 /health 정상이면 is_healthy (0개도 정상)"""
         unhealthy_projects = [instance.brain_id for instance in self._list_instances()
@@ -66,69 +84,83 @@ class GbrainTeamBrainService:
 
     # ---------- 만들기 ----------
     def create_team_brain(self, project, writer_password=None) -> dict:
-        """만들기 흐름 전체 > {brain, steps, writer_secret(새 계정일 때만)}"""
-        self._validate_project(project)
-        database_name, writer_role = to_team_database_name(project), to_team_writer_role(project)
-        steps = {}
-        ai_db_service = self._ai_db_service_factory()
-
-        steps['database'] = self._run_ai_db(lambda: self._ensure_database(ai_db_service, database_name))
-        created_password = self._run_ai_db(lambda: self._ensure_writer_role(ai_db_service, writer_role, database_name))
-        steps['writer_role'] = 'created' if created_password else 'kept'
+        """만들기 흐름 전체 > {brain, steps, writer_secret(새 계정일 때만)}, 실패는 단계·다음 할 일을 붙여 재발생"""
+        run = _CreateRun()
         try:
-            instance = self._provision(project, ai_db_service, database_name, writer_role,
-                                       created_password or writer_password, steps)
+            self._validate_project(project)
+            return self._create(project, writer_password, run)
         except GbrainServerError as error:
-            # 새 쓰기 계정 비번은 다시 받을 수 없음 > 뒤 단계가 실패해도 오류 응답에 1회 실어 보냄
-            error.details = {'steps': steps}
-            if created_password:
-                error.details['writer_secret'] = self._build_writer_secret_for(project, created_password)
-            raise
+            raise self._attach_run_context(error, project, run)
+        except Exception as error:
+            # 예상 못 한 오류도 같은 응답 모양 (로그에는 형식 이름만)
+            logger.error(f'[gbrain team] create failed : step={run.step} {type(error).__name__}')
+            unexpected = GbrainServerError(f'{run.step} 단계에서 예상하지 못한 오류가 났어요 ({type(error).__name__})',
+                                           'team_create_unexpected', 500)
+            raise self._attach_run_context(unexpected, project, run) from error
+
+    def plan_team_brain(self, project, writer_password=None) -> dict:
+        """dry_run: 아무것도 바꾸지 않고 계획만 (실패도 같은 응답 모양)"""
+        try:
+            self._validate_project(project)
+            return build_team_brain_plan(self, project, writer_password)
+        except GbrainServerError as error:
+            raise attach_failure_context(error, {}, 'dry_run')
+
+    def build_database_steps(self) -> GbrainTeamDatabaseSteps:
+        return GbrainTeamDatabaseSteps(self._ai_db_service_factory(), self.database_repair)
+
+    def _create(self, project, writer_password, run) -> dict:
+        database_name, writer_role = to_team_database_name(project), to_team_writer_role(project)
+        steps = run.steps
+        database_steps = self.build_database_steps()
+
+        # DB 검사 > 막는 이유 있으면 아무것도 바꾸지 않고 멈춤 > DB·쓰기 계정·권한·준비
+        run.step = 'database'
+        state = database_steps.inspect(database_name, writer_role)
+        if state.blockers:
+            raise state.blockers[0]
+        steps['database'] = database_steps.ensure_database(state)
+        if state.repairs:
+            steps['database_repair'] = '+'.join(state.repairs)
+        run.step = 'writer_role'
+        run.created_password = database_steps.ensure_writer_role(state)
+        steps['writer_role'] = 'created' if run.created_password else 'kept'
+        run.step = 'grants'
+        steps['grants'] = database_steps.apply_grants(state)
+        run.step = 'prepare'
+        steps['prepare'] = database_steps.prepare(state)
+        has_pages_table = database_steps.has_pages_table(database_name)
+
+        # 등록(포트) > 관리자 토큰 > 설정·스키마 > 서비스 > nginx
+        run.step = 'register'
+        entry = self._run_registry(lambda: self.registry.register(project, database_name, writer_role))
+        instance = self.registry.to_instance(entry)
+        run.step = 'admin_token'
+        steps['admin_token'] = 'created' if self.provisioner.ensure_admin_token(instance) else 'kept'
+        run.step = 'config'
+        steps['config'] = self._ensure_brain_config(instance, run.created_password or writer_password, has_pages_table)
+        run.step = 'service'
+        self.provisioner.install_service(instance)
+        steps['service'] = 'installed'
+        run.step = 'nginx'
+        steps['nginx'] = 'published' if self.provisioner.publish_nginx_route(instance) else 'kept'
+        steps['monitoring'] = 'included'  # services.yml gbrain-team-brains 가 /gbrain/teams/health 로 전체 감시
         logger.info(f'[gbrain team] created : project={project} port={instance.port} '
                     + ' '.join(f'{name}={value}' for name, value in steps.items()))
 
         result = {'brain': self.describe(instance), 'steps': steps}
-        if created_password:
-            result['writer_secret'] = self._build_writer_secret(instance, created_password)
+        if run.created_password:
+            result['writer_secret'] = self._build_writer_secret(instance, run.created_password)
         return result
 
-    def _provision(self, project, ai_db_service, database_name, writer_role, writer_password, steps):
-        """브레인 준비 > 등록(포트) > 관리자 토큰 > 설정·스키마 > 서비스 > nginx (steps 에 단계별 결과 기록)"""
-        steps['prepare'] = self._run_ai_db(lambda: self._ensure_prepared(ai_db_service, database_name, writer_role))
-        has_pages_table = self._run_ai_db(lambda: ai_db_service.get_gbrain_status(database_name)).get('has_pages_table')
-        entry = self._run_registry(lambda: self.registry.register(project, database_name, writer_role))
-        instance = self.registry.to_instance(entry)
-        steps['admin_token'] = 'created' if self.provisioner.ensure_admin_token(instance) else 'kept'
-        steps['config'] = self._ensure_brain_config(instance, writer_password, has_pages_table)
-        self.provisioner.install_service(instance)
-        steps['service'] = 'installed'
-        steps['nginx'] = 'published' if self.provisioner.publish_nginx_route(instance) else 'kept'
-        steps['monitoring'] = 'included'  # services.yml gbrain-team-brains 가 /gbrain/teams/health 로 전체 감시
-        return instance
+    def _attach_run_context(self, error, project, run):
+        """끝난 단계·실패 단계·다음 할 일 + 새 쓰기 계정 비번 (다시 받을 수 없음 > 오류 응답에 1회)"""
+        attach_failure_context(error, run.steps, run.step)
+        if run.created_password:
+            error.details['writer_secret'] = self._build_writer_secret_for(project, run.created_password)
+        return error
 
-    # ---------- 단계 ----------
-    @staticmethod
-    def _ensure_database(ai_db_service, database_name) -> str:
-        if any(database['name'] == database_name for database in ai_db_service.list_databases()):
-            return 'kept'
-        ai_db_service.create_database(database_name)
-        return 'created'
-
-    @staticmethod
-    def _ensure_writer_role(ai_db_service, writer_role, database_name):
-        """없으면 만들고 접속 권한까지 > 새 비번 반환, 있으면 None (비번 재설정 안 함)"""
-        if any(role['name'] == writer_role for role in ai_db_service.list_roles()):
-            return None
-        return ai_db_service.create_role(writer_role, database_name)['password']
-
-    @staticmethod
-    def _ensure_prepared(ai_db_service, database_name, writer_role) -> str:
-        gbrain_status = ai_db_service.get_gbrain_status(database_name)
-        if gbrain_status.get('is_ready') and gbrain_status.get('writer_role') == writer_role:
-            return 'kept'
-        ai_db_service.prepare_gbrain(database_name, writer_role)
-        return 'prepared'
-
+    # ---------- 설정 단계 ----------
     def _ensure_brain_config(self, instance, writer_password, has_pages_table) -> str:
         """설정 있음 + 새 비번 없음 > 유지, 비번 없이 설정도 없음 > 409 (기존 쓰기 계정 비번 입력 필요)"""
         has_config = self.provisioner.has_brain_config(instance)
@@ -181,12 +213,6 @@ class GbrainTeamBrainService:
             logger.error(f'[gbrain team] registry failed : {error}')
             raise GbrainServerError('팀 브레인 등록부를 읽지 못했어요', 'team_registry_unreadable', 500)
 
-    @staticmethod
-    def _run_ai_db(action):
-        """AI 서버 DB 오류 > 같은 code 로 전달 (화면이 기존 AI DB 오류 코드로 원인 구분)"""
-        try:
-            return action()
-        except AiDbError as error:
-            logger.warning(f'[gbrain team] ai db step failed : {error.code}')
-            raise GbrainServerError(f'AI 서버 DB 작업이 실패했어요 [{error.code}]', error.code,
-                                    503 if error.code == 'ai_db_unavailable' else 409)
+    def run_registry(self, action):
+        """dry_run 이 같은 등록부 오류 변환을 쓰게 공개"""
+        return self._run_registry(action)

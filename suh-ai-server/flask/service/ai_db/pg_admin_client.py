@@ -13,6 +13,7 @@ from service.ai_db.ai_db_errors import (
     AiDbError, AiDbUnavailable, AlreadyExists, DatabaseInUse, GbrainOpsMissing, InvalidName, NotFound,
     PermissionDenied, RoleInUse,
 )
+from service.ai_db.pg_team_brain_client import PgTeamBrainClientMixin
 
 logger = logging.getLogger(__name__)
 
@@ -20,12 +21,12 @@ CONNECT_TIMEOUT_SECONDS = 3
 PASSWORD_ALGORITHM = "scram-sha-256"
 # pgcode > 오류 (42P04 duplicate_database, 42710 duplicate_object, 3D000 invalid_catalog_name,
 # 42704 undefined_object, 55006 object_in_use, 2BP01 dependent_objects_still_exist, 42501 insufficient_privilege,
-# 42602 invalid_name, 42883 undefined_function = 그 DB 에 ai_db_ops 함수 미설치)
+# 42602 invalid_name, 42883 undefined_function·3F000 invalid_schema_name = 그 DB 에 ai_db_ops 미설치)
 PGCODE_ERRORS = {
     "42P04": AlreadyExists, "42710": AlreadyExists,
     "3D000": NotFound, "42704": NotFound,
     "55006": DatabaseInUse, "2BP01": RoleInUse, "42501": PermissionDenied,
-    "42602": InvalidName, "42883": GbrainOpsMissing,
+    "42602": InvalidName, "42883": GbrainOpsMissing, "3F000": GbrainOpsMissing,
 }
 DATABASE_IN_USE_MESSAGE = "is being accessed by other users"
 
@@ -57,8 +58,8 @@ SELECT to_regnamespace('ai_db_ops') IS NOT NULL,
 GBRAIN_PREPARE_SQL = "SELECT ai_db_ops.prepare_gbrain_database({})"
 
 
-class PgAdminClient:
-    """관리 DSN 1개로 동작, 호출마다 연결 > autocommit 실행 > 닫기"""
+class PgAdminClient(PgTeamBrainClientMixin):
+    """관리 DSN 1개로 동작, 호출마다 연결 > autocommit 실행 > 닫기 (팀 브레인 작업은 PgTeamBrainClientMixin)"""
 
     def __init__(self, dsn: str, connect=psycopg2.connect):
         self._dsn = dsn

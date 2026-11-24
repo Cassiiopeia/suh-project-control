@@ -72,6 +72,11 @@ GBRAIN_SETUP_SCRIPT_DISPLAY_PATH = 'scripts/setup-gbrain-http.ps1'
 GBRAIN_SETUP_SCRIPT_PATH = os.environ.get(
     'GBRAIN_SETUP_SCRIPT_PATH',
     os.path.join(os.path.dirname(__file__), '..', '..', *GBRAIN_SETUP_SCRIPT_DISPLAY_PATH.split('/')))
+# 팀 DB 준비 함수 SQL (이미 있는 DB 에 ai_db_ops 가 없을 때 슈퍼유저로 실행, #226): 레포 기준 + 실제 경로
+GBRAIN_TEAM_OPS_SQL_DISPLAY_PATH = 'sql/ai_db_ops_gbrain.sql'
+GBRAIN_TEAM_OPS_SQL_PATH = os.environ.get(
+    'GBRAIN_TEAM_OPS_SQL_PATH',
+    os.path.join(os.path.dirname(__file__), '..', '..', *GBRAIN_TEAM_OPS_SQL_DISPLAY_PATH.split('/')))
 # nginx 설치 폴더 후보 (deploy-nginx.ps1 과 같은 규칙: C:/tools/nginx-*)
 GBRAIN_NGINX_GLOB = os.environ.get('GBRAIN_NGINX_GLOB', 'C:/tools/nginx-*')
 # 서비스 설치·초기화 제한 시간 (기동 후 /health 60초 대기 포함)
