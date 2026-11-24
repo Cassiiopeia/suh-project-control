@@ -1,14 +1,33 @@
 {
   "metadata": {
-    "lastUpdated": "2026-11-24T00:41:13Z",
-    "currentVersion": "2.0.104",
+    "lastUpdated": "2026-11-24T07:39:01Z",
+    "currentVersion": "2.0.105",
     "projectType": "python",
-    "totalReleases": 100,
+    "totalReleases": 101,
     "projectTypes": [
       "python"
     ]
   },
   "releases": [
+    {
+      "version": "2.0.105",
+      "project_type": "python",
+      "project_types": [
+        "python"
+      ],
+      "date": "2026-11-24",
+      "pr_number": 231,
+      "raw_summary": "## Summary by CodeRabbit\n\n## 릴리스 노트\n\n* **개선**\n  * AI 서버 배포 중 서버 접속이 끊기면 자동으로 다시 시도해 배포가 중간에 멈추지 않음",
+      "parsed_changes": {
+        "개선": {
+          "title": "개선",
+          "items": [
+            "AI 서버 배포 중 서버 접속이 끊기면 자동으로 다시 시도해 배포가 중간에 멈추지 않음"
+          ]
+        }
+      },
+      "parse_method": "markdown"
+    },
     {
       "version": "2.0.104",
       "project_type": "python",
